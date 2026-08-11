@@ -1,0 +1,964 @@
+openapi: 3.1.0
+
+info:
+  title: Arsène CMS API
+  version: 1.0.0
+  summary: >-
+    The two Arsène operations that need server-side atomicity and therefore
+    exist as real Supabase Edge Function endpoints, instead of a direct
+    PostgREST read/write against a table. Everything else in the writer
+    editor (drafts, taxonomy/categories, the asset library, alt-text edits,
+    cover/body re-tagging after upload) is a direct PostgREST call against
+    Postgres under RLS and is deliberately NOT part of this contract — see
+    "What is out of scope" below.
+  description: |
+    ## What is in scope, and why only two endpoints
+
+    Arsène's writer editor is a single-page app that talks to Postgres
+    directly via PostgREST/RLS for nearly everything: creating/autosaving a
+    draft, editing its title/body/meta fields, creating a league or category,
+    browsing the shared asset library, and editing an image's `alt_text` or
+    `role` after it has been uploaded. None of that needs a bespoke endpoint;
+    RLS is the enforcement point and Postgres row shape is the contract.
+
+    Two operations are different, because they have side effects that must
+    happen exactly once, atomically, from the server, and cannot be expressed
+    as a single-row PostgREST write:
+
+    - `POST /v1/articles/{articleId}/publish` — validates publishability,
+      generates the slug/JSON-LD/sitemap entry, flips the article live, and
+      **synchronously** records the `article_published` telemetry event
+      (spec §4) in the same request that publishes, so the time-to-publish
+      metric this project exists to prove (spec §3) can never be published
+      without also being measured.
+    - `POST /v1/articles/{articleId}/images` — accepts a raw upload, and is
+      the one place that must guarantee "no image reaches a writer-visible
+      state without going through compression/format-conversion", which a
+      raw PostgREST insert into a storage-backed table cannot guarantee.
+
+    ## What is out of scope
+
+    Draft CRUD, category/league CRUD, draft locking reads, alt-text/role
+    edits after upload, and the asset library listing are all direct
+    PostgREST operations against Postgres tables (e.g. `articles`,
+    `article_images`, `categories`, `leagues`) governed by Supabase's
+    auto-generated PostgREST OpenAPI surface and RLS policies. That surface
+    is not hand-authored and is not duplicated here; this file only covers
+    the two operations above.
+
+    In particular: **alt-text generation** (AC-15) is server-side computation
+    that needs the article's own title/content as context, so it happens as
+    part of the async pipeline kicked off by `POST .../images` and is
+    returned via `alt_text` on that resource once ready (see below).
+    **Alt-text editing** by the writer afterward is a trivial single-column
+    write with no atomicity requirement, so it is a direct PostgREST
+    `PATCH .../article_images?id=eq.{imageId}` under RLS, not a third
+    endpoint in this contract. The same is true of moving the `role`
+    (cover/body) flag between existing images after upload.
+
+    ## Server-side image processing constraint (implementation note, not a
+    contract decision)
+
+    Supabase Edge Functions run on Deno. `sharp`, the library normally used
+    on Node for WebP/AVIF conversion and compression, is not usable there
+    without a Node compatibility shim, and heavy native image codecs are
+    awkward in that runtime generally. This contract does **not** assume
+    synchronous, Node-only tooling is available server-side: `POST
+    .../images` always returns `201` once the upload itself is accepted, but
+    the returned resource's `status` may be `ready` (processing completed
+    within the request — plausible for a small file with a fast codec path)
+    or `processing` (conversion and alt-text generation are still running,
+    e.g. via a queued job, a WASM/Deno-native codec, or a call out to an
+    external image-processing service). Callers MUST treat `processing` as
+    the common case, not an edge case, and must not block their own UI
+    waiting synchronously on `ready`. The eventual `ready`/`failed`
+    transition is observed via a direct PostgREST read of the same image row
+    (out of scope of this contract — see "What is out of scope"), not via a
+    second call into this API. Which of the above implementation strategies
+    is actually used is an implementation decision left for the build, not
+    fixed by this contract.
+
+    ## Versioning strategy
+
+    Every path here is prefixed with `/v1`, this contract's own semantic
+    version — independent of the `/functions/v1/` segment Supabase puts in
+    front of every Edge Function URL (see `servers` below).
+
+    - **Non-breaking** (new optional request field, new optional response
+      field, a new enum member a client should treat as "unknown, ignore", a
+      wholly new endpoint) ships inside `/v1`, no client changes required.
+      Clients MUST ignore response fields and enum values they don't
+      recognise rather than fail closed — in particular, `ArticleImage.status`
+      and `Error.code` are both places a future value may be added
+      non-breakingly.
+    - **Breaking** (removing/renaming a field, making an optional field
+      required, changing a field's type, changing an error `code` a client
+      branches on, changing an existing endpoint's URL or method) ships
+      under a new `/v2` prefix, as new routes on the same Edge Function or a
+      second function, so `/v1` keeps running until every consumer (the
+      writer editor SPA) has migrated. No sunset date is fixed here; the
+      migration exit criterion is "no more caller depends on `/v1`".
+    - Greenfield build: 1.0.0 is the first cut, written before any server
+      code exists.
+
+    ## Error envelope
+
+    Every operation can return the `Error` schema on any status code it did
+    not explicitly document, via its `default` response, so a consumer
+    always has one shape to parse for "something unexpected happened".
+    Documented error responses use the same `Error` schema with a specific
+    `code` so callers branch on `error.code`, not on `error.message` (human
+    wording, not stable) and not on HTTP status alone — several distinct
+    problems here legitimately share a status, e.g. `409` covers both
+    `IMAGE_NOT_READY` and `DRAFT_LOCKED` on publish, which a writer-facing UI
+    must render very differently.
+
+    ## Auth model
+
+    Writers have real Supabase Auth accounts (unlike the sibling `pronos`
+    project's account-less players). Both operations below require a
+    Supabase Auth bearer JWT for the calling writer, declared explicitly per
+    operation via `security`, never left to a document-level default.
+    Because Edge Functions do not automatically inherit PostgREST's RLS the
+    way a direct table call does, the function implementing this contract
+    must either forward the caller's JWT to its own Supabase client calls (so
+    RLS still applies to whatever it reads/writes on the writer's behalf) or
+    perform the equivalent authorization check explicitly — this contract
+    assumes that happens, but does not itself enforce it.
+
+    There is no separate reviewer/approval role anywhere in this contract:
+    per the product spec's out-of-scope section, every writer can publish
+    directly.
+
+    ## Pagination
+
+    Neither operation in this contract returns a list. `POST .../publish`
+    returns the one article it just published; `POST .../images` returns
+    the one image resource it just created. No pagination parameters exist
+    here by design — this is not an oversight, there is nothing to page.
+
+    ## Idempotency
+
+    - `POST .../publish`: the state it produces (`published_at`, `slug`,
+      `structured_data`, the sitemap entry) is recomputed deterministically
+      from the article's current content on every call, so replaying the
+      same request converges on the same stored state as long as nothing
+      about the article changed between attempts — no client-supplied key
+      is required for that part. It does **not** by itself protect the
+      synchronous `article_published` telemetry emission from being
+      duplicated by a client retry after a timeout. An optional
+      `Idempotency-Key` suppresses a second telemetry emission (and only
+      that — the returned article state is computed and returned identically
+      either way) for a repeat of the same key within a 5-minute window.
+    - `POST .../images`: **not** naturally idempotent — every accepted
+      call creates a new image row and a new stored object. Uploading a
+      multi-MB file over a writer's home connection is exactly the scenario
+      where a client cannot know whether a prior attempt already succeeded,
+      so `Idempotency-Key` is **required** here. Replaying the same key for
+      the same `articleId` within a 24-hour window returns the original
+      created resource (whatever its current `status`) unchanged and
+      performs no new upload/processing; a different key, or the same key
+      against a different `articleId`, is a new request.
+
+  contact:
+    name: Lionel Le Boiteux
+    email: lionel.leboiteux@gmail.com
+  license:
+    name: UNLICENSED
+    identifier: UNLICENSED
+
+servers:
+  - url: 'https://{projectRef}.supabase.co/functions/v1/arsene-api'
+    description: >-
+      Supabase Edge Function deployment. `/functions/v1/` is Supabase's own
+      platform routing prefix, unrelated to this contract's `/v1` API-version
+      prefix used in every path below (full URL of an operation looks like
+      `.../functions/v1/arsene-api/v1/articles/{articleId}/publish`).
+    variables:
+      projectRef:
+        default: xxxxxxxxxxxxxxxxxxxx
+        description: Supabase project ref, one per environment (dev/staging/prod).
+
+tags:
+  - name: Articles
+    description: Server-side-atomic operations on an article, beyond plain PostgREST CRUD.
+  - name: Images
+    description: Upload and optimisation of an article's cover/body images.
+
+paths:
+
+  /v1/articles/{articleId}/publish:
+    post:
+      operationId: publishArticle
+      tags: [Articles]
+      summary: Publish or republish an article
+      description: |
+        Validates the article can go live, generates the URL slug,
+        schema.org JSON-LD markup, and a sitemap entry, sets/refreshes
+        `published_at`, and synchronously records one `article_published`
+        telemetry event (spec §4: `writer_id`, `article_id`, `published_at`,
+        `is_republish`) as part of the same request — never as a fire-and-
+        forget side call, so a published article can never exist without a
+        matching telemetry row.
+
+        **First publish vs. republish (AC-17) is the same endpoint.**
+        Whether `article.published_at` is already set before this call
+        determines `is_republish` in both the telemetry event and the
+        response; there is no separate endpoint or approval step for
+        editing and republishing an already-live article — republishing
+        updates the live content immediately.
+
+        **Cover image is mandatory (01-decisions.md #1).** If the article
+        has no image with `role: cover`, this returns `400
+        COVER_IMAGE_REQUIRED` — a distinct `code` from the generic `400
+        VALIDATION_FAILED` used for every other validation failure (e.g. a
+        missing title, or a "Pronos" article missing its required
+        structured match fields per AC-04), so the editor can point the
+        writer specifically at "add a cover image" rather than a generic
+        error banner.
+
+        **A broken or still-processing image blocks publish (AC-08),
+        cover or body.** If any image attached to the article — the cover,
+        or any image embedded in the body — has `status: processing` or
+        `status: failed` (see `POST .../images`), this returns `409
+        IMAGE_NOT_READY` with `details.image_id`, `details.role`, and
+        `details.status` identifying exactly which image is the problem.
+        This is distinct from `COVER_IMAGE_REQUIRED`: that code means no
+        cover image is set at all; this one means an image *is* set but
+        is not yet safe to publish.
+
+        **Draft locking (AC-05) is enforced here too.** If the calling
+        writer does not currently hold the edit lock on this article's
+        draft (someone else does), this returns `409 DRAFT_LOCKED`.
+      security:
+        - supabaseWriterAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ArticleIdPathParam'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishRequest'
+            examples:
+              noOverrides:
+                summary: publish using the meta title/description already saved on the draft
+                value: {}
+              withMetaOverrides:
+                summary: writer tweaks the suggested meta fields right before confirming (AC-13)
+                value:
+                  meta_title: 'Pronos Ligue 1 – Journée 12 : nos pronostics'
+                  meta_description: >-
+                    Nos pronostics pour la journée 12 de Ligue 1 : confiance,
+                    scores et analyses match par match.
+      responses:
+        '200':
+          description: The article is now live (first publish or republish).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishResponse'
+              examples:
+                firstPublish:
+                  summary: first time this article goes live
+                  value:
+                    article_id: a1a1a1a1-0000-4a2b-9c3d-000000000001
+                    slug: pronos-ligue-1-journee-12
+                    status: published
+                    published_at: '2026-08-11T10:47:12Z'
+                    first_published_at: '2026-08-11T10:47:12Z'
+                    is_republish: false
+                    meta_title: 'Pronos Ligue 1 – Journée 12 : nos pronostics'
+                    meta_description: >-
+                      Nos pronostics pour la journée 12 de Ligue 1 :
+                      confiance, scores et analyses match par match.
+                    canonical_url: 'https://fantasycoach.example/ligue-1/pronos/pronos-ligue-1-journee-12'
+                    structured_data:
+                      '@context': 'https://schema.org'
+                      '@type': NewsArticle
+                      headline: 'Pronos Ligue 1 – Journée 12'
+                      image:
+                        - 'https://cdn.fantasycoach.example/articles/a1a1a1a1/cover-optimized.webp'
+                      datePublished: '2026-08-11T10:47:12Z'
+                      dateModified: '2026-08-11T10:47:12Z'
+                      author:
+                        '@type': Person
+                        name: Lionel Le Boiteux
+                      mainEntityOfPage: 'https://fantasycoach.example/ligue-1/pronos/pronos-ligue-1-journee-12'
+                    sitemap:
+                      loc: 'https://fantasycoach.example/ligue-1/pronos/pronos-ligue-1-journee-12'
+                      lastmod: '2026-08-11'
+                    telemetry_event_id: 7e7e7e7e-0000-4a2b-9c3d-777777777777
+                republish:
+                  summary: republishing an article that already went live 3 days ago (AC-17)
+                  value:
+                    article_id: a1a1a1a1-0000-4a2b-9c3d-000000000001
+                    slug: pronos-ligue-1-journee-12
+                    status: published
+                    published_at: '2026-08-11T10:47:12Z'
+                    first_published_at: '2026-08-08T09:03:00Z'
+                    is_republish: true
+                    meta_title: 'Pronos Ligue 1 – Journée 12 : nos pronostics'
+                    meta_description: >-
+                      Nos pronostics pour la journée 12 de Ligue 1 :
+                      confiance, scores et analyses match par match.
+                    canonical_url: 'https://fantasycoach.example/ligue-1/pronos/pronos-ligue-1-journee-12'
+                    structured_data:
+                      '@context': 'https://schema.org'
+                      '@type': NewsArticle
+                      headline: 'Pronos Ligue 1 – Journée 12'
+                      image:
+                        - 'https://cdn.fantasycoach.example/articles/a1a1a1a1/cover-optimized.webp'
+                      datePublished: '2026-08-08T09:03:00Z'
+                      dateModified: '2026-08-11T10:47:12Z'
+                      author:
+                        '@type': Person
+                        name: Lionel Le Boiteux
+                      mainEntityOfPage: 'https://fantasycoach.example/ligue-1/pronos/pronos-ligue-1-journee-12'
+                    sitemap:
+                      loc: 'https://fantasycoach.example/ligue-1/pronos/pronos-ligue-1-journee-12'
+                      lastmod: '2026-08-11'
+                    telemetry_event_id: 8f8f8f8f-0000-4a2b-9c3d-888888888888
+        '400':
+          description: >-
+            The article cannot be published as it stands. `error.code`
+            distinguishes a missing cover image from every other validation
+            failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                missingCoverImage:
+                  summary: no cover image has been set on this article
+                  value:
+                    error:
+                      code: COVER_IMAGE_REQUIRED
+                      message: >-
+                        This article has no cover image. Upload one and set
+                        it as the cover before publishing.
+                      details:
+                        article_id: a1a1a1a1-0000-4a2b-9c3d-000000000001
+                      request_id: 1a1a1a1a-1111-4a2b-9c3d-aaaaaaaaaaaa
+                otherValidationFailure:
+                  summary: e.g. a Pronos article missing required structured match fields (AC-04)
+                  value:
+                    error:
+                      code: VALIDATION_FAILED
+                      message: Request failed validation.
+                      details:
+                        fields:
+                          - field: pronos[0].confidence_tier
+                            message: must be one of "Indispensable", "Prudent", "Risqué"
+                      request_id: 2b2b2b2b-2222-4a2b-9c3d-bbbbbbbbbbbb
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: >-
+            The article cannot be published right now for a reason that
+            isn't a plain validation failure. `error.code` distinguishes an
+            image that isn't ready yet from the draft being locked by
+            another writer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                imageStillProcessing:
+                  summary: the cover image upload hasn't finished optimising yet
+                  value:
+                    error:
+                      code: IMAGE_NOT_READY
+                      message: >-
+                        The cover image is still being optimised and cannot
+                        be published yet. Try again in a few seconds.
+                      details:
+                        image_id: c3c3c3c3-0000-4a2b-9c3d-cccccccccccc
+                        role: cover
+                        status: processing
+                      request_id: 3c3c3c3c-3333-4a2b-9c3d-cccccccccccc
+                imageFailed:
+                  summary: a body image failed optimisation and was never replaced (AC-08)
+                  value:
+                    error:
+                      code: IMAGE_NOT_READY
+                      message: >-
+                        One of this article's images failed to process and
+                        must be removed or replaced before publishing.
+                      details:
+                        image_id: d4d4d4d4-0000-4a2b-9c3d-dddddddddddd
+                        role: body
+                        status: failed
+                      request_id: 4d4d4d4d-4444-4a2b-9c3d-dddddddddddd
+                draftLocked:
+                  summary: another writer currently holds the edit lock (AC-05)
+                  value:
+                    error:
+                      code: DRAFT_LOCKED
+                      message: This draft is currently locked for editing by another writer.
+                      details:
+                        locked_by_writer_id: e5e5e5e5-0000-4a2b-9c3d-eeeeeeeeeeee
+                        locked_by_display_name: Marie D.
+                      request_id: 5e5e5e5e-5555-4a2b-9c3d-eeeeeeeeeeee
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+
+  /v1/articles/{articleId}/images:
+    post:
+      operationId: uploadArticleImage
+      tags: [Images]
+      summary: Upload a cover or body image, to be converted and compressed
+      description: |
+        Accepts a raw image upload for one article, tagged as `cover` or
+        `body` (AC-06 — only the cover image is ever surfaced in category
+        listings and social previews; that distinction is made at upload
+        time, not inferred later). The stored asset is converted to WebP or
+        AVIF and compressed (AC-07); the original uploaded bytes are never
+        what is served to site visitors.
+
+        **Always `201`, `status` carries the real state.** This always
+        returns `201` once the upload itself is accepted and a resource
+        exists to describe it — including when optimisation and alt-text
+        generation are still running (`status: processing`; see "Server-side
+        image processing constraint" above). It is not an error for
+        `status` to be `processing` in the response to this very call.
+
+        **Alt text (AC-15).** Once processing completes, `alt_text` is
+        auto-generated from this article's own current title/content and
+        included on the resource (`status: ready`) — it is `null` until
+        then. The writer overrides it afterward via a direct PostgREST
+        `PATCH` on the underlying image row (out of scope of this
+        contract — see "What is out of scope" above), not through this
+        endpoint.
+
+        **A broken upload (AC-08).** A file whose format cannot even be
+        sniffed (bad magic bytes, or a container this pipeline does not
+        support at all) is rejected synchronously with `422
+        UNSUPPORTED_FORMAT` and **no resource is created**. A file that
+        looks like a valid container but fails during the (possibly async)
+        conversion step still results in a created resource, which
+        transitions to `status: failed` with a `failure` object explaining
+        why; that transition is observed via a direct PostgREST read (out
+        of scope here), not a second call to this endpoint. Either way, the
+        publish endpoint above independently refuses to publish an article
+        with any image not in `status: ready`.
+
+        **Cover uniqueness.** Uploading with `role: cover` demotes any
+        image that was previously this article's cover to `role: body` in
+        the same transaction as the new upload; `replaced_cover_image_id`
+        carries the id of the image that was just demoted, or `null` if
+        there was none (always `null` for `role: body` uploads).
+      security:
+        - supabaseWriterAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ArticleIdPathParam'
+        - $ref: '#/components/parameters/IdempotencyKeyHeaderRequired'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ImageUploadRequest'
+            encoding:
+              file:
+                contentType: image/jpeg, image/png, image/webp, image/avif, image/heic
+      responses:
+        '201':
+          description: >-
+            The image resource was created (whether or not optimisation has
+            finished yet — see `status`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArticleImage'
+              examples:
+                readyImmediately:
+                  summary: small file, processed synchronously within the request
+                  value:
+                    id: c3c3c3c3-0000-4a2b-9c3d-cccccccccccc
+                    article_id: a1a1a1a1-0000-4a2b-9c3d-000000000001
+                    role: cover
+                    status: ready
+                    original_filename: psg-om-cover.jpg
+                    alt_text: 'PSG face à l’OM au Parc des Princes'
+                    urls:
+                      original: 'https://cdn.fantasycoach.example/articles/a1a1a1a1/cover-original.jpg'
+                      optimized: 'https://cdn.fantasycoach.example/articles/a1a1a1a1/cover-optimized.webp'
+                    failure: null
+                    replaced_cover_image_id: null
+                    created_at: '2026-08-11T10:20:00Z'
+                stillProcessing:
+                  summary: optimisation and alt-text generation still running asynchronously
+                  value:
+                    id: d4d4d4d4-0000-4a2b-9c3d-dddddddddddd
+                    article_id: a1a1a1a1-0000-4a2b-9c3d-000000000001
+                    role: body
+                    status: processing
+                    original_filename: celebration.png
+                    alt_text: null
+                    urls: null
+                    failure: null
+                    replaced_cover_image_id: null
+                    created_at: '2026-08-11T10:21:00Z'
+                coverReplacedPrevious:
+                  summary: a new cover upload demotes the article's previous cover to body
+                  value:
+                    id: f6f6f6f6-0000-4a2b-9c3d-ffffffffffff
+                    article_id: a1a1a1a1-0000-4a2b-9c3d-000000000001
+                    role: cover
+                    status: processing
+                    original_filename: new-cover.jpg
+                    alt_text: null
+                    urls: null
+                    failure: null
+                    replaced_cover_image_id: c3c3c3c3-0000-4a2b-9c3d-cccccccccccc
+                    created_at: '2026-08-11T11:00:00Z'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          description: The uploaded file exceeds the maximum accepted size (20 MB).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: FILE_TOO_LARGE
+                  message: 'Files must be 20 MB or smaller; this file is 34 MB.'
+                  details:
+                    max_bytes: 20971520
+                    received_bytes: 35651584
+                  request_id: 6f6f6f6f-6666-4a2b-9c3d-ffffffffffff
+        '422':
+          description: >-
+            The uploaded file's format could not even be recognised
+            (corrupted or unsupported), so no image resource was created
+            (AC-08). Distinct from a resource that was created and later
+            transitions to `status: failed` during conversion.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: UNSUPPORTED_FORMAT
+                  message: >-
+                    This file could not be recognised as a supported image
+                    format. Please upload a JPEG, PNG, WebP, AVIF, or HEIC
+                    file.
+                  details:
+                    detected_content_type: application/octet-stream
+                  request_id: 7a7a7a7a-7777-4a2b-9c3d-aaaaaaaaaaaa
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+
+components:
+
+  securitySchemes:
+    supabaseWriterAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Supabase Auth session token for the calling writer's own account.
+        Sent as `Authorization: Bearer <token>`. Required on every operation
+        in this contract; there is no unauthenticated operation here (unlike
+        the sibling `pronos` project's account-less player endpoints).
+
+  parameters:
+    ArticleIdPathParam:
+      name: articleId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: An `articles.id` value.
+      example: a1a1a1a1-0000-4a2b-9c3d-000000000001
+
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+      description: >-
+        Client-generated opaque token (e.g. a UUID) scoping retry-safety for
+        this specific request. See the operation description for exactly
+        what it deduplicates and its replay window.
+      example: 6c1a9e2b-4b1a-4e2b-9c3a-abcdefabcdef
+
+    IdempotencyKeyHeaderRequired:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+      description: >-
+        Client-generated opaque token (e.g. a UUID). Required on this
+        operation because uploading a file is not naturally idempotent and
+        retries over an unreliable connection are the expected case, not the
+        exception. See the operation description for the replay window.
+      example: 9e8d7c6b-5a4f-4e3d-9c2b-1a0f9e8d7c6b
+
+  responses:
+    ValidationError:
+      description: The request body or parameters failed validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: VALIDATION_FAILED
+              message: Request failed validation.
+              details:
+                fields:
+                  - field: role
+                    message: must be one of "cover", "body"
+              request_id: 4b3c2d1e-0f1a-4b2c-8d3e-4f5a6b7c8d9e
+
+    Unauthorized:
+      description: Missing or invalid writer bearer token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: UNAUTHORIZED
+              message: A valid Supabase Auth bearer token is required for this endpoint.
+              details: null
+              request_id: 7d8e9f0a-1b2c-4d3e-9f4a-5b6c7d8e9f0a
+
+    NotFound:
+      description: The referenced article does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: NOT_FOUND
+              message: No article was found matching the given id.
+              details:
+                article_id: 00000000-0000-0000-0000-000000000000
+              request_id: 8e9f0a1b-2c3d-4e5f-8a9b-6c7d8e9f0a1b
+
+    UnexpectedError:
+      description: >-
+        Any status code not explicitly documented above for this operation.
+        Always parseable as the same `Error` envelope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: INTERNAL_ERROR
+              message: An unexpected error occurred. Please retry.
+              details: null
+              request_id: 9f0a1b2c-3d4e-4f5a-8b9c-7d8e9f0a1b2c
+
+  schemas:
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_FAILED
+                - COVER_IMAGE_REQUIRED
+                - IMAGE_NOT_READY
+                - DRAFT_LOCKED
+                - UNSUPPORTED_FORMAT
+                - FILE_TOO_LARGE
+                - NOT_FOUND
+                - UNAUTHORIZED
+                - CONFLICT
+                - INTERNAL_ERROR
+              description: >-
+                Machine-checkable error category. Consumers should branch on
+                this, not on `message` (human-readable, wording not stable)
+                and not on HTTP status alone — several codes here share a
+                status, e.g. `409` covers both `IMAGE_NOT_READY` and
+                `DRAFT_LOCKED`.
+            message:
+              type: string
+              description: >-
+                Human-readable explanation, safe to show to a writer; not
+                guaranteed stable wording for programmatic matching.
+            details:
+              description: >-
+                Machine-readable context specific to `code`. `null` when
+                there is nothing further to add beyond `message`.
+              oneOf:
+                - type: object
+                  additionalProperties: true
+                - type: 'null'
+            request_id:
+              description: >-
+                Correlation id for this specific request/response, for
+                cross-referencing server logs when reporting a problem.
+              oneOf:
+                - type: string
+                  format: uuid
+                - type: 'null'
+
+    PublishRequest:
+      type: object
+      description: >-
+        Both fields are optional last-moment overrides of the auto-suggested
+        meta title/description shown at the publish step (AC-13). Omit
+        either or both to publish using the values already saved on the
+        draft (written there directly via PostgREST during editing).
+      properties:
+        meta_title:
+          type: string
+          minLength: 1
+          maxLength: 70
+          example: 'Pronos Ligue 1 – Journée 12 : nos pronostics'
+        meta_description:
+          type: string
+          minLength: 1
+          maxLength: 160
+          example: >-
+            Nos pronostics pour la journée 12 de Ligue 1 : confiance, scores
+            et analyses match par match.
+
+    StructuredData:
+      type: object
+      description: >-
+        The generated schema.org JSON-LD markup (AC-14), embedded verbatim
+        into the published page. Shape follows schema.org's `NewsArticle`;
+        not modelled field-by-field here since schema.org markup is
+        intentionally extensible — treat this as an opaque, valid JSON-LD
+        object rather than something to destructure.
+      required: ['@context', '@type']
+      properties:
+        '@context':
+          type: string
+          const: 'https://schema.org'
+        '@type':
+          type: string
+          example: NewsArticle
+      additionalProperties: true
+
+    SitemapEntry:
+      type: object
+      required: [loc, lastmod]
+      properties:
+        loc:
+          type: string
+          format: uri
+        lastmod:
+          type: string
+          format: date
+
+    PublishResponse:
+      type: object
+      required:
+        - article_id
+        - slug
+        - status
+        - published_at
+        - first_published_at
+        - is_republish
+        - meta_title
+        - meta_description
+        - canonical_url
+        - structured_data
+        - sitemap
+        - telemetry_event_id
+      properties:
+        article_id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+          description: >-
+            The generated URL slug (AC-14). Stable across republishes of the
+            same article; only ever (re)computed on first publish.
+          example: pronos-ligue-1-journee-12
+        status:
+          type: string
+          enum: [published]
+          description: >-
+            Always `published` today; declared as an enum (not a boolean)
+            so a future non-breaking value (e.g. a "published with
+            warnings" state) can be added under this same `/v1` prefix.
+        published_at:
+          type: string
+          format: date-time
+          description: >-
+            The timestamp of *this* call — refreshed on every republish, and
+            what is recorded verbatim as the `article_published` telemetry
+            event's `published_at` (spec §4).
+        first_published_at:
+          type: string
+          format: date-time
+          description: >-
+            Set once, on the article's first publish, and never changed by
+            a later republish. Equal to `published_at` on a first publish.
+        is_republish:
+          type: boolean
+          description: >-
+            `false` when `first_published_at` did not exist before this
+            call, `true` otherwise. Recorded verbatim as the
+            `article_published` telemetry event's `is_republish` field.
+        meta_title:
+          type: string
+        meta_description:
+          type: string
+        canonical_url:
+          type: string
+          format: uri
+        structured_data:
+          $ref: '#/components/schemas/StructuredData'
+        sitemap:
+          $ref: '#/components/schemas/SitemapEntry'
+        telemetry_event_id:
+          type: string
+          format: uuid
+          description: >-
+            Id of the `article_published` telemetry row inserted by this
+            call. Always present: unlike some state-toggling admin actions
+            elsewhere, there is no "no-op" case for publish/republish — a
+            republish always at least refreshes `published_at`, so a
+            telemetry event is always emitted.
+
+    ImageUploadRequest:
+      type: object
+      required: [file, role]
+      properties:
+        file:
+          type: string
+          format: binary
+          description: >-
+            Raw image bytes. Accepted source formats: JPEG, PNG, WebP,
+            AVIF, HEIC. Maximum 20 MB; larger uploads are rejected with
+            `413 FILE_TOO_LARGE` before any processing is attempted.
+        role:
+          type: string
+          enum: [cover, body]
+          description: >-
+            Whether this is the article's single cover image (AC-06 — the
+            only one shown in category listings and social previews) or an
+            image embedded in the body. An article has at most one `cover`
+            image at a time; see "Cover uniqueness" in the operation
+            description.
+          example: cover
+
+    ImageFailure:
+      type: object
+      description: Present only when the image's `status` is `failed`.
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [UNSUPPORTED_FORMAT, CORRUPTED_FILE, PROCESSING_TIMEOUT, INTERNAL_ERROR]
+        message:
+          type: string
+          example: >-
+            The uploaded file passed initial format detection but could not
+            be decoded during conversion.
+
+    ImageUrls:
+      type: object
+      description: Present only when the image's `status` is `ready`.
+      required: [original, optimized]
+      properties:
+        original:
+          type: string
+          format: uri
+          description: The as-uploaded file, retained for reference; never served to visitors.
+        optimized:
+          type: string
+          format: uri
+          description: >-
+            The WebP or AVIF, compressed asset (AC-07) — what is actually
+            served to site visitors.
+
+    ArticleImage:
+      type: object
+      required:
+        - id
+        - article_id
+        - role
+        - status
+        - original_filename
+        - alt_text
+        - urls
+        - failure
+        - replaced_cover_image_id
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        article_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [cover, body]
+        status:
+          type: string
+          enum: [processing, ready, failed]
+          description: >-
+            `processing` and `ready` are both non-error outcomes of a
+            successful upload — see "Server-side image processing
+            constraint" in the top-level description for why `processing`
+            is expected, not exceptional. `failed` means conversion was
+            attempted and did not succeed; see `failure`.
+        original_filename:
+          type: string
+          example: psg-om-cover.jpg
+        alt_text:
+          description: >-
+            Auto-generated from this article's own title/content once
+            `status` is `ready` (AC-15). `null` while `processing` or
+            `failed`. Writer-editable afterward via a direct PostgREST
+            `PATCH` on the image row — not through this API.
+          oneOf:
+            - type: string
+            - type: 'null'
+        urls:
+          description: '`null` until `status` is `ready`.'
+          oneOf:
+            - $ref: '#/components/schemas/ImageUrls'
+            - type: 'null'
+        failure:
+          description: '`null` unless `status` is `failed`.'
+          oneOf:
+            - $ref: '#/components/schemas/ImageFailure'
+            - type: 'null'
+        replaced_cover_image_id:
+          description: >-
+            The id of the image that was demoted from `role: cover` to
+            `role: body` by this upload, or `null` if there was no previous
+            cover (always `null` when this upload's own `role` is `body`).
+          oneOf:
+            - type: string
+              format: uuid
+            - type: 'null'
+        created_at:
+          type: string
+          format: date-time

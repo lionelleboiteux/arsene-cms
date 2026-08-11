@@ -52,12 +52,43 @@
       "notes": "adopted from arsene-cms-product-spec.docx"
     },
     "architecture": {
-      "status": "pending",
-      "artifacts": [],
-      "actor": null,
-      "model": null,
-      "at": null,
-      "notes": null
+      "status": "passed",
+      "artifacts": [
+        {
+          "path": "pdlc/arsene-cms/02-architecture.v1.md",
+          "sha256": "531c1b4c2c9fb766f3e21d8543fb8d76367a6651c6600dca02f67f04a4e96e69",
+          "recorded": "2026-08-11T14:38:39Z"
+        },
+        {
+          "path": "pdlc/arsene-cms/adr/0001-supabase-backend-isr-frontend.md",
+          "sha256": "8d3595155bb8d2f9363225cf23adb925c6897d38fe4a6b8892a9e762ee89d72e",
+          "recorded": "2026-08-11T14:38:39Z"
+        },
+        {
+          "path": "pdlc/arsene-cms/adr/0002-fixture-data-ownership.md",
+          "sha256": "d829354b5f96cf39f4cd8af1f319e28f84bbc502ff6859b5834048d6116f5e6f",
+          "recorded": "2026-08-11T14:38:39Z"
+        },
+        {
+          "path": "pdlc/arsene-cms/adr/0003-draft-locking-mechanism.md",
+          "sha256": "a625cc2fcdecfe960faf559449e3d5048f7b25b9e8724690e7157f4b64f61c69",
+          "recorded": "2026-08-11T14:38:39Z"
+        },
+        {
+          "path": "pdlc/arsene-cms/contracts/openapi.yaml",
+          "sha256": "f4f1999016743f67d14e2813bb145ee29840bc238658b6257901df47289a8f6a",
+          "recorded": "2026-08-11T14:38:39Z"
+        },
+        {
+          "path": "pdlc/arsene-cms/contracts/pronos-fixtures.consumer.md",
+          "sha256": "fcb170f64bdce4b9604d55a55d2b373dc99205a8924988e44d7dcd3d87349b78",
+          "recorded": "2026-08-11T14:38:39Z"
+        }
+      ],
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "sonnet",
+      "at": "2026-08-11T14:38:39Z",
+      "notes": "Option C (Supabase backend + on-demand ISR on Cloudflare Pages, refined from static rebuild-on-publish) recommended and accepted. Fixture data owned by pronos, consumed nullable. Draft locking via staleness columns. Sliced into writer-editor, public-site. Counter-metric (writer adoption) has no direct event; proxy (published-article count per writer) flagged for confirmation before John's review gate."
     },
     "red": {
       "status": "pending",
@@ -132,7 +163,10 @@
       "notes": null
     }
   },
-  "children": [],
+  "children": [
+    "writer-editor",
+    "public-site"
+  ],
   "overrides": [],
   "reviews": [],
   "log": [
@@ -142,6 +176,30 @@
       "idea": "arsene-cms",
       "spec": "arsene-cms-product-spec.docx",
       "actor": "lionel.leboiteux@gmail.com"
+    },
+    {
+      "at": "2026-08-11T14:29:06Z",
+      "event": "split",
+      "children": [
+        "writer-editor",
+        "public-site"
+      ],
+      "actor": "lionel.leboiteux@gmail.com"
+    },
+    {
+      "at": "2026-08-11T14:38:39Z",
+      "event": "pass",
+      "gate": "architecture",
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "sonnet",
+      "artifacts": [
+        "pdlc/arsene-cms/02-architecture.v1.md",
+        "pdlc/arsene-cms/adr/0001-supabase-backend-isr-frontend.md",
+        "pdlc/arsene-cms/adr/0002-fixture-data-ownership.md",
+        "pdlc/arsene-cms/adr/0003-draft-locking-mechanism.md",
+        "pdlc/arsene-cms/contracts/openapi.yaml",
+        "pdlc/arsene-cms/contracts/pronos-fixtures.consumer.md"
+      ]
     }
   ]
 }
