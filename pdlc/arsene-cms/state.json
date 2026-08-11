@@ -1,0 +1,147 @@
+{
+  "schema": "pdlc/v2",
+  "idea": {
+    "id": "arsene-cms",
+    "title": "Ars\u00e8ne",
+    "spec_author": "Lionel Le Boiteux",
+    "spec_date": "2026-08-11",
+    "branch": "feat/arsene-cms",
+    "adopted": "2026-08-11T13:53:24Z"
+  },
+  "success": {
+    "metrics": [
+      {
+        "name": "time from draft start to published",
+        "baseline": "approximately 50 minutes (self-reported estimate, not yet precisely measured)",
+        "target": "under 10 minutes",
+        "by_when": "4 weeks after launch"
+      }
+    ],
+    "counter_metric": "writer adoption must not decline - writers reverting to drafting in Word or Google Docs and manually pasting is a failure signal even if the time metric improves",
+    "required_events": [
+      "draft_started",
+      "article_published"
+    ]
+  },
+  "config": {
+    "stacks": [
+      "typescript",
+      "python"
+    ],
+    "coverage_branch_min": 80,
+    "parallel_subagents_max": 3
+  },
+  "gates": {
+    "adopt": {
+      "status": "passed",
+      "artifacts": [
+        {
+          "path": "pdlc/arsene-cms/00-product-spec.docx",
+          "sha256": "406dec1ff2a1c9d8b84635626a550488d30a97e95976b4c5fb6067dc9ee4cb51",
+          "recorded": "2026-08-11T13:53:24Z"
+        },
+        {
+          "path": "spec-header.json",
+          "sha256": "8d5d67443ae1a94196bfb4d01ed571b48a5d7c2f1e7b951d945a55f5991da55b",
+          "recorded": "2026-08-11T13:53:24Z"
+        }
+      ],
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "n/a",
+      "at": "2026-08-11T13:53:24Z",
+      "notes": "adopted from arsene-cms-product-spec.docx"
+    },
+    "architecture": {
+      "status": "pending",
+      "artifacts": [],
+      "actor": null,
+      "model": null,
+      "at": null,
+      "notes": null
+    },
+    "red": {
+      "status": "pending",
+      "artifacts": [],
+      "actor": null,
+      "model": null,
+      "at": null,
+      "notes": null
+    },
+    "green": {
+      "status": "pending",
+      "artifacts": [],
+      "actor": null,
+      "model": null,
+      "at": null,
+      "notes": null
+    },
+    "verify": {
+      "status": "pending",
+      "artifacts": [],
+      "actor": null,
+      "model": null,
+      "at": null,
+      "notes": null
+    },
+    "polish": {
+      "status": "pending",
+      "artifacts": [],
+      "actor": null,
+      "model": null,
+      "at": null,
+      "notes": null
+    },
+    "ship": {
+      "status": "pending",
+      "artifacts": [],
+      "actor": null,
+      "model": null,
+      "at": null,
+      "notes": null
+    },
+    "pipeline": {
+      "status": "pending",
+      "artifacts": [],
+      "actor": null,
+      "model": null,
+      "at": null,
+      "notes": null
+    },
+    "dashboard": {
+      "status": "pending",
+      "artifacts": [],
+      "actor": null,
+      "model": null,
+      "at": null,
+      "notes": null
+    },
+    "release": {
+      "status": "pending",
+      "artifacts": [],
+      "actor": null,
+      "model": null,
+      "at": null,
+      "notes": null
+    },
+    "review": {
+      "status": "pending",
+      "artifacts": [],
+      "actor": null,
+      "model": null,
+      "at": null,
+      "notes": null
+    }
+  },
+  "children": [],
+  "overrides": [],
+  "reviews": [],
+  "log": [
+    {
+      "at": "2026-08-11T13:53:24Z",
+      "event": "adopt",
+      "idea": "arsene-cms",
+      "spec": "arsene-cms-product-spec.docx",
+      "actor": "lionel.leboiteux@gmail.com"
+    }
+  ]
+}

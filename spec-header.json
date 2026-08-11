@@ -1,0 +1,22 @@
+{
+  "idea_id": "arsene-cms",
+  "title": "Ars\u00e8ne",
+  "author": "Lionel Le Boiteux",
+  "date": "2026-08-11",
+  "success_metrics": [
+    {
+      "name": "time from draft start to published",
+      "baseline": "approximately 50 minutes (self-reported estimate, not yet precisely measured)",
+      "target": "under 10 minutes",
+      "by_when": "4 weeks after launch"
+    }
+  ],
+  "counter_metric": "writer adoption must not decline - writers reverting to drafting in Word or Google Docs and manually pasting is a failure signal even if the time metric improves",
+  "required_events": [
+    "draft_started",
+    "article_published"
+  ],
+  "acceptance_criteria_count": "18",
+  "out_of_scope": "ads/monetisation integration, Wix content migration, affiliate/sponsored content blocks, human editorial approval workflow",
+  "_source": "arsene-cms-product-spec.docx"
+}
