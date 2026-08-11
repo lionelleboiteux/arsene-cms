@@ -1,0 +1,6 @@
+node_modules/
+coverage/
+.venv-contract/
+.schemathesis/
+.hypothesis/
+.DS_Store

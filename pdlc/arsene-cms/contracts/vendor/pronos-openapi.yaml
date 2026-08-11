@@ -1,0 +1,1606 @@
+openapi: 3.1.0
+
+info:
+  title: Jeu des Pronos API
+  version: 1.0.0
+  summary: >-
+    Public read/write API for the Jeu des Pronos player form and the admin
+    review view. This is the ONLY interface either frontend is allowed to
+    call — all writes go through Supabase Edge Functions implementing this
+    contract, never directly through PostgREST against the tables in
+    contracts/db-schema.sql, so that kickoff-time validation and telemetry
+    emission happen in exactly one place.
+  description: |
+    ## Versioning strategy
+
+    Every path in this contract is prefixed with `/v1`. That prefix is this
+    API's own semantic version, independent of the `/functions/v1/` segment
+    Supabase puts in front of every Edge Function URL — the two are
+    unrelated version numbers that happen to share a digit at v1.
+
+    - **Non-breaking changes** (new optional request field, new optional
+      response field, new enum member a client should treat as "unknown,
+      ignore", a wholly new endpoint) ship inside `/v1` with no client
+      changes required. Clients MUST ignore unrecognised response fields
+      and unrecognised enum values rather than fail closed.
+    - **Breaking changes** (removing/renaming a field, making an optional
+      field required, changing a field's type, changing an error `code`
+      that a client branches on, changing an existing endpoint's URL or
+      method) ship under a new `/v2` prefix, deployed either as new routes
+      on the same Edge Function or as a second function, so `/v1` keeps
+      running unchanged until every consumer (the player form, the admin
+      view) has migrated. There is no sunset date fixed by this document;
+      the migration exit criterion is "no more caller depends on `/v1`".
+    - This is a greenfield build: 1.0.0 is the first cut, written before any
+      server code exists. Nothing here is decided by precedent.
+
+    ## Error envelope
+
+    Every operation in this API — success or failure — can return the
+    `Error` schema on any status code it did not explicitly document,
+    via each operation's `default` response, so a consumer always has one
+    shape to parse for "something I didn't expect happened." Documented
+    error responses use the same `Error` schema with a specific `code` so
+    callers can branch on `error.code` rather than parsing `error.message`
+    or matching on HTTP status alone (several distinct problems legitimately
+    share a status code, e.g. 404 for "league does not exist" vs 404 for
+    "duplicate flag does not exist").
+
+    ## Auth model
+
+    Players have no accounts: no login, no password, a free-text pseudo is
+    the entire identity (see db-schema.sql `players` table comment). Every
+    player-facing operation below therefore declares `security: []`
+    (no auth) explicitly, rather than relying on there being no global
+    security requirement to fall back to.
+
+    Admin (`/v1/admin/*`) requires the Supabase Auth session Lio gets from
+    her magic-link sign-in, sent as a bearer JWT. There is deliberately no
+    "add a league" admin endpoint: per the spec's AC-13, a fourth league is
+    added by inserting a row + `leagues.config` in Postgres directly
+    (fixture source adapter + calendar rule), not through this API. Keeping
+    league identity out of every endpoint's *shape* (leagues are always a
+    `league_id`/`leagueId` parameter, never a field name or a path segment
+    baked in per-league) is what makes that possible.
+
+  contact:
+    name: Lionel Le Boiteux
+    email: lionel.leboiteux@gmail.com
+  license:
+    name: UNLICENSED
+    identifier: UNLICENSED
+
+servers:
+  - url: 'https://{projectRef}.supabase.co/functions/v1/pronos-api'
+    description: >-
+      Supabase Edge Function deployment. The `/functions/v1/` segment is
+      Supabase's own platform routing prefix, unrelated to this contract's
+      `/v1` API-version prefix used in every path below (so the full URL of
+      an operation looks like
+      `.../functions/v1/pronos-api/v1/leagues`).
+    variables:
+      projectRef:
+        default: xxxxxxxxxxxxxxxxxxxx
+        description: Supabase project ref, one per environment (dev/staging/prod).
+
+tags:
+  - name: Leagues
+    description: Public, unauthenticated read endpoints for league and gameweek state.
+  - name: Predictions
+    description: Public, unauthenticated submission of a player's prediction.
+  - name: Standings
+    description: Public, unauthenticated, read-only classement endpoints.
+  - name: Admin
+    description: >-
+      Authenticated (Supabase Auth bearer session) endpoints used only by
+      Lio, from the admin view.
+
+paths:
+
+  /v1/leagues:
+    get:
+      operationId: listLeagues
+      tags: [Leagues]
+      summary: List all configured leagues
+      description: |
+        Returns every league currently configured to play, in no guaranteed
+        order. This is how the player form discovers which leagues exist
+        (currently 3: Ligue 1, Premier League, Bundesliga) without any
+        league identity being baked into this or any other endpoint beyond
+        the `id`/`code` returned here — adding a 4th league (AC-13) changes
+        the *contents* of this list, never its shape.
+
+        **Pagination:** deliberately absent. The number of leagues is
+        bounded by how many Lio configures in Postgres (`leagues` table),
+        expected to stay in the single digits indefinitely; a page/per_page
+        parameter here would be machinery for a cardinality this small.
+      security: []
+      responses:
+        '200':
+          description: The full list of configured leagues.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeagueListResponse'
+              example:
+                data:
+                  - id: 3f29b6d2-8b1a-4e2b-9c3a-111111111111
+                    code: ligue-1
+                    name: Ligue 1
+                    logo_url: 'https://cdn.pronos.example/logos/ligue-1.png'
+                  - id: 51e6a0f0-2c44-4b1d-9a0e-222222222222
+                    code: premier-league
+                    name: Premier League
+                    logo_url: 'https://cdn.pronos.example/logos/premier-league.png'
+                  - id: 7a1d9e60-9d5c-4a2f-9b3e-333333333333
+                    code: bundesliga
+                    name: Bundesliga
+                    logo_url: 'https://cdn.pronos.example/logos/bundesliga.png'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+
+  /v1/leagues/{leagueId}/current:
+    get:
+      operationId: getCurrentGameweek
+      tags: [Leagues]
+      summary: Get a league's currently open gameweek, its matches, and lock state
+      description: |
+        Drives the player form for one league: the currently open gameweek
+        (`leagues.current_gameweek_id`, a read-side cache), its matches, and
+        for each match whether it is locked.
+
+        **Lock state is never cached.** `is_locked` on every returned match
+        is computed at request time as `games.starts_at <= now()` — see the
+        comment on `leagues.current_gameweek_id` in db-schema.sql. A stale
+        `current_gameweek_id` pointer can make this endpoint slow to advance
+        to the next gameweek; it can never make a match look unlocked when
+        it has actually started (AC-01, AC-02).
+
+        **Own-pick lookup.** If `pseudo` is supplied and matches an existing
+        player (exact, case-sensitive string match against `players.pseudo`
+        — see db-schema.sql's identity-model comment), each match includes
+        that player's own existing prediction, if any, as `my_prediction`,
+        so the form can render "already picked 2-1" and let them overwrite
+        it (AC-11). Without `pseudo`, `my_prediction` is always `null`.
+
+        **Hard isolation rule.** This endpoint — and this API generally —
+        never exposes any *other* player's pick for a match where
+        `is_locked` is `false`. That isolation is a product requirement,
+        not an implementation detail: "cannot see other players' picks
+        before matches lock". What (if anything) becomes visible about
+        other players' picks once a match *has* locked is intentionally
+        left unspecified by this contract; a future non-breaking addition
+        (e.g. an `others` field, populated only when `is_locked: true`)
+        could be added to `GameWithPrediction` under this same `/v1` prefix
+        without breaking existing consumers, but no such field exists yet
+        and none should be assumed.
+
+        If the league has no currently open gameweek (e.g. between
+        seasons, or before the first gameweek has been configured), this
+        still returns `200` with `gameweek: null` and `games: []` — that is
+        a normal state of a real league, not an error condition. `404` is
+        reserved for `leagueId` itself not existing.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/LeagueIdPathParam'
+        - $ref: '#/components/parameters/PseudoQueryParam'
+      responses:
+        '200':
+          description: >-
+            The league's current gameweek state, optionally personalised by
+            `pseudo`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentGameweekResponse'
+              examples:
+                withOwnPredictionAndAnUnlockedAndLockedMatch:
+                  summary: pseudo supplied, one match already locked
+                  value:
+                    league:
+                      id: 3f29b6d2-8b1a-4e2b-9c3a-111111111111
+                      code: ligue-1
+                      name: Ligue 1
+                      logo_url: 'https://cdn.pronos.example/logos/ligue-1.png'
+                    season_id: 8a9c6f10-1111-4a2b-9c3d-444444444444
+                    gameweek:
+                      id: 9d2f6a10-2222-4a2b-9c3d-555555555555
+                      number: 15
+                      starts_at: '2026-08-09T18:45:00Z'
+                      ends_at: '2026-08-11T20:00:00Z'
+                      stage_name: Journée 15
+                    games:
+                      - game:
+                          id: 9c1e4a2e-0000-4a2b-9c3d-666666666666
+                          home_team:
+                            id: 1a1a1a1a-0000-4a2b-9c3d-777777777777
+                            name: Olympique de Marseille
+                            code: OM
+                            logo_url: 'https://cdn.pronos.example/teams/om.png'
+                          away_team:
+                            id: 2b2b2b2b-0000-4a2b-9c3d-888888888888
+                            name: Paris Saint-Germain
+                            code: PSG
+                            logo_url: 'https://cdn.pronos.example/teams/psg.png'
+                          starts_at: '2026-08-09T18:45:00Z'
+                          status: in_play
+                          home_team_score: null
+                          away_team_score: null
+                        is_locked: true
+                        my_prediction:
+                          game_id: 9c1e4a2e-0000-4a2b-9c3d-666666666666
+                          predicted_home_score: 2
+                          predicted_away_score: 1
+                          submitted_at: '2026-08-09T09:12:03Z'
+                      - game:
+                          id: 3c3c3c3c-0000-4a2b-9c3d-999999999999
+                          home_team:
+                            id: 4d4d4d4d-0000-4a2b-9c3d-aaaaaaaaaaaa
+                            name: AS Monaco
+                            code: ASM
+                            logo_url: 'https://cdn.pronos.example/teams/asm.png'
+                          away_team:
+                            id: 5e5e5e5e-0000-4a2b-9c3d-bbbbbbbbbbbb
+                            name: LOSC Lille
+                            code: LOSC
+                            logo_url: 'https://cdn.pronos.example/teams/losc.png'
+                          starts_at: '2026-08-10T19:00:00Z'
+                          status: scheduled
+                          home_team_score: null
+                          away_team_score: null
+                        is_locked: false
+                        my_prediction: null
+                noOpenGameweek:
+                  summary: league between seasons, nothing open right now
+                  value:
+                    league:
+                      id: 7a1d9e60-9d5c-4a2f-9b3e-333333333333
+                      code: bundesliga
+                      name: Bundesliga
+                      logo_url: 'https://cdn.pronos.example/logos/bundesliga.png'
+                    season_id: null
+                    gameweek: null
+                    games: []
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+
+  /v1/predictions:
+    post:
+      operationId: submitPrediction
+      tags: [Predictions]
+      summary: Submit or overwrite a player's prediction for one match
+      description: |
+        Upserts a prediction, keyed on `(player, game)` — enforced at the
+        database level by `predictions`' `unique (player_id, game_id)`
+        constraint (see db-schema.sql). Resubmitting for the same pseudo
+        and the same match before it locks **overwrites** the existing row;
+        it never creates a second one (AC-11). Because of this, the
+        operation always returns `200`, whether it just inserted the
+        player's first pick for this match or overwrote an earlier one —
+        both are, from the caller's point of view, "your prediction is now
+        saved", and the response body is identical either way.
+
+        **Kickoff-time lock (AC-01).** The single source of truth for
+        whether a match still accepts a submission is `games.starts_at` at
+        the instant this request is handled — never a client-supplied flag,
+        never the `is_locked` value the client may have read moments
+        earlier from `GET /v1/leagues/{leagueId}/current`. If `starts_at`
+        has passed, the request is rejected with `409` and
+        `error.code: MATCH_LOCKED`, distinct from a `400` validation
+        failure, so the frontend can show "this match has already started"
+        specifically, rather than a generic error — even when the page's
+        grey-out is stale (e.g. a tab left open past kickoff).
+
+        **Email receipt (AC-12) is a side effect of this call, not a
+        separate one.** If (and only if) `email` is present and valid, a
+        receipt of the player's submitted picks is queued for delivery as
+        part of handling this request; the response's
+        `email_receipt_queued` reflects whether that hand-off succeeded.
+        Omitting `email` always succeeds with `email_receipt_queued: false`
+        and no email is sent.
+
+        **Telemetry (informational, not a separate interface).** A
+        successful submission emits a `prediction_submitted` event
+        (`player_pseudo`, `league`, `gameweek`, `match_id`, `submitted_at`,
+        `has_email`); a `409 MATCH_LOCKED` rejection emits a
+        `prediction_rejected_late` event instead
+        (`player_pseudo_attempt`, `league`, `gameweek`, `match_id`,
+        `attempted_at`). Both are appended to `telemetry_events` by the
+        same Edge Function invocation and are not separately callable or
+        queryable through this API.
+
+        **Idempotency.** The canonical idempotency guarantee is the
+        `(player, game)` upsert described above: replaying the exact same
+        request any number of times before the match locks converges on one
+        row and one final state, by construction, with no client-supplied
+        key required. This does **not** by itself protect the *email side
+        effect* from being repeated if a client retries after a timeout
+        without knowing whether the first attempt's email already went out.
+        Callers that want that additional protection may send an
+        `Idempotency-Key` header; the API will suppress a second email send
+        (and only the email send — the upserted row and both possible
+        telemetry events are unaffected either way) for a repeat of the
+        same key within a 5-minute window.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PredictionCreateRequest'
+            examples:
+              withEmail:
+                summary: first-time pick, email receipt requested
+                value:
+                  league_id: 3f29b6d2-8b1a-4e2b-9c3a-111111111111
+                  game_id: 3c3c3c3c-0000-4a2b-9c3d-999999999999
+                  pseudo: Lio_92
+                  email: lio92@example.com
+                  predicted_home_score: 2
+                  predicted_away_score: 1
+              overwriteNoEmail:
+                summary: resubmission for the same pseudo+match, no email
+                value:
+                  league_id: 3f29b6d2-8b1a-4e2b-9c3a-111111111111
+                  game_id: 3c3c3c3c-0000-4a2b-9c3d-999999999999
+                  pseudo: Lio_92
+                  predicted_home_score: 1
+                  predicted_away_score: 1
+      responses:
+        '200':
+          description: >-
+            The prediction as stored after the upsert (whether this call
+            created it or overwrote a previous one).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Prediction'
+              example:
+                id: b1b1b1b1-0000-4a2b-9c3d-cccccccccccc
+                player_id: c2c2c2c2-0000-4a2b-9c3d-dddddddddddd
+                pseudo: Lio_92
+                league_id: 3f29b6d2-8b1a-4e2b-9c3a-111111111111
+                season_id: 8a9c6f10-1111-4a2b-9c3d-444444444444
+                gameweek_id: 9d2f6a10-2222-4a2b-9c3d-555555555555
+                game_id: 3c3c3c3c-0000-4a2b-9c3d-999999999999
+                predicted_home_score: 2
+                predicted_away_score: 1
+                submitted_at: '2026-08-09T09:12:03Z'
+                email_receipt_queued: true
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The match has already kicked off; this submission is rejected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: MATCH_LOCKED
+                  message: >-
+                    This match started at 2026-08-09T18:45:00Z and can no
+                    longer accept predictions.
+                  details:
+                    game_id: 9c1e4a2e-0000-4a2b-9c3d-666666666666
+                    starts_at: '2026-08-09T18:45:00Z'
+                  request_id: 6f0a1b2c-3d4e-4f56-8a7b-9c0d1e2f3a4b
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+
+  /v1/leagues/{leagueId}/gameweeks/{gameweekId}/standings:
+    get:
+      operationId: getGameweekStandings
+      tags: [Standings]
+      summary: Get one league-gameweek's classement
+      description: |
+        Public, read-only projection of `league_gameweek_standings` for one
+        `(league, gameweek)` pair, ordered by `rank` ascending. A gameweek
+        with zero submissions still returns `200` with an empty `data`
+        array and `pagination.total_items: 0` (AC-14) — that is a valid
+        result, not an error.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/LeagueIdPathParam'
+        - $ref: '#/components/parameters/GameweekIdPathParam'
+        - $ref: '#/components/parameters/PageQueryParam'
+        - $ref: '#/components/parameters/PerPageQueryParam'
+      responses:
+        '200':
+          description: Ranked standings for this league-gameweek.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeagueGameweekStandingsResponse'
+              example:
+                league_id: 3f29b6d2-8b1a-4e2b-9c3a-111111111111
+                gameweek_id: 9d2f6a10-2222-4a2b-9c3d-555555555555
+                data:
+                  - player_id: c2c2c2c2-0000-4a2b-9c3d-dddddddddddd
+                    pseudo: Lio_92
+                    points: 8
+                    rank: 1
+                    predictions_count: 3
+                    correct_results_count: 2
+                    exact_scores_count: 1
+                  - player_id: e3e3e3e3-0000-4a2b-9c3d-eeeeeeeeeeee
+                    pseudo: Jean_M
+                    points: 5
+                    rank: 2
+                    predictions_count: 3
+                    correct_results_count: 1
+                    exact_scores_count: 1
+                pagination:
+                  page: 1
+                  per_page: 20
+                  total_items: 2
+                  total_pages: 1
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+
+  /v1/leagues/{leagueId}/seasons/{seasonId}/standings/overall:
+    get:
+      operationId: getOverallStandings
+      tags: [Standings]
+      summary: Get a season's overall classement
+      description: |
+        Public, read-only projection of `overall_standings` for one season
+        of one league, ordered by `rank` ascending.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/LeagueIdPathParam'
+        - $ref: '#/components/parameters/SeasonIdPathParam'
+        - $ref: '#/components/parameters/PageQueryParam'
+        - $ref: '#/components/parameters/PerPageQueryParam'
+      responses:
+        '200':
+          description: Ranked overall standings for this season.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OverallStandingsResponse'
+              example:
+                league_id: 3f29b6d2-8b1a-4e2b-9c3a-111111111111
+                season_id: 8a9c6f10-1111-4a2b-9c3d-444444444444
+                data:
+                  - player_id: c2c2c2c2-0000-4a2b-9c3d-dddddddddddd
+                    pseudo: Lio_92
+                    points: 63
+                    rank: 1
+                    predictions_count: 15
+                    correct_results_count: 10
+                    exact_scores_count: 5
+                pagination:
+                  page: 1
+                  per_page: 20
+                  total_items: 1
+                  total_pages: 1
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+
+  /v1/standings/cross-league:
+    get:
+      operationId: getCrossLeagueWeeklyStandings
+      tags: [Standings]
+      summary: Get the cross-league ("European") table for one calendar week
+      description: |
+        One pseudo's points summed across every league for a single ISO
+        calendar week, plus the cumulative running total through that week.
+        Leagues run independent gameweek schedules with no shared numbering,
+        so the calendar week of each league's gameweek (its `starts_at`) is
+        the key used to line separate leagues up — not the gameweek number.
+        `rank` orders by the cumulative running total, not the week's points
+        alone. A week with no data anywhere returns `200` with an empty
+        `data` array and `week_start: null`, the same convention as AC-14
+        for a single league's empty gameweek.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/WeekQueryParam'
+        - $ref: '#/components/parameters/PageQueryParam'
+        - $ref: '#/components/parameters/PerPageQueryParam'
+      responses:
+        '200':
+          description: Cross-league standings for the requested (or most recent) week.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CrossLeagueStandingsResponse'
+              example:
+                week_start: '2026-08-10'
+                data:
+                  - player_id: c2c2c2c2-0000-4a2b-9c3d-dddddddddddd
+                    pseudo: Lio_92
+                    points: 8
+                    running_points: 21
+                    rank: 1
+                    predictions_count: 3
+                    correct_results_count: 2
+                    exact_scores_count: 1
+                pagination:
+                  page: 1
+                  per_page: 20
+                  total_items: 1
+                  total_pages: 1
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+
+  /v1/admin/duplicate-flags:
+    get:
+      operationId: listDuplicateFlags
+      tags: [Admin]
+      summary: List near-duplicate pseudo flags for review
+      description: |
+        Lists `duplicate_flags` rows (AC-09). Defaults to `status=pending`
+        so Lio's weekly review queue is the default view; pass
+        `status=all` to see the full history including already-reviewed
+        and dismissed flags. This endpoint is informational only — nothing
+        it returns has ever blocked or merged either player's submissions,
+        and there is no endpoint anywhere in this API that does.
+      security:
+        - supabaseBearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, reviewed, dismissed, all]
+            default: pending
+          description: Filter by review status; `all` removes the filter.
+        - name: league_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Restrict to one league.
+        - name: gameweek_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Restrict to one gameweek.
+        - $ref: '#/components/parameters/PageQueryParam'
+        - $ref: '#/components/parameters/PerPageQueryParam'
+      responses:
+        '200':
+          description: Matching duplicate flags, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DuplicateFlagListResponse'
+              example:
+                data:
+                  - id: f1f1f1f1-0000-4a2b-9c3d-111122223333
+                    league_id: 3f29b6d2-8b1a-4e2b-9c3a-111111111111
+                    gameweek_id: 9d2f6a10-2222-4a2b-9c3d-555555555555
+                    player_a:
+                      id: c2c2c2c2-0000-4a2b-9c3d-dddddddddddd
+                      pseudo: Lio_92
+                    player_b:
+                      id: a4a4a4a4-0000-4a2b-9c3d-444455556666
+                      pseudo: Lio92
+                    similarity_score: 0.94
+                    status: pending
+                    reviewed_at: null
+                    reviewed_by: null
+                    created_at: '2026-08-09T21:00:00Z'
+                pagination:
+                  page: 1
+                  per_page: 20
+                  total_items: 1
+                  total_pages: 1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+
+  /v1/admin/duplicate-flags/{flagId}:
+    patch:
+      operationId: updateDuplicateFlagStatus
+      tags: [Admin]
+      summary: Mark a duplicate-pseudo flag reviewed or dismissed
+      description: |
+        Sets `duplicate_flags.status`. This never touches `players` or
+        `predictions` in any way — it cannot merge, delete, or reassign
+        either pseudo's data; it only records that Lio looked at the pair.
+        `reviewed_by` is set by the API from the authenticated admin
+        session, not accepted from the request body.
+
+        **Idempotency.** This is an absolute-state PATCH (it sets `status`
+        to the given value, it does not toggle or increment anything), so
+        it is naturally idempotent without needing an `Idempotency-Key`:
+        submitting the same `status` for the same `flagId` any number of
+        times leaves the row in the same end state and returns `200` every
+        time, including on repeats after a client-side timeout/retry.
+      security:
+        - supabaseBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FlagIdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DuplicateFlagPatchRequest'
+            example:
+              status: dismissed
+      responses:
+        '200':
+          description: The flag after the status update.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DuplicateFlag'
+              example:
+                id: f1f1f1f1-0000-4a2b-9c3d-111122223333
+                league_id: 3f29b6d2-8b1a-4e2b-9c3a-111111111111
+                gameweek_id: 9d2f6a10-2222-4a2b-9c3d-555555555555
+                player_a:
+                  id: c2c2c2c2-0000-4a2b-9c3d-dddddddddddd
+                  pseudo: Lio_92
+                player_b:
+                  id: a4a4a4a4-0000-4a2b-9c3d-444455556666
+                  pseudo: Lio92
+                similarity_score: 0.94
+                status: dismissed
+                reviewed_at: '2026-08-10T08:03:00Z'
+                reviewed_by: lionel.leboiteux@gmail.com
+                created_at: '2026-08-09T21:00:00Z'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+
+  /v1/admin/gameweeks/{gameweekId}/override:
+    post:
+      operationId: overrideGameweek
+      tags: [Admin]
+      summary: Manually open, close, or re-score a gameweek when automation fails
+      description: |
+        Escape hatch for when the automated pipeline (pg_cron/pg_net fixture
+        sync, kickoff-based close, morning-after scoring run) fails to open,
+        close, or score a gameweek correctly:
+
+        - `action: open` — points `leagues.current_gameweek_id` at this
+          gameweek. A no-op (`applied: false`) if it is already the open
+          one for its league.
+        - `action: close` — advances `leagues.current_gameweek_id` past
+          this gameweek. Requires this gameweek to currently be its
+          league's open one; otherwise `409 CONFLICT`.
+        - `action: rescore` — re-runs point calculation for this gameweek
+          (recomputes `prediction_scores` and the standings tables that
+          depend on it). Requires this gameweek's last match to have
+          already kicked off (i.e. it is closed in the kickoff-time sense);
+          otherwise `409 CONFLICT`.
+
+        **This endpoint's own successful use is itself one of the things
+        the project measures.** Every call that actually changes state
+        (`applied: true`) appends one `admin_manual_intervention` event to
+        `telemetry_events` — `type` (the `action` used), `league`,
+        `gameweek`, `timestamp`, and `duration_minutes_estimate` taken
+        verbatim from the request body — because "how much manual admin
+        time did this take this week" is the project's primary success
+        metric. A no-op (`applied: false`) does not emit a new event: it
+        did not cost Lio any additional recovery time beyond the call
+        itself, and double-counting a retried no-op would inflate the
+        metric this endpoint exists to keep honest.
+
+        **Idempotency.** Unlike the two endpoints above, this one requires
+        an `Idempotency-Key` header. Its side effects (a telemetry insert,
+        and for `rescore`, real recomputation work) are not safe to repeat
+        silently on every client retry the way an absolute-state PATCH or a
+        `(player, game)` upsert is. Replaying the same key for the same
+        `gameweekId` within a 24-hour window returns the original stored
+        response unchanged and performs no new work; a different key (or
+        the same key against a different `gameweekId`) is treated as a new
+        request.
+      security:
+        - supabaseBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/GameweekIdPathParam'
+        - $ref: '#/components/parameters/IdempotencyKeyHeaderRequired'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GameweekOverrideRequest'
+            examples:
+              forceClose:
+                summary: last match of the gameweek kicked off but the auto-closer didn't fire
+                value:
+                  action: close
+                  duration_minutes_estimate: 4
+                  notes: >-
+                    Fixture adapter reported the last PL match 20 min late;
+                    auto-close cron had already run and skipped it.
+              rescore:
+                summary: morning-after scoring run failed, re-triggering it
+                value:
+                  action: rescore
+                  duration_minutes_estimate: 10
+                  notes: Scoring job errored on a postponed-then-replayed fixture.
+      responses:
+        '200':
+          description: >-
+            The override was accepted (whether it changed state or was a
+            no-op — see `applied`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameweekOverrideResponse'
+              example:
+                gameweek_id: 9d2f6a10-2222-4a2b-9c3d-555555555555
+                league_id: 3f29b6d2-8b1a-4e2b-9c3a-111111111111
+                action: close
+                applied: true
+                current_gameweek_id_before: 9d2f6a10-2222-4a2b-9c3d-555555555555
+                current_gameweek_id_after: 1f2e3d4c-3333-4a2b-9c3d-777788889999
+                telemetry_event_id: 2a2b2c2d-0000-4a2b-9c3d-aaaabbbbcccc
+                applied_at: '2026-08-11T20:05:00Z'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: >-
+            The requested action does not apply to this gameweek's current
+            state (e.g. `rescore` requested before the gameweek has closed).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: CONFLICT
+                  message: >-
+                    Gameweek 15 has not closed yet (its last match starts
+                    2026-08-11T20:00:00Z); it cannot be rescored.
+                  details:
+                    gameweek_id: 9d2f6a10-2222-4a2b-9c3d-555555555555
+                    action: rescore
+                  request_id: 1c2b3a4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+
+components:
+
+  securitySchemes:
+    supabaseBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Supabase Auth session token issued to Lio via magic-link sign-in.
+        Sent as `Authorization: Bearer <token>`. Required on every
+        `/v1/admin/*` operation; player-facing operations never require it.
+
+  parameters:
+    LeagueIdPathParam:
+      name: leagueId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: A `leagues.id` value, as returned by `GET /v1/leagues`.
+      example: 3f29b6d2-8b1a-4e2b-9c3a-111111111111
+
+    SeasonIdPathParam:
+      name: seasonId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: A `seasons.id` value.
+      example: 8a9c6f10-1111-4a2b-9c3d-444444444444
+
+    GameweekIdPathParam:
+      name: gameweekId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: A `gameweeks.id` value.
+      example: 9d2f6a10-2222-4a2b-9c3d-555555555555
+
+    FlagIdPathParam:
+      name: flagId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: A `duplicate_flags.id` value.
+      example: f1f1f1f1-0000-4a2b-9c3d-111122223333
+
+    PseudoQueryParam:
+      name: pseudo
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 60
+      description: >-
+        Exact, case-sensitive match against `players.pseudo`. When present
+        and matched, the response's `my_prediction` fields are populated
+        for that player. Omit entirely for an anonymous, unpersonalised
+        read.
+      example: Lio_92
+
+    PageQueryParam:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      example: 1
+
+    PerPageQueryParam:
+      name: per_page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      description: Maximum 100 rows per page.
+      example: 20
+
+    WeekQueryParam:
+      name: week
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+      description: >-
+        The Monday (ISO calendar week start) to return standings for. Omit
+        to get the most recent week that has any data.
+      example: '2026-08-10'
+
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+      description: >-
+        Client-generated opaque token (e.g. a UUID) scoping retry-safety
+        for this specific request. See each operation's description for
+        exactly what it deduplicates and its replay window.
+      example: 6c1a9e2b-4b1a-4e2b-9c3a-abcdefabcdef
+
+    IdempotencyKeyHeaderRequired:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+      description: >-
+        Client-generated opaque token (e.g. a UUID). Required on this
+        operation because its side effects (a telemetry insert, and for
+        `action: rescore`, real recomputation work) are not safe to repeat
+        silently on every retry. See the operation description for the
+        replay window.
+      example: 6c1a9e2b-4b1a-4e2b-9c3a-abcdefabcdef
+
+  responses:
+    ValidationError:
+      description: The request body or parameters failed validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: VALIDATION_FAILED
+              message: Request failed validation.
+              details:
+                fields:
+                  - field: predicted_home_score
+                    message: must be an integer >= 0
+              request_id: 4b3c2d1e-0f1a-4b2c-8d3e-4f5a6b7c8d9e
+
+    Unauthorized:
+      description: Missing or invalid admin bearer token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: UNAUTHORIZED
+              message: >-
+                A valid Supabase Auth bearer token is required for this
+                endpoint.
+              details: null
+              request_id: 7d8e9f0a-1b2c-4d3e-9f4a-5b6c7d8e9f0a
+
+    NotFound:
+      description: The referenced resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: NOT_FOUND
+              message: No resource was found matching the given identifier(s).
+              details:
+                league_id: 00000000-0000-0000-0000-000000000000
+              request_id: 8e9f0a1b-2c3d-4e5f-8a9b-6c7d8e9f0a1b
+
+    UnexpectedError:
+      description: >-
+        Any status code not explicitly documented above for this operation.
+        Always parseable as the same `Error` envelope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: INTERNAL_ERROR
+              message: An unexpected error occurred. Please retry.
+              details: null
+              request_id: 9f0a1b2c-3d4e-4f5a-8b9c-7d8e9f0a1b2c
+
+  schemas:
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_FAILED
+                - MATCH_LOCKED
+                - NOT_FOUND
+                - UNAUTHORIZED
+                - CONFLICT
+                - INTERNAL_ERROR
+              description: >-
+                Machine-checkable error category. Consumers should branch
+                on this, not on `message` (human-readable, may change
+                wording) and not on HTTP status alone (several codes can
+                share one status, e.g. `NOT_FOUND` is always `404` but not
+                every `404` on this API is the same kind of "not found").
+            message:
+              type: string
+              description: Human-readable explanation, safe to show to Lio; not guaranteed stable wording for programmatic matching.
+            details:
+              description: >-
+                Machine-readable context specific to `code`. `null` when
+                there is nothing further to add beyond `message`.
+              oneOf:
+                - type: object
+                  additionalProperties: true
+                - type: 'null'
+            request_id:
+              description: >-
+                Correlation id for this specific request/response, for
+                cross-referencing server logs when reporting a problem.
+              oneOf:
+                - type: string
+                  format: uuid
+                - type: 'null'
+
+    League:
+      type: object
+      required: [id, code, name, logo_url]
+      description: >-
+        Deliberately excludes `leagues.config` (fixture-source adapter,
+        calendar rule): that column is managed directly in Postgres by
+        Lio, never through this API (see AC-13) — a 4th league appearing
+        here is driven purely by a new row existing, with zero endpoint or
+        schema changes.
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          description: Stable, URL/UI-safe slug. Unique.
+          example: ligue-1
+        name:
+          type: string
+          example: Ligue 1
+        logo_url:
+          oneOf:
+            - type: string
+              format: uri
+            - type: 'null'
+
+    Team:
+      type: object
+      required: [id, name, code, logo_url]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Olympique de Marseille
+        code:
+          type: string
+          example: OM
+        logo_url:
+          oneOf:
+            - type: string
+              format: uri
+            - type: 'null'
+
+    Game:
+      type: object
+      required:
+        - id
+        - home_team
+        - away_team
+        - starts_at
+        - status
+        - home_team_score
+        - away_team_score
+      properties:
+        id:
+          type: string
+          format: uuid
+        home_team:
+          $ref: '#/components/schemas/Team'
+        away_team:
+          $ref: '#/components/schemas/Team'
+        starts_at:
+          type: string
+          format: date-time
+          description: >-
+            The single source of truth for locking (`games.starts_at`).
+            Every lock decision anywhere in this API is `starts_at <=
+            now()` computed at request time, never a stored flag.
+        status:
+          type: string
+          description: >-
+            Fixture status as reported by the configured fixture adapter
+            (`leagues.config`). Not a closed enum in the database and not
+            one here either — new adapters may introduce values beyond the
+            ones illustrated (`scheduled`, `in_play`, `finished`,
+            `postponed`, `cancelled`); consumers must not exhaustively
+            switch on this without a default/unknown case.
+          example: scheduled
+        home_team_score:
+          description: 'null until the match has a reported result.'
+          oneOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+        away_team_score:
+          description: 'null until the match has a reported result.'
+          oneOf:
+            - type: integer
+              minimum: 0
+            - type: 'null'
+
+    Gameweek:
+      type: object
+      required: [id, number, starts_at, ends_at, stage_name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: integer
+          example: 15
+        starts_at:
+          type: string
+          format: date-time
+          description: Kickoff of this gameweek's first scheduled match.
+        ends_at:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+          description: Kickoff of this gameweek's last scheduled match, once known.
+        stage_name:
+          oneOf:
+            - type: string
+            - type: 'null'
+          example: Journée 15
+
+    PredictionSummary:
+      type: object
+      description: >-
+        A player's own prediction for one match, as embedded in
+        `GameWithPrediction.my_prediction`. Never another player's.
+      required:
+        [game_id, predicted_home_score, predicted_away_score, submitted_at]
+      properties:
+        game_id:
+          type: string
+          format: uuid
+        predicted_home_score:
+          type: integer
+          minimum: 0
+        predicted_away_score:
+          type: integer
+          minimum: 0
+        submitted_at:
+          type: string
+          format: date-time
+
+    GameWithPrediction:
+      type: object
+      required: [game, is_locked, my_prediction]
+      properties:
+        game:
+          $ref: '#/components/schemas/Game'
+        is_locked:
+          type: boolean
+          description: >-
+            Computed as `game.starts_at <= now()` at response time. Never
+            a cached value.
+        my_prediction:
+          description: >-
+            The requesting player's own existing prediction for this game.
+            `null` when no `pseudo` was supplied, the pseudo matched no
+            player, or that player has no prediction for this game yet.
+            Never contains any other player's pick, regardless of
+            `is_locked`.
+          oneOf:
+            - $ref: '#/components/schemas/PredictionSummary'
+            - type: 'null'
+
+    CurrentGameweekResponse:
+      type: object
+      required: [league, season_id, gameweek, games]
+      properties:
+        league:
+          $ref: '#/components/schemas/League'
+        season_id:
+          oneOf:
+            - type: string
+              format: uuid
+            - type: 'null'
+        gameweek:
+          description: >-
+            `null` when the league currently has no open gameweek (e.g.
+            between seasons). Backed by `leagues.current_gameweek_id`, a
+            read-side cache only — see db-schema.sql.
+          oneOf:
+            - $ref: '#/components/schemas/Gameweek'
+            - type: 'null'
+        games:
+          type: array
+          description: Empty when `gameweek` is `null`.
+          items:
+            $ref: '#/components/schemas/GameWithPrediction'
+
+    PredictionCreateRequest:
+      type: object
+      required:
+        [league_id, game_id, pseudo, predicted_home_score, predicted_away_score]
+      properties:
+        league_id:
+          type: string
+          format: uuid
+          description: >-
+            Must match `game_id`'s own league; supplied explicitly so a
+            mismatch is rejected as `VALIDATION_FAILED` rather than the
+            backend silently trusting the game's own league.
+        game_id:
+          type: string
+          format: uuid
+        pseudo:
+          type: string
+          minLength: 1
+          maxLength: 60
+          description: >-
+            Free-text identity, no account behind it. Exact string is the
+            player's identity (`players.pseudo`, globally unique) — see
+            db-schema.sql's identity-model comment on near-duplicates.
+          example: Lio_92
+        email:
+          description: >-
+            Optional. When present and syntactically valid, a receipt is
+            queued as a side effect of this call (AC-12). Omit or send
+            `null` for no email.
+          oneOf:
+            - type: string
+              format: email
+            - type: 'null'
+          example: lio92@example.com
+        predicted_home_score:
+          type: integer
+          minimum: 0
+          maximum: 99
+        predicted_away_score:
+          type: integer
+          minimum: 0
+          maximum: 99
+
+    Prediction:
+      type: object
+      required:
+        - id
+        - player_id
+        - pseudo
+        - league_id
+        - season_id
+        - gameweek_id
+        - game_id
+        - predicted_home_score
+        - predicted_away_score
+        - submitted_at
+        - email_receipt_queued
+      properties:
+        id:
+          type: string
+          format: uuid
+        player_id:
+          type: string
+          format: uuid
+        pseudo:
+          type: string
+        league_id:
+          type: string
+          format: uuid
+        season_id:
+          type: string
+          format: uuid
+        gameweek_id:
+          type: string
+          format: uuid
+        game_id:
+          type: string
+          format: uuid
+        predicted_home_score:
+          type: integer
+          minimum: 0
+        predicted_away_score:
+          type: integer
+          minimum: 0
+        submitted_at:
+          type: string
+          format: date-time
+        email_receipt_queued:
+          type: boolean
+          description: >-
+            `true` only when an `email` was given in the request AND the
+            receipt send was successfully handed off. Always `false` when
+            no email was given.
+
+    Pagination:
+      type: object
+      required: [page, per_page, total_items, total_pages]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        per_page:
+          type: integer
+          minimum: 1
+          maximum: 100
+        total_items:
+          type: integer
+          minimum: 0
+        total_pages:
+          type: integer
+          minimum: 0
+
+    StandingsEntry:
+      type: object
+      required:
+        - player_id
+        - pseudo
+        - points
+        - rank
+        - predictions_count
+        - correct_results_count
+        - exact_scores_count
+      properties:
+        player_id:
+          type: string
+          format: uuid
+        pseudo:
+          type: string
+        points:
+          type: integer
+        rank:
+          description: 'null only if ranking has not yet been computed for this row.'
+          oneOf:
+            - type: integer
+              minimum: 1
+            - type: 'null'
+        predictions_count:
+          type: integer
+          minimum: 0
+        correct_results_count:
+          type: integer
+          minimum: 0
+        exact_scores_count:
+          type: integer
+          minimum: 0
+
+    LeagueGameweekStandingsResponse:
+      type: object
+      required: [league_id, gameweek_id, data, pagination]
+      properties:
+        league_id:
+          type: string
+          format: uuid
+        gameweek_id:
+          type: string
+          format: uuid
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StandingsEntry'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    OverallStandingsResponse:
+      type: object
+      required: [league_id, season_id, data, pagination]
+      properties:
+        league_id:
+          type: string
+          format: uuid
+        season_id:
+          type: string
+          format: uuid
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StandingsEntry'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    CrossLeagueStandingsEntry:
+      type: object
+      required:
+        - player_id
+        - pseudo
+        - points
+        - running_points
+        - rank
+        - predictions_count
+        - correct_results_count
+        - exact_scores_count
+      properties:
+        player_id:
+          type: string
+          format: uuid
+        pseudo:
+          type: string
+        points:
+          type: integer
+          description: Points earned across all leagues in this calendar week only.
+        running_points:
+          type: integer
+          description: Cumulative points across all leagues, this week and every prior week.
+        rank:
+          type: integer
+          minimum: 1
+          description: Rank by running_points (the cumulative total), not this week's points alone.
+        predictions_count:
+          type: integer
+          minimum: 0
+        correct_results_count:
+          type: integer
+          minimum: 0
+        exact_scores_count:
+          type: integer
+          minimum: 0
+
+    CrossLeagueStandingsResponse:
+      type: object
+      required: [week_start, data, pagination]
+      properties:
+        week_start:
+          description: 'null only if no league has any scored gameweek yet.'
+          oneOf:
+            - type: string
+              format: date
+            - type: 'null'
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CrossLeagueStandingsEntry'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    DuplicateFlagPlayerRef:
+      type: object
+      required: [id, pseudo]
+      properties:
+        id:
+          type: string
+          format: uuid
+        pseudo:
+          type: string
+
+    DuplicateFlag:
+      type: object
+      required:
+        - id
+        - league_id
+        - gameweek_id
+        - player_a
+        - player_b
+        - similarity_score
+        - status
+        - reviewed_at
+        - reviewed_by
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        league_id:
+          type: string
+          format: uuid
+        gameweek_id:
+          type: string
+          format: uuid
+        player_a:
+          $ref: '#/components/schemas/DuplicateFlagPlayerRef'
+        player_b:
+          $ref: '#/components/schemas/DuplicateFlagPlayerRef'
+        similarity_score:
+          type: number
+          minimum: 0
+          maximum: 1
+        status:
+          type: string
+          enum: [pending, reviewed, dismissed]
+        reviewed_at:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        reviewed_by:
+          description: Set by the API from the authenticated admin session, not client-supplied.
+          oneOf:
+            - type: string
+            - type: 'null'
+        created_at:
+          type: string
+          format: date-time
+
+    DuplicateFlagListResponse:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DuplicateFlag'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    DuplicateFlagPatchRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [reviewed, dismissed]
+          description: >-
+            Only forward transitions from `pending` an admin actually makes
+            are accepted here; `pending` itself is not a settable target
+            through this endpoint (a flag becomes `pending` only by being
+            newly created by the weekly detection job).
+
+    GameweekOverrideRequest:
+      type: object
+      required: [action, duration_minutes_estimate]
+      properties:
+        action:
+          type: string
+          enum: [open, close, rescore]
+        duration_minutes_estimate:
+          type: number
+          minimum: 0
+          description: >-
+            Lio's estimate of how long this manual fix took, in minutes.
+            Recorded verbatim into the `admin_manual_intervention`
+            telemetry event this call emits — a direct input to the
+            project's "weekly manual admin time" success metric.
+          example: 4
+        notes:
+          description: Free-text context for Lio's own future reference; never shown to players.
+          oneOf:
+            - type: string
+            - type: 'null'
+
+    GameweekOverrideResponse:
+      type: object
+      required:
+        - gameweek_id
+        - league_id
+        - action
+        - applied
+        - current_gameweek_id_before
+        - current_gameweek_id_after
+        - telemetry_event_id
+        - applied_at
+      properties:
+        gameweek_id:
+          type: string
+          format: uuid
+        league_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum: [open, close, rescore]
+        applied:
+          type: boolean
+          description: >-
+            `false` when the requested action was already the gameweek's
+            state (e.g. `open` on the already-open gameweek) and nothing
+            changed; no telemetry event is emitted for a no-op.
+        current_gameweek_id_before:
+          description: 'null if the league had no open gameweek beforehand.'
+          oneOf:
+            - type: string
+              format: uuid
+            - type: 'null'
+        current_gameweek_id_after:
+          description: 'null if the league has no open gameweek afterwards (e.g. after closing the season''s last gameweek).'
+          oneOf:
+            - type: string
+              format: uuid
+            - type: 'null'
+        telemetry_event_id:
+          description: >-
+            Id of the `admin_manual_intervention` row inserted into
+            `telemetry_events` by this call. `null` only when `applied` is
+            `false`.
+          oneOf:
+            - type: string
+              format: uuid
+            - type: 'null'
+        applied_at:
+          type: string
+          format: date-time
+
+    LeagueListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/League'

@@ -228,7 +228,7 @@ production feature.
 | Tampering | Yes | `publish`/image Edge Functions validate server-side (cover image presence, file type/size) rather than trusting the client; writer-controlled columns (e.g. `published_at`, slug, schema markup) are not directly writable via PostgREST, only via the publish function | RLS/grants deny direct writer writes to publish-controlled columns |
 | Repudiation | Low | `telemetry_events` plus `writer_id`/`updated_at` on every article give an audit trail of who published/edited what and when | Article history retains `writer_id` on every publish |
 | Information disclosure | Yes | Drafts are not readable by the `anon` role — RLS restricts unpublished articles to authenticated writers; the image bucket must not allow public listing of unpublished assets | RLS policy denying `anon` SELECT on unpublished articles/images |
-| Denial of service | Low | Upload size limits on the image Edge Function (bounded memory/time budget for the WASM codec); rate limiting on `publish`, mirroring pronos' existing 10 req/min per IP precedent | Max upload size enforced (e.g. 10MB); rate limit on mutating endpoints |
+| Denial of service | Low | Upload size limits on the image Edge Function (bounded memory/time budget for the WASM codec); rate limiting on `publish`, mirroring pronos' existing 10 req/min per IP precedent | Max upload size enforced at 20MB (fixed by the contract's `FILE_TOO_LARGE` response, `max_bytes: 20971520` — this is the binding number; an earlier draft of this row said "e.g. 10MB" before the contract fixed it); rate limit on mutating endpoints, assumed at pronos' 10 req/min/IP precedent pending explicit confirmation |
 | Elevation of privilege | N/A | The spec has no role hierarchy — every writer has equal, full publish rights by design, no approval step exists to escalate around | Not applicable — confirmed by spec section 2 and section 8 (no approval workflow) |
 
 ## 8. Observability
@@ -260,3 +260,27 @@ proxy: weekly published-article count per writer, compared against the pre-launc
 baseline, reviewed manually at John's review gate rather than dashboarded
 automatically. This should be confirmed with the product owner/Pam as an accepted
 measurement approach before John's review gate, not assumed.
+
+## 9. Addendum — refined during the red gate
+
+Two points from this document were sharpened while writing the test suite (see
+`03-red-evidence.v1.md` §6 and `traceability.md` §6 for the full reasoning). Recorded
+here so the architecture document stays the source of truth, not just the traceability
+notes:
+
+- **Draft creation cannot be a bare client-side PostgREST insert.** §1's shape implies
+  the editor writes drafts directly to Postgres for everything, including creation.
+  But `draft_started` is one of the two events the whole success metric depends on
+  (§4/§8), and if the SPA is what's responsible for emitting it after an insert it
+  controls, a client bug can silently drop the metric's numerator with nothing to
+  detect it. Draft **creation** and **reopening** go through a thin server-side
+  seam (`src/api/createDraft.ts` — an RPC or Edge Function, not a raw insert) that
+  emits `draft_started` itself, exactly once, as part of the same transaction. Every
+  other draft field edit (title, body, structured fields) stays direct PostgREST/RLS
+  as originally designed — this refinement is scoped to the two moments that touch
+  telemetry, not the whole drafting flow.
+- **The DoS row's upload-size figure was provisional text ("e.g. 10MB") written before
+  the contract fixed a real number.** `contracts/openapi.yaml`'s `FILE_TOO_LARGE`
+  response is the binding limit (20MB) — §7's table has been corrected to match. The
+  contract is a promise already made to callers; the architecture note was the stale
+  one.
