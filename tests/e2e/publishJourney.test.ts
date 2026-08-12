@@ -42,6 +42,12 @@ beforeAll(async () => {
       databaseUrl: db.connectionUri,
       writerToken: WRITER_TOKEN,
       writerId,
+      // This file is the pre-JWT end-to-end suite `router.ts`'s `verify()`
+      // comment sanctions, so it runs on the static token by design. From the
+      // third remediation pass that has to be *stated* rather than inferred
+      // from a missing secret — see tests/e2e/failClosedConfig.test.ts
+      // (NFR-FAILCLOSED-01). Setup only: no assertion in this file changes.
+      allowLegacyAuth: true,
     });
     started = { db, server, writerId };
   } catch (err) {

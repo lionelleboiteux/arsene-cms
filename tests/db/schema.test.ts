@@ -378,6 +378,80 @@ describe('write protection and disclosure', () => {
     expect(sqlstate).toBe('42501'); // insufficient_privilege
   });
 
+  /**
+   * M1 (05-verification.v2.md §4, third remediation pass) — AC-05's lock is
+   * stealable straight through PostgREST.
+   *
+   * `db/migrations/0001_initial_schema.sql`'s column grant hands
+   * `authenticated` direct UPDATE on `locked_by`/`locked_at`, and
+   * `writers_manage_articles` is `using (true) with check (true)`. So while
+   * `repo.takeLock()` implements the compare-and-swap ADR-0003 designed, any
+   * writer can skip it entirely with `PATCH /rest/v1/articles?id=eq.<id>` and
+   * take a colleague's live lock mid-sentence — with no recovery path for the
+   * writer who lost it. The application-level CAS proven in
+   * `tests/db/remediation.test.ts` (AC-05-free/held/stale) is only a lock if
+   * the data layer agrees it is.
+   *
+   * The lock columns therefore belong on the same side of the grant line as
+   * the publish-controlled ones NFR-TAMPER-01 (directly above) already pins:
+   * written only by the server seam running as `service_role`, i.e. reachable
+   * only through `POST /v1/articles/{id}/open`, which is where the CAS lives.
+   *
+   * Two cases, because they are two different attacks and one grant change
+   * could close only one of them:
+   *   a  writing `locked_by` steals the lock outright;
+   *   b  writing `locked_at` alone never changes the holder, but refreshes
+   *      somebody else's heartbeat forever, so the 90-second staleness window
+   *      that AC-05 relies on to recover an abandoned draft never opens.
+   */
+  type LockGrantCase = { id: string; attack: string; sql: string; params: (article: string, writer: string) => string[] };
+
+  const LOCK_GRANT_CASES: LockGrantCase[] = [
+    {
+      id: 'NFR-LOCK-GRANT-01a',
+      attack: 'stealing a colleague’s live lock by writing locked_by directly',
+      sql: `update articles set locked_by = $2, locked_at = now() where id = $1`,
+      params: (article, writer) => [article, writer],
+    },
+    {
+      id: 'NFR-LOCK-GRANT-01b',
+      attack: 'keeping a colleague’s abandoned lock alive forever by refreshing locked_at directly',
+      sql: `update articles set locked_at = now() where id = $1`,
+      params: (article) => [article],
+    },
+  ];
+
+  it.each(
+    LOCK_GRANT_CASES.map(
+      (c) =>
+        [
+          `${c.id}: a writer cannot take the draft lock through PostgREST — ${c.attack} is refused, so the only way to hold a lock is the server seam's compare-and-swap`,
+          c,
+        ] as const,
+    ),
+  )('%s', async (_title, c) => {
+    const { client } = db();
+    const marie = await seedWriter(client, `Marie D. (lock grant ${c.id})`);
+    const thief = await seedWriter(client, `Lionel (lock grant ${c.id})`);
+    const article = await seedArticle(client, {
+      writer_id: marie,
+      title: `Verrou volé ${c.id}`,
+      league_name: 'Ligue 1',
+      type_name: 'Pronos',
+    });
+    // Marie is holding it right now: her heartbeat is one second old.
+    await client.query(
+      `update articles set locked_by = $2, locked_at = now() - interval '1 second' where id = $1`,
+      [article, marie],
+    );
+
+    const sqlstate = await asRole('authenticated', () =>
+      captureSqlError(() => client.query(c.sql, c.params(article, thief))),
+    );
+
+    expect(sqlstate).toBe('42501'); // insufficient_privilege
+  });
+
   it('NFR-AUDIT-01: every article and every telemetry row is stamped with a writer id that cannot be null', async () => {
     const res = await db().client.query(
       `select table_name, column_name, is_nullable

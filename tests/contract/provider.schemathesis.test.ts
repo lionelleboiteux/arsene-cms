@@ -38,6 +38,12 @@ beforeAll(async () => {
       databaseUrl: db.connectionUri,
       writerToken: WRITER_TOKEN,
       writerId: WRITER_ID,
+      // Fuzzed on the static token by design (the pre-JWT suite). From the
+      // third remediation pass, running without `SUPABASE_JWT_SECRET` has to
+      // be an explicit choice rather than a silent downgrade — see
+      // tests/e2e/failClosedConfig.test.ts (NFR-FAILCLOSED-01). Setup only:
+      // no assertion in this file changes.
+      allowLegacyAuth: true,
     });
     baseUrl = server.url;
   } catch (err) {

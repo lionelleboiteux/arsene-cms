@@ -624,6 +624,16 @@ export interface ApiServerModule {
     /** Verify finding #3, second pass: must genuinely reach the spawned child. */
     jwtSecret?: string;
     imageCallbackSecret?: string;
+    /**
+     * M3 (05-verification.v2.md, third pass): running with no JWT secret at
+     * all is a legitimate, documented mode (`router.ts`'s `verify()` comment,
+     * and the pre-JWT end-to-end suite below), but it must be *chosen*, never
+     * arrived at by a secret quietly going missing. This flag is that explicit
+     * choice; `server.ts` forwards it to the child as
+     * `ALLOW_LEGACY_STATIC_AUTH=true`. See tests/e2e/failClosedConfig.test.ts
+     * for the full statement of the mechanism.
+     */
+    allowLegacyAuth?: boolean;
   }): Promise<{ url: string; stop(): Promise<void> }>;
 }
 
@@ -841,10 +851,26 @@ export type RouterOptions = {
   jwtSecret?: string;
   /** ADR-0004's Lambda callback shared secret. */
   imageCallbackSecret?: string;
+  /**
+   * How long a request may take to finish delivering its body before the
+   * server answers it and stops waiting (05-verification.v2.md §5: `readBody()`
+   * has no timeout, so a declared-but-never-completed body hangs the request
+   * indefinitely). Optional so the shipped default applies in production;
+   * overridable so NFR-DOS-03 can prove the mechanism in ~2 seconds instead of
+   * waiting out a realistic one.
+   */
+  readTimeoutMs?: number;
 };
 
 export interface ApiRouterModule {
   startHttpServer(opts: RouterOptions): Promise<{ url: string; stop(): Promise<void> }>;
+  /**
+   * The read timeout a deployment gets when it configures none — the value
+   * that actually protects production, as opposed to the test override above.
+   * NFR-DOS-03b pins it, so "pass NFR-DOS-03 by honouring the override and
+   * leave the default at Node's 300 s" is not a way through the gate.
+   */
+  DEFAULT_READ_TIMEOUT_MS: number;
 }
 
 export async function loadApiRouter(): Promise<ApiRouterModule> {
