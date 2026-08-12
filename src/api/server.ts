@@ -18,7 +18,22 @@ const ENTRY = new URL('./serverMain.ts', import.meta.url).pathname;
 
 export type RunningServer = { url: string; stop(): Promise<void> };
 
-export async function startServer(opts: ServerOptions): Promise<RunningServer> {
+// `readTimeoutMs` is omitted rather than inherited-and-ignored: this boundary
+// passes configuration to a child process, and the last time it advertised an
+// option it silently dropped (`jwtSecret`), the bug survived a whole verify
+// pass. The child gets `router.ts`'s shipped default.
+export type SpawnedServerOptions = Omit<ServerOptions, 'readTimeoutMs'> & {
+  /**
+   * M3 (05-verification.v2.md): running on the legacy static token, with no
+   * JWT secret at all, stays a legitimate mode — but it has to be *chosen*.
+   * This flag is that choice, forwarded to the child as
+   * `ALLOW_LEGACY_STATIC_AUTH=true`; without it, `serverMain.ts` refuses to
+   * start when `SUPABASE_JWT_SECRET` is missing or empty.
+   */
+  allowLegacyAuth?: boolean;
+};
+
+export async function startServer(opts: SpawnedServerOptions): Promise<RunningServer> {
   const child = spawn(
     process.execPath,
     [ENTRY, String(opts.port), opts.databaseUrl, opts.writerToken, opts.writerId],
@@ -38,6 +53,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
         ...(opts.imageCallbackSecret !== undefined
           ? { IMAGE_CALLBACK_SECRET: opts.imageCallbackSecret }
           : {}),
+        ...(opts.allowLegacyAuth === true ? { ALLOW_LEGACY_STATIC_AUTH: 'true' } : {}),
       },
     },
   );
@@ -59,7 +75,10 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
         resolve(match[1]);
       }
     }, 50);
-    child.on('exit', (code) => {
+    // `close` rather than `exit`: it fires once the child's stdio pipes have
+    // been drained, so a child that refuses to start (serverMain.ts's
+    // fail-closed check) has its reason in `output` by the time it is reported.
+    child.on('close', (code) => {
       clearInterval(check);
       clearTimeout(timer);
       reject(new Error(`Edge Function exited with code ${code}:\n${output}`));

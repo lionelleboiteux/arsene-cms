@@ -33,6 +33,16 @@ const CDN_ORIGIN = 'https://cdn.fantasycoach.example';
 /** A Postgres foreign-key violation: this token's `sub` is not a writer here. */
 const FOREIGN_KEY_VIOLATION = '23503';
 
+/**
+ * How long a request gets to finish delivering its body before the server
+ * answers `408` and lets the socket go (05-verification.v2.md §5: a body that
+ * is declared and then never arrives used to hang on Node's 300-second
+ * default). Deliberately short: an anonymous caller must not be able to park
+ * connections cheaply. The cost is that a 20 MB upload has to arrive inside
+ * this window, so a very slow uplink is refused rather than waited for.
+ */
+export const DEFAULT_READ_TIMEOUT_MS = 8_000;
+
 const PublishBody = z.object({
   meta_title: z.string().min(1).max(70).optional(),
   meta_description: z.string().min(1).max(160).optional(),
@@ -46,11 +56,24 @@ const CreateDraftBody = z.object({
   type_name: z.string().optional(),
 });
 
+/**
+ * 05-verification.v2.md L2: the callback may only publish assets from the
+ * trusted CDN. A real origin comparison, not a prefix test — `startsWith`
+ * would accept `https://cdn.fantasycoach.example.attacker.test/…`.
+ */
+const isCdnUrl = (value: string): boolean => {
+  try {
+    return new URL(value).origin === CDN_ORIGIN;
+  } catch {
+    return false;
+  }
+};
+
 /** contracts/internal-openapi.yaml: `ready` needs a URL, `failed` a reason. */
 const ImageStatusBody = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('ready'),
-    optimized_url: z.string().min(1),
+    optimized_url: z.string().min(1).refine(isCdnUrl, `must be a URL on ${CDN_ORIGIN}`),
     failure: z.null().optional(),
   }),
   z.object({
@@ -392,6 +415,9 @@ export type ServerOptions = {
   jwtSecret?: string;
   /** ADR-0004's Lambda status-callback shared secret. */
   imageCallbackSecret?: string;
+  /** How long a request may take to deliver its body; `DEFAULT_READ_TIMEOUT_MS`
+   * when unset. */
+  readTimeoutMs?: number;
 };
 
 type Shared = {
@@ -421,11 +447,22 @@ export async function startHttpServer(opts: ServerOptions): Promise<RunningServe
     },
   };
 
-  const server = http.createServer((req, res) => {
-    void route(req, res, ctx).catch(() =>
-      send(res, errorResponse(500, 'INTERNAL_ERROR', 'An unexpected error occurred.')),
-    );
-  });
+  const readTimeoutMs = opts.readTimeoutMs ?? DEFAULT_READ_TIMEOUT_MS;
+  const server = http.createServer(
+    {
+      requestTimeout: readTimeoutMs,
+      // Node only notices an over-running request when it sweeps its
+      // connections, every 30 s by default — which would make the timeout
+      // above nearly meaningless. Sweeping four times per window keeps the
+      // real bound within 1.25x the configured value.
+      connectionsCheckingInterval: Math.ceil(readTimeoutMs / 4),
+    },
+    (req, res) => {
+      void route(req, res, ctx).catch(() =>
+        send(res, errorResponse(500, 'INTERNAL_ERROR', 'An unexpected error occurred.')),
+      );
+    },
+  );
 
   await new Promise<void>((resolve) => server.listen(opts.port, '127.0.0.1', resolve));
 
@@ -497,9 +534,18 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse, ctx: C
     send(res, tooLarge());
     return;
   }
-  // The callback carries a shared secret rather than a writer token, and checks
-  // it in its own handler.
-  if (op.kind !== 'image-status' && !(await verify(bearerToken(req.headers.authorization ?? null), ctx.opts)).valid) {
+  // The callback carries a shared secret rather than a writer token (ADR-0004),
+  // but it is checked here, from the headers alone, for the same reason the
+  // writer token is: 05-verification.v2.md M2 found the one credential-free
+  // route was also the one route an anonymous caller could make buffer
+  // megabytes. `handleImageStatusCallback` still checks it too — that is its
+  // own contract, and its unit tests are the ones that pin it.
+  if (op.kind === 'image-status') {
+    if (!verifySharedSecret(header(req, 'x-arsene-image-callback-secret'), ctx.opts.imageCallbackSecret ?? '')) {
+      send(res, errorResponse(401, 'UNAUTHORIZED', 'A valid image-callback secret is required.'));
+      return;
+    }
+  } else if (!(await verify(bearerToken(req.headers.authorization ?? null), ctx.opts)).valid) {
     send(res, errorResponse(401, 'UNAUTHORIZED', 'A valid Supabase Auth bearer token is required.'));
     return;
   }

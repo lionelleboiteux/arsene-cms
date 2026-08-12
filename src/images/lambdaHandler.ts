@@ -9,7 +9,9 @@
  * `article_images` and the contract need no change.
  */
 
-import sharp from 'sharp';
+// `Sharp` is a named type export from sharp 0.35 onwards (0.34 exposed it as a
+// namespace alongside the default export).
+import sharp, { type Sharp } from 'sharp';
 import { sniffImageFormat, type SourceFormat } from './format.ts';
 import { decodeHeic } from './heic.ts';
 import type { OptimizeResult } from './optimize.ts';
@@ -19,7 +21,7 @@ const WEBP_QUALITY = 75;
 const WEBP_EFFORT = 2;
 
 /** HEVC-in-HEIF is decoded first; `sharp` opens every other format itself. */
-async function open(bytes: Uint8Array, format: SourceFormat): Promise<sharp.Sharp> {
+async function open(bytes: Uint8Array, format: SourceFormat): Promise<Sharp> {
   if (format !== 'heic') return sharp(Buffer.from(bytes));
   const { data, width, height } = await decodeHeic(bytes);
   return sharp(data, { raw: { width, height, channels: 4 } });

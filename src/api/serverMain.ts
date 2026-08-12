@@ -5,12 +5,39 @@
  * process.
  */
 
+import { writeSync } from 'node:fs';
 import { startHttpServer } from './router.ts';
 
 const [port, databaseUrl, writerToken, writerId] = process.argv.slice(2);
 
 if (port === undefined || databaseUrl === undefined || writerToken === undefined || writerId === undefined) {
   throw new Error('usage: serverMain.ts <port> <databaseUrl> <writerToken> <writerId>');
+}
+
+/**
+ * M3 (05-verification.v2.md): without a JWT secret, `router.ts`'s `verify()`
+ * falls back to the one static writer token and attributes every article to
+ * one constant — legitimate for a deployment that chose it, catastrophic and
+ * silent when a rotation or a cloned environment merely lost the variable.
+ * This entry point is the only place that reads that environment, so it is
+ * the place that refuses to start when the mode was not chosen.
+ */
+const jwtSecret = process.env.SUPABASE_JWT_SECRET;
+if (
+  (jwtSecret === undefined || jwtSecret === '') &&
+  process.env.ALLOW_LEGACY_STATIC_AUTH !== 'true'
+) {
+  // `writeSync` rather than `process.stderr.write`: writes to a pipe are
+  // asynchronous on macOS, and this process is about to exit.
+  writeSync(
+    2,
+    'refusing to start: SUPABASE_JWT_SECRET is missing or empty, so every request ' +
+      'would be authenticated by the shared static writer token instead of the ' +
+      "caller's own Supabase Auth JWT. Set SUPABASE_JWT_SECRET, or set " +
+      'ALLOW_LEGACY_STATIC_AUTH=true to choose the legacy static-token mode ' +
+      'deliberately.\n',
+  );
+  process.exit(78); // EX_CONFIG
 }
 
 const server = await startHttpServer({
