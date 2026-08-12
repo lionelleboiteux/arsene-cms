@@ -3,11 +3,14 @@ import { loadImageOptimize } from '../support/seams.js';
 import type { OptimizeResult } from '../support/seams.js';
 import {
   BASE_JPEG,
+  BASE_PNG,
   MB,
   corruptedJpeg,
   oversizedJpeg,
+  pngChunksAreIntact,
   unsupportedFile,
   validJpeg,
+  validPng,
 } from '../support/imageFixtures.js';
 
 /**
@@ -38,6 +41,23 @@ const CASES: CodecCase[] = [
     file: validJpeg,
     filename: 'psg-om-cover.jpg',
     declared_content_type: 'image/jpeg',
+    expect: (r, input) => ({
+      ok: r.ok,
+      modern_format: r.ok ? r.format === 'webp' || r.format === 'avif' : null,
+      compressed: r.ok ? r.byte_size < input.byteLength : null,
+      reports_original_size: r.ok ? r.original_byte_size === input.byteLength : null,
+    }),
+    expected: { ok: true, modern_format: true, compressed: true, reports_original_size: true },
+  },
+  {
+    // Same acceptance criterion, second source format: openapi.yaml lists PNG
+    // alongside JPEG as an accepted upload, so AC-07's promise ("becomes a
+    // compressed WebP/AVIF") is owed to a PNG on exactly the same terms.
+    id: 'AC-07',
+    klass: 'a valid 4 MB PNG, the contract’s other common source format,',
+    file: validPng,
+    filename: 'psg-om-cover.png',
+    declared_content_type: 'image/png',
     expect: (r, input) => ({
       ok: r.ok,
       modern_format: r.ok ? r.format === 'webp' || r.format === 'avif' : null,
@@ -99,7 +119,7 @@ describe('image optimisation (real codec, real files)', () => {
   });
 
   /**
-   * Harness guard, not a product assertion: proves the four fixtures above are
+   * Harness guard, not a product assertion: proves the fixtures above are
    * genuine files of the size and shape each case claims, so a green run can
    * never be green because a fixture quietly turned into an empty buffer.
    * This one passes at red — it depends on no production code.
@@ -114,6 +134,11 @@ describe('image optimisation (real codec, real files)', () => {
       corrupted_sniffs_as_jpeg: jpegMagic(corruptedJpeg()),
       oversized_exceeds_contract_limit: oversizedJpeg().byteLength > CONTRACT_MAX_BYTES,
       unsupported_is_a_pdf: Buffer.from(unsupportedFile()).subarray(0, 5).toString() === '%PDF-',
+      // Chunk-walked and CRC-checked, not magic-byte sniffed: `corruptedJpeg()`
+      // is proof that a correct header says nothing about the bytes behind it.
+      base_png_is_an_intact_png: pngChunksAreIntact(BASE_PNG),
+      valid_png_is_an_intact_png: pngChunksAreIntact(validPng()),
+      valid_png_is_about_4mb: validPng().byteLength >= 4 * MB && validPng().byteLength < 5 * MB,
     }).toEqual({
       base_is_jpeg: true,
       valid_is_jpeg: true,
@@ -121,6 +146,9 @@ describe('image optimisation (real codec, real files)', () => {
       corrupted_sniffs_as_jpeg: true,
       oversized_exceeds_contract_limit: true,
       unsupported_is_a_pdf: true,
+      base_png_is_an_intact_png: true,
+      valid_png_is_an_intact_png: true,
+      valid_png_is_about_4mb: true,
     });
   });
 });

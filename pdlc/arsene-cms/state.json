@@ -110,12 +110,18 @@
       "notes": null
     },
     "green": {
-      "status": "pending",
-      "artifacts": [],
-      "actor": null,
-      "model": null,
-      "at": null,
-      "notes": null
+      "status": "passed",
+      "artifacts": [
+        {
+          "path": "pdlc/arsene-cms/04-green-evidence.v1.md",
+          "sha256": "7208d05b31e001a3d8e49f4a3dad82eceaee15578cc73b098d627712637bfe77",
+          "recorded": "2026-08-12T05:40:55Z"
+        }
+      ],
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "at": "2026-08-12T05:40:55Z",
+      "notes": "127/127 tests pass (126 original + PNG support added via a scoped red/green amendment per product-owner decision), tsc clean, 90.47% branch / 94.16% stmt coverage excluding out-of-process modules, above the 80% floor. No test file edited by the implementer. Deviations documented in evidence \u00a76 (server runs in child process per Schemathesis constraint; draft_started backfilled at publish rather than via insert trigger, proven necessary by AC-18; rate-limit ordering; idempotency store has no expiry). D7 (image format gap) half-closed: PNG now decodes, WebP/AVIF/HEIC remain 422 and are explicitly deferred, not silently dropped. Schemathesis found and fixed a real bug: malformed JSON returned 500 instead of 400."
     },
     "verify": {
       "status": "pending",
@@ -221,6 +227,16 @@
       "artifacts": [
         "pdlc/arsene-cms/03-red-evidence.v1.md",
         "pdlc/arsene-cms/traceability.md"
+      ]
+    },
+    {
+      "at": "2026-08-12T05:40:55Z",
+      "event": "pass",
+      "gate": "green",
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": [
+        "pdlc/arsene-cms/04-green-evidence.v1.md"
       ]
     }
   ]
