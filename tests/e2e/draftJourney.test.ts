@@ -172,4 +172,19 @@ describe('draft creation over its real route (verify finding #4)', () => {
       { title: 'Brouillon de Marie', article_writer: writerA, event_writer: writerA },
     ]);
   });
+
+  it('VERIFY-03-REGRESSION: the legacy static writer token is refused once a JWT secret is configured, so it cannot act as a permanent bypass of real per-writer auth', async () => {
+    const { server } = ctx();
+
+    // This server was started with BOTH jwtSecret (see beforeAll) and the
+    // legacy writerToken option 'unused-static-token' — kept only so the
+    // option shape stays compatible with deployments that have no JWT secret
+    // at all. Presenting that static credential here must fail exactly like
+    // any other invalid bearer token: verify finding #3 is not actually fixed
+    // if a hardcoded shared secret still authenticates in parallel with real
+    // per-writer JWT verification.
+    const res = await createDraft(server.url, 'unused-static-token', { title: 'Devrait échouer' });
+
+    expect(res.status).toBe(401);
+  });
 });

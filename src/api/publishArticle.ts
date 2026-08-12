@@ -6,6 +6,7 @@
  */
 
 import { evaluateLock } from '../domain/lock.ts';
+import { sanitizePastedHtml } from '../domain/paste.ts';
 import { buildPronosEntry, type PronosEntryInput } from '../domain/pronosEntry.ts';
 import {
   articlePath,
@@ -22,15 +23,14 @@ import { buildTelemetryEvent, type TelemetrySink } from '../telemetry/events.ts'
 import { bearerToken, errorResponse, type HandlerResponse } from './http.ts';
 import type { RateLimiter } from './rateLimit.ts';
 
-/** Where optimised assets are served from — never Supabase Storage (§4). */
-const CDN_ORIGIN = 'https://cdn.fantasycoach.example';
-
 export type ImageRecord = {
   id: string;
   article_id: string;
   role: 'cover' | 'body';
   status: 'processing' | 'ready' | 'failed';
   alt_text: string | null;
+  /** The converted asset's real CDN URL, written by ADR-0004's callback. */
+  optimized_url?: string | null;
 };
 
 export type ArticleRecord = {
@@ -72,6 +72,7 @@ export type PublishDeps = {
       writer_id: string;
       published_at: Date;
       slug: string;
+      body_html: string;
       meta_title: string;
       meta_description: string;
       structured_data: Record<string, unknown>;
@@ -123,10 +124,11 @@ export async function handlePublishArticle(
     return errorResponse(429, 'CONFLICT', `More than ${rate.limit} publishes per minute.`);
   }
 
-  const refusal = await refusePublish(article, auth.writer_id, now, deps);
+  const images = await deps.repo.getArticleImages(article.id);
+  const refusal = await refusePublish(article, images, auth.writer_id, now, deps);
   if (refusal !== null) return refusal;
 
-  const response = await publishNow(req, article, auth.writer_id, now, deps);
+  const response = await publishNow(req, article, images, auth.writer_id, now, deps);
   if (req.idempotency_key) deps.idempotency.store(req.idempotency_key, req.article_id, response);
   return response;
 }
@@ -134,6 +136,7 @@ export async function handlePublishArticle(
 /** Every documented reason a publish is refused, in the contract's order. */
 async function refusePublish(
   article: ArticleRecord,
+  images: ImageRecord[],
   writer_id: string,
   now: Date,
   deps: PublishDeps,
@@ -154,7 +157,6 @@ async function refusePublish(
     });
   }
 
-  const images = await deps.repo.getArticleImages(article.id);
   if (!images.some((image) => image.role === 'cover')) {
     return errorResponse(400, 'COVER_IMAGE_REQUIRED', 'This article has no cover image.', {
       article_id: article.id,
@@ -194,10 +196,14 @@ function invalidPronosFields(
 async function publishNow(
   req: PublishHttpRequest,
   article: ArticleRecord,
+  images: ImageRecord[],
   writer_id: string,
   now: Date,
   deps: PublishDeps,
 ): Promise<HandlerResponse> {
+  // H1: `body_html` is directly PostgREST-writable by any writer, so the one
+  // request that makes it public is the one that must sanitise it.
+  const body_html = sanitizePastedHtml(article.body_html);
   const body_text = htmlToText(article.body_html);
   const suggestion = suggestMeta({ ...article, body_text });
   const meta_title = req.body.meta_title ?? article.meta_title ?? suggestion.meta_title;
@@ -212,7 +218,9 @@ async function publishNow(
     league_name: article.league_name,
     type_name: article.type_name,
     writer_display_name: await deps.repo.getWriterDisplayName(article.writer_id),
-    cover_image_url: `${CDN_ORIGIN}/articles/${article.id}/cover-optimized.webp`,
+    // §6.4: the URL the cover was actually stored under, never one built from
+    // the article id — this value is persisted into `structured_data`.
+    cover_image_url: images.find((image) => image.role === 'cover')?.optimized_url ?? '',
     published_at: now.toISOString(),
     first_published_at: (article.first_published_at ?? now).toISOString(),
   };
@@ -223,6 +231,7 @@ async function publishNow(
     writer_id,
     published_at: now,
     slug: view.slug,
+    body_html,
     meta_title,
     meta_description,
     structured_data,

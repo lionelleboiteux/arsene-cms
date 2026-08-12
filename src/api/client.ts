@@ -20,6 +20,8 @@ export class ArseneApiError extends Error {
 }
 
 export type ArseneClient = {
+  createDraft(args?: { title?: string; league_name?: string; type_name?: string }): Promise<unknown>;
+  openDraft(args: { articleId: string }): Promise<unknown>;
   publishArticle(args: {
     articleId: string;
     meta_title?: string;
@@ -59,6 +61,26 @@ export function createArseneClient(opts: {
   });
 
   return {
+    async createDraft(args = {}) {
+      const response = await fetch(`${opts.baseUrl}/v1/articles`, {
+        method: 'POST',
+        headers: headers({ 'content-type': 'application/json' }),
+        body: JSON.stringify(args),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      return parse(response);
+    },
+
+    async openDraft(args) {
+      const response = await fetch(`${opts.baseUrl}/v1/articles/${args.articleId}/open`, {
+        method: 'POST',
+        headers: headers({ 'content-type': 'application/json' }),
+        body: '{}',
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      return parse(response);
+    },
+
     async publishArticle(args) {
       const response = await fetch(`${opts.baseUrl}/v1/articles/${args.articleId}/publish`, {
         method: 'POST',

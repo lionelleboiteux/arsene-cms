@@ -32,7 +32,9 @@ export type CreateDraftDeps = {
   repo: {
     insertDraft(input: { writer_id: string; title: string }): Promise<{ id: string }>;
     getArticle(article_id: string): Promise<ArticleRecord | null>;
-    takeLock(input: { article_id: string; writer_id: string; now: Date }): Promise<boolean>;
+    /** Staleness-checked compare-and-swap; the database's clock decides. */
+    takeLock(input: { article_id: string; writer_id: string }): Promise<boolean>;
+    getWriterDisplayName(writer_id: string): Promise<string>;
   };
   telemetry: TelemetrySink;
 };
@@ -51,7 +53,9 @@ export async function handleCreateDraft(
   const now = deps.now();
   const draft = await deps.repo.insertDraft({
     writer_id: auth.writer_id,
-    title: req.body.title ?? UNTITLED,
+    // A draft's title is never blank: it has to be displayable in the writer's
+    // draft list before they have typed anything (contract, `createDraft`).
+    title: req.body.title === undefined || req.body.title === '' ? UNTITLED : req.body.title,
   });
   deps.telemetry.emit(
     buildTelemetryEvent('draft_started', {
@@ -60,7 +64,7 @@ export async function handleCreateDraft(
       started_at: now.toISOString(),
     }),
   );
-  await deps.repo.takeLock({ article_id: draft.id, writer_id: auth.writer_id, now });
+  await deps.repo.takeLock({ article_id: draft.id, writer_id: auth.writer_id });
 
   return { status: 201, body: { article_id: draft.id, locked_by: auth.writer_id } };
 }
@@ -82,14 +86,14 @@ export async function handleOpenDraft(
     });
   }
 
-  const held = await deps.repo.takeLock({
-    article_id: article.id,
-    writer_id: auth.writer_id,
-    now: deps.now(),
-  });
+  const held = await deps.repo.takeLock({ article_id: article.id, writer_id: auth.writer_id });
   if (!held) {
+    // AC-05: the editor names who to ask, exactly as publish's own 409 does.
+    const locked_by = article.locked_by;
     return errorResponse(409, 'DRAFT_LOCKED', 'This draft is currently locked by another writer.', {
-      locked_by_writer_id: article.locked_by,
+      locked_by_writer_id: locked_by,
+      locked_by_display_name:
+        locked_by === null ? null : await deps.repo.getWriterDisplayName(locked_by),
     });
   }
 

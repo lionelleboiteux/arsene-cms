@@ -1,13 +1,22 @@
 /**
- * `POST /v1/articles/{articleId}/images` — the one place that guarantees no
- * image reaches a writer-visible state without going through format
- * conversion and compression (AC-07), and the place cover uniqueness is
- * decided (AC-06).
+ * `POST /v1/articles/{articleId}/images` — the place cover uniqueness is
+ * decided (AC-06), and the place an upload is admitted to the asynchronous
+ * conversion pipeline.
+ *
+ * ADR-0004: this request stores the original and returns `201` with
+ * `status: processing` immediately. It never decodes anything — the conversion
+ * runs in Lambda (`src/images/lambdaHandler.ts`) and reports back through
+ * `POST /internal/images/{imageId}/status`, so no writer upload can exceed the
+ * Edge Function's CPU budget (verify finding #5). What stays here is what is
+ * cheap and must be answered now: the size limit, the container sniff, cover
+ * uniqueness, and the alt text the article's own text already determines.
  */
 
 import { generateAltText, htmlToText } from '../domain/seo.ts';
-import { MAX_UPLOAD_BYTES, type OptimizeResult } from '../images/optimize.ts';
+import { sniffImageFormat, isDamagedContainer } from '../images/format.ts';
+import { MAX_UPLOAD_BYTES } from '../images/optimize.ts';
 import { bearerToken, errorResponse, type HandlerResponse } from './http.ts';
+import type { RateLimiter } from './rateLimit.ts';
 import type { ArticleRecord, ImageRecord } from './publishArticle.ts';
 
 export type UploadImageRequest = {
@@ -20,6 +29,7 @@ export type UploadImageRequest = {
 };
 
 export type UploadDeps = {
+  now(): Date;
   auth: {
     verifyBearer(
       token: string | null,
@@ -32,22 +42,18 @@ export type UploadDeps = {
       id: string;
       article_id: string;
       role: 'cover' | 'body';
-      status: 'processing' | 'ready' | 'failed';
+      status: 'processing' | 'failed';
       original_filename: string;
       alt_text: string | null;
-      urls: { original: string; optimized: string } | null;
+      original_url: string | null;
+      optimized_url: string | null;
       failure: { code: string; message: string } | null;
       replaced_cover_image_id: string | null;
     }): Promise<{ id: string; created_at: Date }>;
     demoteCurrentCover(article_id: string): Promise<string | null>;
   };
   storage: { put(key: string, bytes: Uint8Array): Promise<{ url: string }> };
-  optimizer: {
-    optimize(
-      bytes: Uint8Array,
-      meta: { filename: string; declared_content_type: string },
-    ): Promise<OptimizeResult>;
-  };
+  rateLimiter: RateLimiter;
   idempotency: {
     lookup(key: string, article_id: string): HandlerResponse | null;
     store(key: string, article_id: string, response: HandlerResponse): void;
@@ -85,6 +91,13 @@ export async function handleUploadImage(
   const replay = deps.idempotency.lookup(req.idempotency_key, req.article_id);
   if (replay !== null) return replay;
 
+  // Checked once the article is known to exist, so the budget protects the
+  // upload path itself rather than 404 lookups (as on publish).
+  const rate = deps.rateLimiter.check(`upload:${req.client_ip}`, deps.now());
+  if (!rate.allowed) {
+    return errorResponse(429, 'CONFLICT', `More than ${rate.limit} uploads per minute.`);
+  }
+
   if (req.file.bytes.byteLength > MAX_UPLOAD_BYTES) {
     return errorResponse(413, 'FILE_TOO_LARGE', 'Files must be 20 MB or smaller.', {
       max_bytes: MAX_UPLOAD_BYTES,
@@ -92,81 +105,73 @@ export async function handleUploadImage(
     });
   }
 
-  const optimized = await deps.optimizer.optimize(req.file.bytes, {
-    filename: req.file.filename,
-    declared_content_type: req.file.content_type,
-  });
-  const response = await storeImage(req, article, optimized, deps);
+  const response = await createImage(req, article, deps);
   deps.idempotency.store(req.idempotency_key, req.article_id, response);
   return response;
 }
 
-async function storeImage(
+async function createImage(
   req: UploadImageRequest,
   article: ArticleRecord,
-  optimized: OptimizeResult,
   deps: UploadDeps,
 ): Promise<HandlerResponse> {
-  if (!optimized.ok && optimized.code === 'UNSUPPORTED_FORMAT') {
-    // AC-08: an unrecognisable container creates no image row at all.
+  const format = sniffImageFormat(req.file.bytes);
+  if (format === null) {
+    // AC-08: an unrecognisable container creates no image row at all, and is
+    // never handed to the pipeline.
     deps.observability.record({
       event: 'image_optimization',
       outcome: 'failure',
-      details: { article_id: article.id, code: optimized.code },
+      details: { article_id: article.id, code: 'UNSUPPORTED_FORMAT' },
     });
-    return errorResponse(422, 'UNSUPPORTED_FORMAT', optimized.message, {
-      detected_content_type: 'application/octet-stream',
-    });
+    return errorResponse(
+      422,
+      'UNSUPPORTED_FORMAT',
+      `${req.file.filename} could not be recognised as a supported image format.`,
+      { detected_content_type: 'application/octet-stream' },
+    );
   }
 
   const id = crypto.randomUUID();
   const replaced_cover_image_id =
     req.role === 'cover' ? await deps.repo.demoteCurrentCover(article.id) : null;
 
-  if (!optimized.ok) {
+  if (isDamagedContainer(req.file.bytes, format)) {
     // AC-08: the row exists and says why, so the writer is told to replace it
-    // and the publish endpoint refuses the article until they do.
+    // and the publish endpoint refuses the article until they do. Nothing is
+    // stored: a truncated file has nothing worth converting.
     return insert(id, req, deps, {
       status: 'failed',
       alt_text: null,
-      urls: null,
-      failure: { code: optimized.code, message: optimized.message },
+      original_url: null,
+      failure: {
+        code: 'CORRUPTED_FILE',
+        message: `${req.file.filename} passed format detection but could not be decoded.`,
+      },
       replaced_cover_image_id,
     });
   }
 
-  const urls = await storeBytes(id, req, optimized, deps);
-  const alt_text = generateAltText({
-    article_title: article.title,
-    body_text: htmlToText(article.body_html),
-    original_filename: req.file.filename,
-  });
+  // AC-15: alt text comes from the article's own words, not from the pixels, so
+  // it is ready the moment conversion completes rather than computed later.
+  const original = await deps.storage.put(`${id}-original-${req.file.filename}`, req.file.bytes);
   return insert(id, req, deps, {
-    status: 'ready',
-    alt_text,
-    urls,
+    status: 'processing',
+    alt_text: generateAltText({
+      article_title: article.title,
+      body_text: htmlToText(article.body_html),
+      original_filename: req.file.filename,
+    }),
+    original_url: original.url,
     failure: null,
     replaced_cover_image_id,
   });
 }
 
-async function storeBytes(
-  id: string,
-  req: UploadImageRequest,
-  optimized: Extract<OptimizeResult, { ok: true }>,
-  deps: UploadDeps,
-): Promise<{ original: string; optimized: string }> {
-  const [original, converted] = await Promise.all([
-    deps.storage.put(`${id}-original-${req.file.filename}`, req.file.bytes),
-    deps.storage.put(`${id}-optimized.${optimized.format}`, optimized.bytes),
-  ]);
-  return { original: original.url, optimized: converted.url };
-}
-
 type ImageState = {
-  status: 'ready' | 'failed';
+  status: 'processing' | 'failed';
   alt_text: string | null;
-  urls: { original: string; optimized: string } | null;
+  original_url: string | null;
   failure: { code: string; message: string } | null;
   replaced_cover_image_id: string | null;
 };
@@ -183,6 +188,7 @@ async function insert(
     article_id: req.article_id,
     role: req.role,
     original_filename: req.file.filename,
+    optimized_url: null,
     ...state,
   });
   return {
@@ -193,8 +199,10 @@ async function insert(
       role: req.role,
       status: state.status,
       original_filename: req.file.filename,
-      alt_text: state.alt_text,
-      urls: state.urls,
+      // Both withheld until the row is `ready` (contract: "`null` until then"),
+      // whatever is already stored on the row.
+      alt_text: null,
+      urls: null,
       failure: state.failure,
       replaced_cover_image_id: state.replaced_cover_image_id,
       created_at: row.created_at.toISOString(),

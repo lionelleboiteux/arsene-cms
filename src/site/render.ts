@@ -9,6 +9,7 @@
  */
 
 import pg from 'pg';
+import { sanitizePastedHtml } from '../domain/paste.ts';
 import {
   articlePath,
   buildStructuredData,
@@ -142,7 +143,11 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
         `<meta property="og:image" content="${escape(view.cover_image_url)}"/>`,
         `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`,
       ].join('');
-      const body = `<article data-article-title="${escape(row.title)}">${row.body_html}</article>`;
+      // Defence in depth (H1): publish sanitises what it stores, and this pass
+      // sanitises again, so a row poisoned another way — a direct PostgREST
+      // PATCH, a row written before publish sanitised — still cannot execute in
+      // a visitor's browser.
+      const body = `<article data-article-title="${escape(row.title)}">${sanitizePastedHtml(row.body_html)}</article>`;
       return { html: page(row.title, head, body), json_ld: [jsonLd] };
     },
 

@@ -18,6 +18,10 @@ const server = await startHttpServer({
   databaseUrl,
   writerToken,
   writerId,
+  // Secrets are environment configuration, never argv: they must not show up
+  // in a process listing (verify finding #3, ADR-0004).
+  jwtSecret: process.env.SUPABASE_JWT_SECRET,
+  imageCallbackSecret: process.env.IMAGE_CALLBACK_SECRET,
 });
 
 process.stdout.write(`listening ${server.url}\n`);
