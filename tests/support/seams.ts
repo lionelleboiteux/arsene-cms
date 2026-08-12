@@ -621,6 +621,9 @@ export interface ApiServerModule {
     databaseUrl: string;
     writerToken: string;
     writerId: string;
+    /** Verify finding #3, second pass: must genuinely reach the spawned child. */
+    jwtSecret?: string;
+    imageCallbackSecret?: string;
   }): Promise<{ url: string; stop(): Promise<void> }>;
 }
 
