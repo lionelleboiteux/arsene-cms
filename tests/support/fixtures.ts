@@ -53,6 +53,15 @@ export function articleRecord(overrides: Partial<ArticleRecord> = {}): ArticleRe
   };
 }
 
+/**
+ * The URL the cover image was actually stored under. 05-verification.v1.md
+ * §6.4: the publish response must echo this, not a path built from
+ * `article.id`. Deliberately shaped like `uploadImage`'s real output
+ * (`{id}-optimized.webp`), which is what makes the fabricated
+ * `{article_id}/cover-optimized.webp` distinguishable from it.
+ */
+export const COVER_OPTIMIZED_URL = `https://cdn.fantasycoach.example/articles/${COVER_IMAGE_ID}-optimized.webp`;
+
 export function imageRecord(overrides: Partial<ImageRecord> = {}): ImageRecord {
   return {
     id: COVER_IMAGE_ID,
@@ -60,6 +69,7 @@ export function imageRecord(overrides: Partial<ImageRecord> = {}): ImageRecord {
     role: 'cover',
     status: 'ready',
     alt_text: 'PSG face à l’OM au Parc des Princes',
+    optimized_url: COVER_OPTIMIZED_URL,
     ...overrides,
   };
 }

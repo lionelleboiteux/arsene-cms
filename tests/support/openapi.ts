@@ -1,11 +1,15 @@
 /**
- * Loads the two OpenAPI documents this suite tests against and turns their
+ * Loads the three OpenAPI documents this suite tests against and turns their
  * component schemas into runtime validators, so contract tests assert against
  * the contract documents themselves rather than a hand-copied expectation.
  *
- *   - Arsène's own contract   pdlc/arsene-cms/contracts/openapi.yaml  (provided)
- *   - pronos' contract        pdlc/arsene-cms/contracts/vendor/pronos-openapi.yaml
- *                             (consumed; vendored copy pinned per PRONOS_SOURCE.md)
+ *   - Arsène's own writer-facing contract
+ *       pdlc/arsene-cms/contracts/openapi.yaml            (provided)
+ *   - Arsène's own internal Lambda-callback contract (ADR-0004)
+ *       pdlc/arsene-cms/contracts/internal-openapi.yaml    (provided)
+ *   - pronos' contract
+ *       pdlc/arsene-cms/contracts/vendor/pronos-openapi.yaml
+ *       (consumed; vendored copy pinned per PRONOS_SOURCE.md)
  */
 
 import { readFileSync } from 'node:fs';
@@ -24,6 +28,14 @@ export const OPENAPI_PATH = path.join(
   'arsene-cms',
   'contracts',
   'openapi.yaml',
+);
+
+export const INTERNAL_OPENAPI_PATH = path.join(
+  REPO_ROOT,
+  'pdlc',
+  'arsene-cms',
+  'contracts',
+  'internal-openapi.yaml',
 );
 
 export const PRONOS_OPENAPI_PATH = path.join(
@@ -69,18 +81,30 @@ const ajv = new Ajv2020({ strict: false, allErrors: true });
 addFormats(ajv);
 ajv.addSchema({ $id: 'arsene', components: { schemas: openapi(OPENAPI_PATH).components.schemas } });
 ajv.addSchema({
+  $id: 'arsene-internal',
+  components: { schemas: openapi(INTERNAL_OPENAPI_PATH).components.schemas },
+});
+ajv.addSchema({
   $id: 'pronos',
   components: { schemas: openapi(PRONOS_OPENAPI_PATH).components.schemas },
 });
 
-function validate(docId: 'arsene' | 'pronos', schemaName: string, value: unknown): string[] {
+function validate(
+  docId: 'arsene' | 'arsene-internal' | 'pronos',
+  schemaName: string,
+  value: unknown,
+): string[] {
   const fn = ajv.compile({ $ref: `${docId}#/components/schemas/${schemaName}` });
   return fn(value) ? [] : (fn.errors ?? []).map((e) => `${e.instancePath || '/'} ${e.message}`);
 }
 
-/** Validate against a schema in Arsène's own contract. */
+/** Validate against a schema in Arsène's own writer-facing contract. */
 export const validateAgainstSchema = (schemaName: string, value: unknown): string[] =>
   validate('arsene', schemaName, value);
+
+/** Validate against a schema in Arsène's own internal Lambda-callback contract (ADR-0004). */
+export const validateAgainstInternalSchema = (schemaName: string, value: unknown): string[] =>
+  validate('arsene-internal', schemaName, value);
 
 /** Validate against a schema in the vendored pronos contract. */
 export const validateAgainstPronosSchema = (schemaName: string, value: unknown): string[] =>

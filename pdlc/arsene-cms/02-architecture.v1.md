@@ -186,20 +186,38 @@ be a known trigger rather than a surprise.
 
 | Interface | Type | File | Consumer test | Provider test |
 |---|---|---|---|---|
+| `POST /v1/articles` (create a draft) | OpenAPI 3.1 | `pdlc/arsene-cms/contracts/openapi.yaml` | Prism mock (editor SPA) | Schemathesis |
+| `POST /v1/articles/{id}/open` (reopen a draft, take its lock) | OpenAPI 3.1 | `pdlc/arsene-cms/contracts/openapi.yaml` | Prism mock (editor SPA) | Schemathesis |
 | `POST /v1/articles/{id}/publish` | OpenAPI 3.1 | `pdlc/arsene-cms/contracts/openapi.yaml` | Prism mock (editor SPA) | Schemathesis |
 | `POST /v1/articles/{id}/images` (+ alt-text patch) | OpenAPI 3.1 | `pdlc/arsene-cms/contracts/openapi.yaml` | Prism mock (editor SPA) | Schemathesis |
+| `POST /internal/images/{id}/status` (ADR-0004, Lambda → Arsène callback) | OpenAPI 3.1 | `pdlc/arsene-cms/contracts/internal-openapi.yaml` | Ajv against payloads the S3+Lambda pipeline actually sends, in the Lambda-side build | Schemathesis, against the callback Edge Function |
 | `GET /v1/leagues/{leagueId}/current` (pronos, consumed not owned) | OpenAPI 3.1 (upstream) | referenced from `/Users/lionelleboiteux/work/pronos/pdlc/jeu-des-pronos/contracts/openapi.yaml`; consumer approach documented at `pdlc/arsene-cms/contracts/pronos-fixtures.consumer.md` | Prism mock against pronos' schema, in Arsène's own CI | N/A — owned by pronos, not this build |
 
-All direct Postgres reads/writes from the editor SPA (drafts, taxonomy, asset library
-listing) go through PostgREST/RLS and are **not** custom endpoints — RLS policies are
-the contract there, tested at red via Testcontainers, not via OpenAPI.
+All direct Postgres reads/writes from the editor SPA (draft field autosave, taxonomy,
+asset library listing) go through PostgREST/RLS and are **not** custom endpoints — RLS
+policies are the contract there, tested at red via Testcontainers, not via OpenAPI.
+Draft **creation** and **reopening** (taking the lock) are the one exception carved out
+of that PostgREST-by-default rule — see `contracts/openapi.yaml`'s "What is in scope"
+section and §9 below for why.
 
-Versioning strategy: `/v1` prefix on Arsène's own endpoints; a breaking change gets
-`/v2` rather than a mutation, matching pronos' precedent. The pronos fixture dependency
-is versioned by pronos' own contract — Arsène pins to the operation shape at
-integration time and the consumer test will fail loudly (not silently degrade) if that
-shape changes, so it surfaces immediately as a broken build rather than a broken
-production feature.
+The Lambda callback (`pdlc/arsene-cms/contracts/internal-openapi.yaml`) is deliberately
+a *separate* OpenAPI document from the writer-facing one, not an extra path inside it:
+its only caller is the S3-triggered Lambda function ADR-0004 introduces, it is
+authenticated by a distinct shared secret rather than a writer's Supabase JWT, and
+folding it into the writer-facing contract would put an operation the editor SPA can
+never legally call in front of every writer-SPA client/mock/fuzz run. See that
+document's own "Why a separate document" section for the full reasoning.
+
+Versioning strategy: `/v1` prefix on Arsène's own writer-facing endpoints; a breaking
+change gets `/v2` rather than a mutation, matching pronos' precedent. The internal
+Lambda-callback contract carries no `/v1` prefix — both its caller (Lambda) and its
+provider (this Edge Function) are deployed from the same repository on coordinated
+pipelines, so a breaking change there ships as a coordinated deploy of both sides
+rather than a versioned path; see that document's own "Versioning strategy" section for
+when that assumption would stop holding. The pronos fixture dependency is versioned by
+pronos' own contract — Arsène pins to the operation shape at integration time and the
+consumer test will fail loudly (not silently degrade) if that shape changes, so it
+surfaces immediately as a broken build rather than a broken production feature.
 
 ## 6. Rollback plan
 

@@ -71,6 +71,12 @@ export type ImageRecord = {
   role: ImageRole;
   status: ImageStatus;
   alt_text: string | null;
+  /**
+   * The CDN URL of the converted asset. Added by the remediation pass:
+   * 05-verification.v1.md §6.4 found the publish response fabricating this
+   * value from `article.id` instead of reading the real stored one.
+   */
+  optimized_url?: string | null;
 };
 
 export type ConfidenceTier = 'Indispensable' | 'Prudent' | 'Risqué';
@@ -585,6 +591,8 @@ export type ArseneClient = {
     role: ImageRole;
     file: { filename: string; content_type: string; bytes: Uint8Array };
   }): Promise<unknown>;
+  createDraft(args?: { title?: string; league_name?: string; type_name?: string }): Promise<unknown>;
+  openDraft(args: { articleId: string }): Promise<unknown>;
 };
 
 export type ArseneApiError = Error & { code: string; status: number };
@@ -673,4 +681,170 @@ export interface SiteRenderModule {
 export async function loadSiteRender(): Promise<SiteRenderModule> {
   // @ts-ignore -- production module does not exist yet (red gate)
   return (await import('../../src/site/render')) as unknown as SiteRenderModule;
+}
+
+// ===========================================================================
+// Remediation pass (05-verification.v1.md) — seams added for findings #1-#5.
+//
+// Same rules as above: lazy, string-literal imports inside functions, so a
+// module that does not exist yet fails exactly one test with exactly one
+// reason. None of the modules below exist at the time these tests were
+// written; that is what makes this a red gate rather than a regression run.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// src/api/auth.ts — verify finding #3 (real Supabase JWT verification)
+// ---------------------------------------------------------------------------
+
+/**
+ * Where `src/api/auth.ts` is expected to live. Read as text by
+ * NFR-TIMING-01, which is a code-presence check (a constant-time comparison
+ * is not observable from a unit test's timings).
+ */
+export const AUTH_MODULE_PATH = 'src/api/auth.ts';
+
+export type JwtVerification = {
+  valid: boolean;
+  /** Derived from the token's `sub` claim, never from a process-wide constant. */
+  writer_id?: WriterId;
+  /** Why a token was refused — for logs, never for the client. */
+  reason?: string;
+};
+
+export interface AuthModule {
+  /**
+   * Verifies a Supabase Auth access token: HS256, signed with the project's
+   * JWT secret, `sub` -> `writer_id`, `exp` honoured against the injected
+   * clock (02-architecture.v1.md §10).
+   */
+  verifySupabaseJwt(
+    token: string | null,
+    opts: { secret: string; now: Date },
+  ): Promise<JwtVerification>;
+  /** Constant-time comparison for the Lambda status-callback shared secret. */
+  verifySharedSecret(provided: string | null, expected: string): boolean;
+}
+
+export async function loadAuth(): Promise<AuthModule> {
+  // @ts-ignore -- production module does not exist yet (red gate, remediation)
+  return (await import('../../src/api/auth')) as unknown as AuthModule;
+}
+
+// ---------------------------------------------------------------------------
+// src/images/lambdaHandler.ts — ADR-0004 (real `sharp`, in AWS Lambda's Node)
+// ---------------------------------------------------------------------------
+
+export interface ImageLambdaModule {
+  /**
+   * The whole optimisation step, moved out of the request path: image bytes
+   * in, WebP/AVIF bytes out, or a failure reason. Same `OptimizeResult` shape
+   * the Edge Function used to return, so `article_images` and the contract are
+   * unchanged (ADR-0004, "Neutral / accepted").
+   */
+  optimizeImageBuffer(
+    bytes: Uint8Array,
+    meta: { filename: string; declared_content_type: string },
+  ): Promise<OptimizeResult>;
+}
+
+export async function loadImageLambda(): Promise<ImageLambdaModule> {
+  // @ts-ignore -- production module does not exist yet (red gate, remediation)
+  return (await import('../../src/images/lambdaHandler')) as unknown as ImageLambdaModule;
+}
+
+// ---------------------------------------------------------------------------
+// src/api/imageStatus.ts — ADR-0004's Lambda -> Arsène status callback
+// ---------------------------------------------------------------------------
+
+export type ImageStatusRow = {
+  id: string;
+  article_id: string;
+  role: ImageRole;
+  status: ImageStatus;
+};
+
+export type ImageStatusCallbackRequest = {
+  image_id: string;
+  /** The `x-arsene-image-callback-secret` header, NOT a writer bearer token. */
+  callback_secret: string | null;
+  body: {
+    status: 'ready' | 'failed';
+    optimized_url?: string | null;
+    failure?: { code: string; message: string } | null;
+  };
+};
+
+export type ImageStatusDeps = {
+  /** ADR-0004: distinct from `WRITER_TOKEN`, rotatable independently. */
+  callbackSecret: string;
+  repo: {
+    getImage(image_id: string): Promise<ImageStatusRow | null>;
+    setImageStatus(input: {
+      image_id: string;
+      status: 'ready' | 'failed';
+      optimized_url: string | null;
+      failure: { code: string; message: string } | null;
+    }): Promise<boolean>;
+  };
+  observability: { record(entry: ObservabilityRecord): void };
+};
+
+export interface ImageStatusModule {
+  handleImageStatusCallback(
+    req: ImageStatusCallbackRequest,
+    deps: ImageStatusDeps,
+  ): Promise<{ status: number; body: Record<string, unknown> }>;
+}
+
+export async function loadImageStatus(): Promise<ImageStatusModule> {
+  // @ts-ignore -- production module does not exist yet (red gate, remediation)
+  return (await import('../../src/api/imageStatus')) as unknown as ImageStatusModule;
+}
+
+// ---------------------------------------------------------------------------
+// src/api/repo.ts — verify finding #4 (`insertDraft`/`takeLock` never existed)
+// ---------------------------------------------------------------------------
+
+export interface RepoModule {
+  createRepo(pool: unknown): {
+    insertDraft(input: { writer_id: WriterId; title: string }): Promise<{ id: string }>;
+    takeLock(input: { article_id: string; writer_id: WriterId; now: Date }): Promise<boolean>;
+    recordTelemetry(article_id: string, events: TelemetryEvent[]): Promise<void>;
+    setImageStatus(input: {
+      image_id: string;
+      status: 'ready' | 'failed';
+      optimized_url: string | null;
+      failure: { code: string; message: string } | null;
+    }): Promise<boolean>;
+    getImage(image_id: string): Promise<ImageStatusRow | null>;
+  };
+}
+
+export async function loadRepo(): Promise<RepoModule> {
+  // @ts-ignore -- the concrete repo exists, but not these methods (finding #4)
+  return (await import('../../src/api/repo')) as unknown as RepoModule;
+}
+
+// ---------------------------------------------------------------------------
+// src/api/router.ts — booted in-process, for the transport-layer guards
+// ---------------------------------------------------------------------------
+
+export type RouterOptions = {
+  port: number;
+  databaseUrl: string;
+  writerToken: string;
+  writerId: string;
+  /** The Supabase project's JWT secret (HS256) — verify finding #3. */
+  jwtSecret?: string;
+  /** ADR-0004's Lambda callback shared secret. */
+  imageCallbackSecret?: string;
+};
+
+export interface ApiRouterModule {
+  startHttpServer(opts: RouterOptions): Promise<{ url: string; stop(): Promise<void> }>;
+}
+
+export async function loadApiRouter(): Promise<ApiRouterModule> {
+  // @ts-ignore -- the module exists; the options/ordering it needs do not yet
+  return (await import('../../src/api/router')) as unknown as ApiRouterModule;
 }

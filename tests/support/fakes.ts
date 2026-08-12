@@ -13,6 +13,8 @@ import type {
   ArticleRecord,
   CreateDraftDeps,
   ImageRecord,
+  ImageStatusDeps,
+  ImageStatusRow,
   ObservabilityRecord,
   OptimizeResult,
   PublishDeps,
@@ -282,4 +284,47 @@ export function buildCreateDraftDeps(
       return state.insertedDrafts;
     },
   } as BuiltDraftDeps;
+}
+
+// ---------------------------------------------------------------------------
+// image status callback (ADR-0004) — Lambda -> Arsène
+// ---------------------------------------------------------------------------
+
+export type BuiltImageStatusDeps = {
+  deps: ImageStatusDeps;
+  observed: ObservabilityRecord[];
+  /** Every accepted write, so a rejected callback can be shown to write nothing. */
+  updates: Array<{
+    image_id: string;
+    status: 'ready' | 'failed';
+    optimized_url: string | null;
+    failure: { code: string; message: string } | null;
+  }>;
+};
+
+export const IMAGE_CALLBACK_SECRET = 'lambda-callback-shared-secret-not-the-writer-token';
+
+export function buildImageStatusDeps(
+  o: { row?: ImageStatusRow | null; callbackSecret?: string } = {},
+): BuiltImageStatusDeps {
+  const obs = fakeObservability();
+  const updates: BuiltImageStatusDeps['updates'] = [];
+  const row = o.row === undefined ? null : o.row;
+
+  const deps: ImageStatusDeps = {
+    callbackSecret: o.callbackSecret ?? IMAGE_CALLBACK_SECRET,
+    repo: {
+      getImage: async (image_id: string) => (row && row.id === image_id ? row : null),
+      setImageStatus: async (input) => {
+        // The compare-and-swap the real repo performs: only a `processing`
+        // row moves. A fake that always succeeds would hide the bug.
+        if (row === null || row.id !== input.image_id || row.status !== 'processing') return false;
+        updates.push({ ...input });
+        return true;
+      },
+    },
+    observability: obs.sink,
+  };
+
+  return { deps, observed: obs.records, updates };
 }

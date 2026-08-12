@@ -1,0 +1,101 @@
+/**
+ * A real 128x128 HEIC (HEVC-compressed, ISO/IEC 23008-12) carrying genuine
+ * photographic pixel content — smooth gradients plus deterministic noise, not a
+ * flat or 1x1 image.
+ *
+ * Committed as base64 rather than generated at test time because no encoder in
+ * this dependency set can produce HEVC-in-HEIF: sharp ships libheif with the AV1
+ * encoder only (`heifsave: Unsupported compression` for `compression: hevc`), so
+ * the file was produced once, out of band, from a generated real-pixel PNG:
+ *
+ *   sips -s format heic -s formatOptions 60 photo.png --out photo.heic
+ *
+ * 4,503 bytes — small enough to live in git, real enough that decoding it proves
+ * HEIC decode support rather than magic-byte sniffing (ADR-0004: "sharp decodes
+ * every format the contract already advertises (JPEG, PNG, WebP, AVIF, HEIC)").
+ */
+
+const HEIC_B64 = [
+  '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',
+].join('');
+
+/** Real HEIC bytes: 128x128, HEVC. */
+export const REAL_HEIC: Uint8Array = Uint8Array.from(Buffer.from(HEIC_B64, 'base64'));

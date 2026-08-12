@@ -34,6 +34,16 @@ type ConsumerCase = {
 
 const CONSUMER_CASES: ConsumerCase[] = [
   {
+    operationId: 'createDraft',
+    responseSchema: 'CreateDraftResponse',
+    call: (c) => c.createDraft({ title: 'Pronos Ligue 1 - Journée 17' }),
+  },
+  {
+    operationId: 'openDraft',
+    responseSchema: 'OpenDraftResponse',
+    call: (c) => c.openDraft({ articleId: ARTICLE_ID }),
+  },
+  {
     operationId: 'publishArticle',
     responseSchema: 'PublishResponse',
     call: (c) =>
@@ -99,17 +109,32 @@ const ERROR_CASES = [
     expectedCode: 'UNSUPPORTED_FORMAT',
     why: 'so the writer is asked to upload a different file (AC-08’s clear error message)',
   },
+  {
+    id: 'AC-05',
+    operationId: 'openDraft',
+    prefer: 'code=409, example=draftLocked',
+    expectedCode: 'DRAFT_LOCKED',
+    why: 'so the editor names the writer holding the lock, the same way publish’s own DRAFT_LOCKED does',
+  },
 ] as const;
 
-const callOperation = (client: any, operationId: string) =>
-  operationId === 'publishArticle'
-    ? client.publishArticle({ articleId: ARTICLE_ID })
-    : client.uploadArticleImage({
+const callOperation = (client: any, operationId: string) => {
+  switch (operationId) {
+    case 'publishArticle':
+      return client.publishArticle({ articleId: ARTICLE_ID });
+    case 'createDraft':
+      return client.createDraft({ title: 'Pronos Ligue 1 - Journée 17' });
+    case 'openDraft':
+      return client.openDraft({ articleId: ARTICLE_ID });
+    default:
+      return client.uploadArticleImage({
         articleId: ARTICLE_ID,
         idempotencyKey: IDEMPOTENCY_KEY,
         role: 'cover',
         file: { filename: 'psg-om-cover.jpg', content_type: 'image/jpeg', bytes: validJpeg() },
       });
+  }
+};
 
 describe('OpenAPI consumer contract (Prism mock)', () => {
   it.each(

@@ -4,27 +4,45 @@ info:
   title: Arsène CMS API
   version: 1.0.0
   summary: >-
-    The two Arsène operations that need server-side atomicity and therefore
+    The four Arsène operations that need server-side atomicity and therefore
     exist as real Supabase Edge Function endpoints, instead of a direct
     PostgREST read/write against a table. Everything else in the writer
-    editor (drafts, taxonomy/categories, the asset library, alt-text edits,
-    cover/body re-tagging after upload) is a direct PostgREST call against
-    Postgres under RLS and is deliberately NOT part of this contract — see
-    "What is out of scope" below.
+    editor (draft field edits/autosave, taxonomy/categories, the asset
+    library, alt-text edits, cover/body re-tagging after upload) is a direct
+    PostgREST call against Postgres under RLS and is deliberately NOT part of
+    this contract — see "What is out of scope" below.
   description: |
-    ## What is in scope, and why only two endpoints
+    ## What is in scope, and why only four endpoints
 
     Arsène's writer editor is a single-page app that talks to Postgres
-    directly via PostgREST/RLS for nearly everything: creating/autosaving a
-    draft, editing its title/body/meta fields, creating a league or category,
+    directly via PostgREST/RLS for nearly everything: autosaving a draft's
+    title/body/meta fields once it exists, creating a league or category,
     browsing the shared asset library, and editing an image's `alt_text` or
     `role` after it has been uploaded. None of that needs a bespoke endpoint;
     RLS is the enforcement point and Postgres row shape is the contract.
 
-    Two operations are different, because they have side effects that must
+    Four operations are different, because they have side effects that must
     happen exactly once, atomically, from the server, and cannot be expressed
     as a single-row PostgREST write:
 
+    - `POST /v1/articles` — creates a new draft and takes its edit lock for
+      the creating writer in the same call that **synchronously** records the
+      `draft_started` telemetry event (spec §4), so the numerator of the
+      time-to-publish metric this project exists to prove (spec §3) can never
+      be created without also being measured (`02-architecture.v1.md` §9). A
+      client-side PostgREST insert followed by a separate client-side
+      telemetry write cannot guarantee the second half happens at all — a
+      dropped network call or a client bug would silently under-count the
+      metric with nothing to detect it.
+    - `POST /v1/articles/{articleId}/open` — reopens an existing draft by
+      attempting to take its edit lock, or reports who currently holds it
+      (AC-05). The lock decision (free/stale vs. actively held) and the
+      draft's current content must be resolved together, from the server, in
+      one atomic compare-and-swap against `locked_by`/`locked_at`
+      (`adr/0003-draft-locking-mechanism.md`) — a client cannot safely
+      perform "check who holds it, then maybe take it, then maybe read the
+      content" as three separate PostgREST calls without a race between two
+      writers opening the same draft at once.
     - `POST /v1/articles/{articleId}/publish` — validates publishability,
       generates the slug/JSON-LD/sitemap entry, flips the article live, and
       **synchronously** records the `article_published` telemetry event
@@ -38,13 +56,17 @@ info:
 
     ## What is out of scope
 
-    Draft CRUD, category/league CRUD, draft locking reads, alt-text/role
-    edits after upload, and the asset library listing are all direct
-    PostgREST operations against Postgres tables (e.g. `articles`,
-    `article_images`, `categories`, `leagues`) governed by Supabase's
-    auto-generated PostgREST OpenAPI surface and RLS policies. That surface
-    is not hand-authored and is not duplicated here; this file only covers
-    the two operations above.
+    Draft **field** edits (title/body/meta autosave after creation),
+    category/league CRUD, lock **heartbeat refresh** by the writer who
+    already holds it, alt-text/role edits after upload, and the asset library
+    listing are all direct PostgREST operations against Postgres tables (e.g.
+    `articles`, `article_images`, `categories`, `leagues`) governed by
+    Supabase's auto-generated PostgREST OpenAPI surface and RLS policies.
+    That surface is not hand-authored and is not duplicated here; this file
+    only covers the four operations above. Draft **creation** and
+    **reopening** (taking the lock) are in scope precisely because of the
+    atomicity argument above — everything else about a draft, once it exists
+    and its lock is held, is not.
 
     In particular: **alt-text generation** (AC-15) is server-side computation
     that needs the article's own title/content as context, so it happens as
@@ -116,7 +138,7 @@ info:
     ## Auth model
 
     Writers have real Supabase Auth accounts (unlike the sibling `pronos`
-    project's account-less players). Both operations below require a
+    project's account-less players). Every operation below requires a
     Supabase Auth bearer JWT for the calling writer, declared explicitly per
     operation via `security`, never left to a document-level default.
     Because Edge Functions do not automatically inherit PostgREST's RLS the
@@ -132,10 +154,15 @@ info:
 
     ## Pagination
 
-    Neither operation in this contract returns a list. `POST .../publish`
-    returns the one article it just published; `POST .../images` returns
-    the one image resource it just created. No pagination parameters exist
-    here by design — this is not an oversight, there is nothing to page.
+    No operation in this contract returns a list. `POST /v1/articles`
+    returns the one draft it just created; `POST .../open` returns the one
+    draft it just reopened; `POST .../publish` returns the one article it
+    just published; `POST .../images` returns the one image resource it just
+    created. No pagination parameters exist here by design — this is not an
+    oversight, there is nothing to page. (The writer's list of their own
+    drafts is a direct PostgREST `GET /articles?writer_id=eq.{id}` read,
+    which does paginate via PostgREST's own `Range`/`Prefer` headers — out of
+    scope of this contract, see "What is out of scope".)
 
     ## Idempotency
 
@@ -159,6 +186,31 @@ info:
       created resource (whatever its current `status`) unchanged and
       performs no new upload/processing; a different key, or the same key
       against a different `articleId`, is a new request.
+    - `POST /v1/articles`: **not** naturally idempotent — every accepted
+      call inserts a new `articles` row and emits one `draft_started`
+      telemetry event; there is no natural key to deduplicate on (unlike
+      publish, nothing about a brand-new draft is deterministic to converge
+      on). Deliberately **no** `Idempotency-Key` is offered here, unlike
+      publish/upload: a duplicate draft from a retried request is a low-cost
+      outcome (one extra, empty, discardable row with a placeholder title —
+      not a duplicated multi-MB upload, and not a metric-corrupting duplicate
+      telemetry event under a name a client already knows to distinguish),
+      so the added complexity of request deduplication was judged not worth
+      it for this endpoint in v1. A client unsure whether its create request
+      landed should list its own recent drafts (a direct PostgREST read, out
+      of scope here) rather than assume failure and blindly retry.
+    - `POST .../open`: naturally idempotent **for the writer who already
+      holds the lock** — calling it again while holding it re-runs the same
+      compare-and-swap (`adr/0003-draft-locking-mechanism.md`), which
+      refreshes `locked_at` and returns the same `200` body; safe to retry
+      after a timeout with no side effect beyond extending the writer's own
+      lock. It is **not** idempotent in effect for a writer who does not hold
+      the lock: each call is a fresh attempt whose outcome depends on whether
+      the lock is free, stale, or actively held **at that moment** — a `409`
+      can legitimately turn into a `200` on retry once the holder's lock goes
+      stale, which is correct behaviour, not a bug to guard against. No
+      `Idempotency-Key` is needed because re-attempting is always safe with
+      the caller's own current intent.
 
   contact:
     name: Lionel Le Boiteux
@@ -186,6 +238,153 @@ tags:
     description: Upload and optimisation of an article's cover/body images.
 
 paths:
+
+  /v1/articles:
+    post:
+      operationId: createDraft
+      tags: [Articles]
+      summary: Create a new draft article
+      description: |
+        Creates a new `articles` row in `draft` status, takes its edit lock
+        for the calling writer (AC-05 — the creator holds the lock from the
+        instant the draft exists, with no separate `open` call needed right
+        after create), and **synchronously** records one `draft_started`
+        telemetry event (spec §4: `writer_id`, `article_id`, `started_at`) as
+        part of the same request — never a fire-and-forget side call, so a
+        draft can never exist without also being measured
+        (`02-architecture.v1.md` §9).
+
+        **Every field is optional.** All three body fields may be omitted,
+        together or individually, to create a fully blank draft. If `title`
+        is omitted (or empty), the server defaults it to "Sans titre" — a
+        draft's title is never blank, so it always has something displayable
+        in the writer's draft list before the writer has typed anything.
+        `league_name`/`type_name` set the draft's initial taxonomy fields
+        when provided; like every other draft field, both remain editable
+        afterward via direct PostgREST `PATCH` writes under RLS (see "What
+        is out of scope" above), not through this endpoint.
+
+        **Not idempotent, and deliberately has no `Idempotency-Key`.** See
+        "Idempotency" above for why a duplicate draft from a client retry is
+        an acceptable, low-cost outcome here, unlike publish or upload.
+      security:
+        - supabaseWriterAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDraftRequest'
+            examples:
+              blankDraft:
+                summary: writer clicks "New draft" with no starting values at all
+                value: {}
+              withStartingValues:
+                summary: writer picks a league/type before typing a title
+                value:
+                  title: 'Pronos Ligue 1 - Journée 17'
+                  league_name: Ligue 1
+                  type_name: Pronos
+      responses:
+        '201':
+          description: The draft was created and its edit lock is held by the calling writer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateDraftResponse'
+              examples:
+                created:
+                  summary: a new draft, locked by its creator
+                  value:
+                    article_id: a1a1a1a1-0000-4a2b-9c3d-000000000001
+                    locked_by: e5e5e5e5-0000-4a2b-9c3d-eeeeeeeeeeee
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+
+  /v1/articles/{articleId}/open:
+    post:
+      operationId: openDraft
+      tags: [Articles]
+      summary: Reopen an existing draft, taking its edit lock
+      description: |
+        Attempts to take this draft's edit lock for the calling writer via
+        the same staleness-checked compare-and-swap described in
+        `adr/0003-draft-locking-mechanism.md` (free, already held by this
+        writer, or stale-by-more-than-90s all succeed; actively held by
+        someone else does not), and returns the draft's current saved
+        content in the same call — the lock decision and the content read
+        must be resolved together, from the server, so two writers opening
+        the same draft at once cannot both believe they hold it.
+
+        **No request body.** This operation takes no input beyond the path's
+        `articleId`; send an empty JSON object (`{}`) or an empty body.
+
+        **AC-05 — locked by someone else.** If the lock is currently held by
+        another writer and is not yet stale, this returns `409 DRAFT_LOCKED`
+        with `error.details.locked_by_writer_id` and
+        `error.details.locked_by_display_name`, so the editor can name who
+        to ask, exactly as `POST .../publish`'s own `DRAFT_LOCKED` response
+        does.
+
+        **Idempotent for the lock holder, not for anyone else.** See
+        "Idempotency" above.
+      security:
+        - supabaseWriterAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ArticleIdPathParam'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              description: Deliberately empty — this operation takes no input beyond `articleId`.
+            examples:
+              empty:
+                summary: the only body this operation accepts
+                value: {}
+      responses:
+        '200':
+          description: The lock is now held by the calling writer; the draft's current content follows.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenDraftResponse'
+              examples:
+                reopened:
+                  summary: an existing draft, now locked by the calling writer
+                  value:
+                    article_id: a1a1a1a1-0000-4a2b-9c3d-000000000001
+                    title: 'Pronos Ligue 1 - Journée 17'
+                    body_html: '<p>Notre analyse de la journée 17...</p>'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The draft is currently locked for editing by another writer (AC-05).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                draftLocked:
+                  summary: another writer currently holds the edit lock and their lock has not gone stale
+                  value:
+                    error:
+                      code: DRAFT_LOCKED
+                      message: This draft is currently locked for editing by another writer.
+                      details:
+                        locked_by_writer_id: e5e5e5e5-0000-4a2b-9c3d-eeeeeeeeeeee
+                        locked_by_display_name: Marie D.
+                      request_id: 5e5e5e5e-5555-4a2b-9c3d-eeeeeeeeeeee
+        default:
+          $ref: '#/components/responses/UnexpectedError'
 
   /v1/articles/{articleId}/publish:
     post:
@@ -721,6 +920,72 @@ components:
                 - type: string
                   format: uuid
                 - type: 'null'
+
+    CreateDraftRequest:
+      type: object
+      description: >-
+        All three fields are optional starting values for the new draft;
+        omit any or all of them to get a blank draft. See the operation
+        description for the "Sans titre" default and how these values are
+        edited afterward.
+      properties:
+        title:
+          type: string
+          example: 'Pronos Ligue 1 - Journée 17'
+        league_name:
+          type: string
+          description: >-
+            The draft's initial league/competition taxonomy value (matched
+            or created against `leagues.name` — see `01-decisions.md` #2 on
+            near-duplicate names not being merged automatically).
+          example: Ligue 1
+        type_name:
+          type: string
+          description: The draft's initial content-type taxonomy value.
+          example: Pronos
+
+    CreateDraftResponse:
+      type: object
+      required: [article_id, locked_by]
+      properties:
+        article_id:
+          type: string
+          format: uuid
+          description: >-
+            The new `articles.id`, immediately usable for autosave PostgREST
+            writes (title/body/taxonomy fields) and, eventually,
+            `POST .../publish`.
+          example: a1a1a1a1-0000-4a2b-9c3d-000000000001
+        locked_by:
+          type: string
+          format: uuid
+          description: >-
+            The creating writer's own id. Always equal to the calling
+            writer's id — the creator holds the edit lock from the instant
+            the draft exists (AC-05), so a client never needs to call
+            `POST .../open` immediately after `POST /v1/articles` for its
+            own just-created draft.
+          example: e5e5e5e5-0000-4a2b-9c3d-eeeeeeeeeeee
+
+    OpenDraftResponse:
+      type: object
+      required: [article_id, title, body_html]
+      properties:
+        article_id:
+          type: string
+          format: uuid
+          example: a1a1a1a1-0000-4a2b-9c3d-000000000001
+        title:
+          type: string
+          description: The draft's current saved title (autosaved via PostgREST, not through this API).
+          example: 'Pronos Ligue 1 - Journée 17'
+        body_html:
+          type: string
+          description: >-
+            The draft's current saved body markup, exactly as stored (this
+            operation does not sanitise — sanitisation of writer-authored
+            HTML happens at publish time; see `POST .../publish`).
+          example: '<p>Notre analyse de la journée 17...</p>'
 
     PublishRequest:
       type: object

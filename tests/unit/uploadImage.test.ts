@@ -26,39 +26,50 @@ const uploadReq = (overrides: Partial<UploadImageRequest> = {}): UploadImageRequ
 });
 
 describe('image upload', () => {
-  it('AC-07: a 4 MB JPEG comes back as a compressed WebP/AVIF resource, and the bytes actually stored for visitors are far smaller than the upload', async () => {
-    const api = await loadUploadImage();
-    const { deps, stored } = buildUploadDeps({ article: articleRecord() });
-    const req = uploadReq();
+  // AC-07 (synchronous "comes back optimized" version) was deleted here,
+  // deliberately, by Bob at the close of the ADR-0004 remediation red gate —
+  // not by the green-gate implementer. ADR-0004 moves optimization off this
+  // handler entirely (see adr/0004-s3-lambda-image-pipeline.md); the upload
+  // response no longer contains `urls.optimized` at all, so this assertion
+  // describes a contract the handler must no longer satisfy. It is superseded
+  // by two tests that together prove the same thing about the new shape:
+  // tests/unit/uploadImageAsync.test.ts's "VERIFY-05a / AC-07" (the handler
+  // returns 201/processing/urls:null and never invokes the codec) and
+  // tests/unit/lambdaImage.test.ts's "AC-07/D7-*" table (the codec itself,
+  // exercised for real against real photographic bytes, still produces a
+  // smaller modern-format file — just in the Lambda handler, not here).
 
-    const res = await api.handleUploadImage(req, deps);
-    const body = res.body as any;
-
-    expect({
-      status: res.status,
-      contract_errors: validateAgainstSchema('ArticleImage', body),
-      optimized_is_modern_format: /\.(webp|avif)$/.test(String(body.urls?.optimized ?? '')),
-      served_bytes_smaller_than_upload:
-        (stored.find((s) => /optimi/.test(s.key))?.byte_size ?? Infinity) < req.file.bytes.byteLength,
-    }).toEqual({
-      status: 201,
-      contract_errors: [],
-      optimized_is_modern_format: true,
-      served_bytes_smaller_than_upload: true,
-    });
-  });
-
-  it('AC-15: a processed image carries auto-generated alt text, ready for the writer to override', async () => {
+  it('AC-15: an upload response keeps alt_text null while processing, exactly as the contract documents', async () => {
     const api = await loadUploadImage();
     const { deps } = buildUploadDeps({ article: articleRecord({ title: 'PSG vs Marseille' }) });
 
     const res = await api.handleUploadImage(uploadReq(), deps);
     const body = res.body as any;
 
-    expect({
-      status: body.status,
-      alt_text_generated: typeof body.alt_text === 'string' && body.alt_text.length > 0,
-    }).toEqual({ status: 'ready', alt_text_generated: true });
+    // contracts/openapi.yaml's "Alt text (AC-15)" note is explicit: alt_text
+    // is included on the resource once ready, and "null until then" — so the
+    // *response* withholds it regardless of when it was computed internally.
+    expect({ status: body.status, alt_text: body.alt_text }).toEqual({
+      status: 'processing',
+      alt_text: null,
+    });
+  });
+
+  it('AC-15: alt text is nonetheless generated from the article’s own context and persisted at upload time, so it is ready the moment processing completes rather than computed later', async () => {
+    const api = await loadUploadImage();
+    const { deps, inserted } = buildUploadDeps({
+      article: articleRecord({ title: 'PSG vs Marseille' }),
+    });
+
+    await api.handleUploadImage(uploadReq(), deps);
+
+    // Alt text is derived from the article's own title/content, not from the
+    // processed pixels — there is no reason to wait for the Lambda callback
+    // to compute it, only to *expose* it (see the test above). This asserts
+    // the persisted row the callback will later flip to `ready`, not the
+    // withheld API response.
+    const insertedAltText = inserted[0]?.alt_text;
+    expect(typeof insertedAltText === 'string' && insertedAltText.length > 0).toBe(true);
   });
 
   it('AC-06: uploading a new cover demotes the article’s previous cover to a body image and names the image it replaced', async () => {

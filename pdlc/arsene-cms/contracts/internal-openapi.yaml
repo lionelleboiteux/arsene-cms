@@ -1,0 +1,493 @@
+openapi: 3.1.0
+
+info:
+  title: Arsène internal image-pipeline callback API
+  version: 1.0.0
+  summary: >-
+    ADR-0004's one service-to-service interface: the callback the S3-event
+    Lambda calls to flip an `article_images` row from `processing` to
+    `ready`/`failed` once it has decoded, converted, and compressed the
+    original upload. This is a separate document from
+    `contracts/openapi.yaml` on purpose — see "Why a separate document" below
+    — because its only caller is Lambda, never the writer editor SPA, and it
+    is not protected by a writer's Supabase Auth bearer token.
+  description: |
+    ## Why a separate document
+
+    `contracts/openapi.yaml` is what the writer editor SPA (a different
+    process, a different trust boundary, a different team-facing artifact —
+    a client engineer building against it never needs to know Lambda exists)
+    consumes. This document describes the opposite direction entirely: AWS
+    Lambda calling back into Arsène's own Supabase Edge Function deployment.
+    Folding it into the writer-facing contract would force every writer-SPA
+    client generator/mock/fuzz run to also carry an operation it can never
+    legally call (it doesn't have, and must never obtain, the callback
+    secret — see "Auth model" below), and would blur two very different
+    audiences reading the same file. Keeping them apart is why ADR-0004
+    itself calls this "a small, **separately-authenticated**" function.
+
+    Despite being internal, this is a real interface between two independent
+    deploys (the Lambda function and the Edge Function are separate deploy
+    units, per ADR-0004's "Negative" section on the new AWS trust boundary),
+    so it gets the same contract rigor as the public document: a validated
+    OpenAPI 3.1 document, fuzzed by Schemathesis against the provider and
+    checked by Ajv against the payloads either side actually sends, exactly
+    like `contracts/openapi.yaml`'s own tooling
+    (`tests/support/schemathesis.ts`, `tests/support/openapi.ts`).
+
+    ## What is in scope
+
+    Exactly one operation: `POST /internal/images/{imageId}/status`, the
+    only path by which anything outside Arsène's own Edge Function process
+    is allowed to move `article_images.status` out of `processing`. Nothing
+    else about `article_images` is reachable this way — not role, not
+    `alt_text`, not `article_id` — see "Auth model" for why the narrowness
+    of what this endpoint can touch is itself a security property, not just
+    a convenience.
+
+    ## What is out of scope
+
+    Everything the public contract already covers (`POST
+    /v1/articles/{articleId}/images`, the writer-facing upload operation
+    that creates the `article_images` row this callback later updates) stays
+    in `contracts/openapi.yaml`. Reading `article_images` — including the
+    row this callback just updated — is the editor's direct PostgREST/
+    Realtime subscription against Postgres under RLS (ADR-0004, "the editor
+    polls or subscribes... until the row leaves `processing`"), not a second
+    call into either API. Uploading the original file to S3, and the
+    Lambda-internal `sharp` conversion itself, are implementation details of
+    the build, not an interface any other process consumes, and so are not
+    modelled here either.
+
+    ## Versioning strategy
+
+    No `/v1` path prefix, unlike the public contract — deliberately. Both
+    ends of this interface (the Lambda function's outbound call, and this
+    Edge Function's inbound handler) are deployed from the same repository
+    by the same team on coordinated deploy pipelines (ADR-0004's own
+    "Negative" section: "a second place credentials and deploys can go
+    wrong" already assumes both sides move together), unlike the public
+    contract's writer editor SPA, which is a separate, independently
+    deployed client that cannot be forced to upgrade in lockstep. A breaking
+    change here (e.g. a new required request field, a changed status-machine
+    rule) is shipped by deploying the Lambda function and this Edge Function
+    together in the same change, not by versioning the path — there is no
+    scenario where an old Lambda build must keep working against a new Edge
+    Function build, or vice versa, the way `/v1` must keep working for
+    writer-SPA clients that haven't redeployed yet. If that assumption ever
+    stops holding (e.g. a second, independently-deployed Lambda consumer
+    appears), this contract adopts the same `/v1`→`/v2` discipline as the
+    public one at that point, not before.
+
+    ## Error envelope
+
+    Same shape and same discipline as `contracts/openapi.yaml`: every
+    response is either the documented success schema or the `Error` schema
+    below, with callers branching on `error.code`, never on `error.message`
+    or on HTTP status alone. This document's `Error.code` enum is its own
+    closed set, independent of the public contract's — the two documents
+    share no `$ref`s, so a code added to one never silently changes the
+    other's validation.
+
+    ## Auth model
+
+    Lambda is not a writer and cannot carry a Supabase Auth bearer JWT — it
+    has no writer session, and must never be issued one, since a leaked
+    Lambda credential must not be able to do anything a writer session can
+    do (publish, browse drafts, etc.), and a leaked writer JWT must not be
+    able to flip image status either. This is ADR-0004's new trust boundary:
+    a distinct shared secret (`callback_secret` / `WRITER_TOKEN`'s sibling,
+    never the same value), sent as a header and checked in constant time
+    (verify finding #9 / `NFR-TIMING-01`) before any row is read or written,
+    rotatable independently of writer credentials. STRIDE-lite, from
+    ADR-0004 verbatim: **Spoofing** is mitigated by the shared secret;
+    **Tampering** is bounded by the fact that a valid secret only ever
+    authorizes moving *one named* `article_images.id` from `processing` to
+    `ready`/`failed` — never an arbitrary column, never a different row,
+    never a different table — so a compromised secret's blast radius is
+    "can mark in-flight images as done", not "can write anything".
+
+    ## Pagination
+
+    N/A — this operation acts on exactly one `article_images` row, named by
+    `imageId` in the path, and returns that one row's post-update state.
+    There is no list operation in this document.
+
+    ## Idempotency
+
+    **Deliberately not idempotent in the classic "replay returns the same
+    success" sense — the state machine itself is the dedupe mechanism.** A
+    callback can only ever move a row *out of* `processing`, once
+    (`NFR-CALLBACK-02c`): the first `processing → ready` or
+    `processing → failed` call succeeds (`200`); every subsequent call
+    naming the same `imageId`, whatever it claims, is refused `409 CONFLICT`
+    and writes nothing, rather than silently re-applying (or overwriting)
+    the original result. This is intentional, not a gap: S3 event
+    notifications and Lambda's own at-least-once delivery model mean a
+    duplicate delivery of the same conversion outcome is the expected retry
+    case, not an edge case, and ADR-0004's Tampering mitigation depends on a
+    settled row being unconditionally final — a second call that "succeeds
+    again" would let a replayed or forged callback silently overwrite an
+    already-published `ready` image's URL. Lambda's own retry logic is
+    expected to treat `409 CONFLICT` on a duplicate delivery as "already
+    handled, no action needed", not as a transient failure to retry harder
+    against. No client-supplied `Idempotency-Key` is used or needed: the
+    dedupe key is `imageId` itself, already required on every call, and the
+    compare-and-swap lives in the database (`tests/db/remediation.test.ts`,
+    `NFR-CALLBACK-03`), not only in the handler, so it holds even under
+    concurrent duplicate deliveries.
+
+  contact:
+    name: Lionel Le Boiteux
+    email: lionel.leboiteux@gmail.com
+  license:
+    name: UNLICENSED
+    identifier: UNLICENSED
+
+servers:
+  - url: 'https://{projectRef}.supabase.co/functions/v1/arsene-internal'
+    description: >-
+      A separate Supabase Edge Function deployment from the writer-facing
+      `arsene-api` function `contracts/openapi.yaml` describes (see "Why a
+      separate document") — same Supabase project, different function name,
+      different auth, so a writer-facing deploy can never accidentally also
+      expose this callback under writer-reachable routing. `/functions/v1/`
+      here is Supabase's own platform routing prefix, unrelated to this
+      contract's own `1.0.0` document version.
+    variables:
+      projectRef:
+        default: xxxxxxxxxxxxxxxxxxxx
+        description: Supabase project ref, one per environment (dev/staging/prod).
+
+tags:
+  - name: Images
+    description: >-
+      Lambda's callback into Arsène once ADR-0004's asynchronous
+      optimisation pipeline finishes with one image.
+
+paths:
+
+  /internal/images/{imageId}/status:
+    post:
+      operationId: reportImageStatus
+      tags: [Images]
+      summary: Report that an image finished (or failed) optimisation
+      description: |
+        Called exactly once per image by the Lambda function ADR-0004
+        introduces, after it has decoded the original from S3, converted it
+        to WebP/AVIF, compressed it, and uploaded the result to the
+        processed prefix (on success) — or after conversion failed for a
+        recognised reason. Flips `article_images.status` from `processing`
+        to `ready` (storing `optimized_url`) or `failed` (storing
+        `failure`), and nothing else.
+
+        **State machine (ADR-0004, `NFR-CALLBACK-02*`).** The only legal
+        transition is `processing` → `ready` or `processing` → `failed`.
+        Naming an image whose row does not exist is `404 NOT_FOUND`. Naming
+        an image whose row has already left `processing` (already `ready`,
+        already `failed`, or otherwise) is `409 CONFLICT` and changes
+        nothing — see "Idempotency" above for why that is correct behaviour
+        for a duplicate delivery, not a bug.
+
+        **`status: ready` requires `optimized_url`; `status: failed`
+        requires `failure`.** The two are mutually exclusive request shapes
+        (see `ImageStatusCallbackRequest`'s `oneOf`): a `ready` call with no
+        `optimized_url`, or a `failed` call with no `failure`, is `400
+        VALIDATION_FAILED` before any row is touched.
+      security:
+        - lambdaCallbackSecret: []
+      parameters:
+        - name: imageId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: An `article_images.id` value — the row this call updates.
+          example: c3c3c3c3-0000-4a2b-9c3d-cccccccccccc
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImageStatusCallbackRequest'
+            examples:
+              conversionSucceeded:
+                summary: Lambda finished converting and compressing the image
+                value:
+                  status: ready
+                  optimized_url: 'https://cdn.fantasycoach.example/articles/c3c3c3c3-0000-4a2b-9c3d-cccccccccccc-optimized.webp'
+              conversionFailed:
+                summary: the file passed initial format detection at upload but could not be decoded by sharp
+                value:
+                  status: failed
+                  failure:
+                    code: CORRUPTED_FILE
+                    message: could not be decoded
+      responses:
+        '200':
+          description: >-
+            The row moved out of `processing` as requested; its new state is
+            returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageStatusCallbackResult'
+              examples:
+                becameReady:
+                  summary: a processing row told the conversion succeeded
+                  value:
+                    image_id: c3c3c3c3-0000-4a2b-9c3d-cccccccccccc
+                    status: ready
+                    optimized_url: 'https://cdn.fantasycoach.example/articles/c3c3c3c3-0000-4a2b-9c3d-cccccccccccc-optimized.webp'
+                    failure: null
+                    updated_at: '2026-08-12T09:15:03Z'
+                becameFailed:
+                  summary: a processing row told the conversion failed
+                  value:
+                    image_id: d4d4d4d4-0000-4a2b-9c3d-dddddddddddd
+                    status: failed
+                    optimized_url: null
+                    failure:
+                      code: CORRUPTED_FILE
+                      message: could not be decoded
+                    updated_at: '2026-08-12T09:15:03Z'
+        '400':
+          description: >-
+            The request body doesn't match its `status`: a `ready` call
+            missing `optimized_url`, or a `failed` call missing `failure`,
+            or an unrecognised `status` value. No row is touched.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: VALIDATION_FAILED
+                  message: 'status "ready" requires optimized_url.'
+                  details:
+                    fields:
+                      - field: optimized_url
+                        message: required when status is "ready"
+                  request_id: 1a1a1a1a-1111-4a2b-9c3d-aaaaaaaaaaaa
+        '401':
+          description: >-
+            Missing or incorrect callback secret. Distinct from the public
+            contract's `Unauthorized` response — this endpoint never accepts
+            a writer bearer token, valid or not (`NFR-CALLBACK-01b`). No row
+            is touched.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: UNAUTHORIZED
+                  message: A valid image-callback secret is required for this endpoint.
+                  details: null
+                  request_id: 7d8e9f0a-1b2c-4d3e-9f4a-5b6c7d8e9f0a
+        '404':
+          description: No `article_images` row matches `imageId`. No row is touched.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: No image was found matching the given id.
+                  details:
+                    image_id: f0f0f0f0-0000-4a2b-9c3d-000000000009
+                  request_id: 8e9f0a1b-2c3d-4e5f-8a9b-6c7d8e9f0a1b
+        '409':
+          description: >-
+            The row named by `imageId` has already left `status: processing`
+            (a replayed or duplicate delivery — see "Idempotency" above). No
+            row is touched, and the row's current, already-settled state is
+            not overwritten by this call.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: CONFLICT
+                  message: >-
+                    This image has already left "processing" and cannot be
+                    updated again.
+                  details:
+                    image_id: c3c3c3c3-0000-4a2b-9c3d-cccccccccccc
+                    current_status: ready
+                  request_id: 3c3c3c3c-3333-4a2b-9c3d-cccccccccccc
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+
+components:
+
+  securitySchemes:
+    lambdaCallbackSecret:
+      type: apiKey
+      in: header
+      name: X-Arsene-Image-Callback-Secret
+      description: >-
+        ADR-0004's shared secret between the S3-event Lambda and this Edge
+        Function — distinct from, and rotatable independently of,
+        `WRITER_TOKEN`/the writer JWT signing key (see "Auth model" above).
+        Sent as `X-Arsene-Image-Callback-Secret: <secret>` (HTTP header names
+        are case-insensitive; the handler and its tests refer to the same
+        header as `x-arsene-image-callback-secret`). Compared in constant
+        time server-side (verify finding #9, `NFR-TIMING-01`) — an
+        implementation requirement this schema assumes but cannot itself
+        enforce.
+
+  responses:
+    UnexpectedError:
+      description: >-
+        Any status code not explicitly documented above for this operation.
+        Always parseable as the same `Error` envelope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: INTERNAL_ERROR
+              message: An unexpected error occurred. Please retry.
+              details: null
+              request_id: 9f0a1b2c-3d4e-4f5a-8b9c-7d8e9f0a1b2c
+
+  schemas:
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_FAILED
+                - UNAUTHORIZED
+                - NOT_FOUND
+                - CONFLICT
+                - INTERNAL_ERROR
+              description: >-
+                Machine-checkable error category, independent of and not
+                `$ref`-shared with `contracts/openapi.yaml`'s own `Error.code`
+                enum (see "Error envelope" above). Consumers (Lambda's own
+                retry logic) should branch on this, not on `message`.
+            message:
+              type: string
+              description: >-
+                Human-readable explanation. Not shown to any human in the
+                normal path (Lambda is the only caller) — useful in logs
+                when diagnosing a misconfigured deploy.
+            details:
+              description: >-
+                Machine-readable context specific to `code`. `null` when
+                there is nothing further to add beyond `message`.
+              oneOf:
+                - type: object
+                  additionalProperties: true
+                - type: 'null'
+            request_id:
+              description: >-
+                Correlation id for this specific request/response, for
+                cross-referencing server logs when diagnosing a problem.
+              oneOf:
+                - type: string
+                  format: uuid
+                - type: 'null'
+
+    ImageFailure:
+      type: object
+      description: >-
+        The reason conversion failed. Required when `status: failed`,
+        forbidden (must be omitted or `null`) when `status: ready`.
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [UNSUPPORTED_FORMAT, CORRUPTED_FILE, PROCESSING_TIMEOUT, INTERNAL_ERROR]
+          description: >-
+            Deliberately the same vocabulary as the public contract's
+            `ArticleImage.failure.code` (`contracts/openapi.yaml`) — this is
+            the value that ends up stored verbatim on the same
+            `article_images.failure` column and later read back by the
+            editor via PostgREST, so the two documents describe the same
+            wire value from two different sides, even though they share no
+            `$ref` (see "Error envelope" above on why the two documents
+            don't cross-reference).
+        message:
+          type: string
+          example: could not be decoded
+
+    ImageStatusCallbackRequest:
+      description: >-
+        Exactly one of two shapes, discriminated by `status`. See the
+        operation description's "requires" rule — sending `optimized_url`
+        alongside `status: failed`, or `failure` alongside `status: ready`,
+        is not itself rejected (both are ignored for the status they don't
+        belong to), but omitting the field the chosen `status` *requires*
+        is `400 VALIDATION_FAILED`.
+      oneOf:
+        - type: object
+          required: [status, optimized_url]
+          properties:
+            status:
+              type: string
+              const: ready
+            optimized_url:
+              type: string
+              format: uri
+              description: >-
+                The processed asset's URL on the CDN-fronted bucket (see
+                ADR-0004's "Neutral / accepted" — `urls.optimized` on the
+                public contract's `ArticleImage` is unaffected by which
+                system originates this URL).
+              example: 'https://cdn.fantasycoach.example/articles/c3c3c3c3-0000-4a2b-9c3d-cccccccccccc-optimized.webp'
+            failure:
+              type: 'null'
+              description: Must be `null` or omitted when `status` is `ready`.
+        - type: object
+          required: [status, failure]
+          properties:
+            status:
+              type: string
+              const: failed
+            failure:
+              $ref: '#/components/schemas/ImageFailure'
+            optimized_url:
+              type: 'null'
+              description: Must be `null` or omitted when `status` is `failed`.
+
+    ImageStatusCallbackResult:
+      type: object
+      required: [image_id, status, optimized_url, failure, updated_at]
+      properties:
+        image_id:
+          type: string
+          format: uuid
+          example: c3c3c3c3-0000-4a2b-9c3d-cccccccccccc
+        status:
+          type: string
+          enum: [ready, failed]
+          description: The row's new status — always what the request asked for, on a `200`.
+        optimized_url:
+          description: '`null` unless `status` is `ready`.'
+          oneOf:
+            - type: string
+              format: uri
+            - type: 'null'
+        failure:
+          description: '`null` unless `status` is `failed`.'
+          oneOf:
+            - $ref: '#/components/schemas/ImageFailure'
+            - type: 'null'
+        updated_at:
+          type: string
+          format: date-time
+          description: Server timestamp of this transition, for Lambda-side logging/tracing.

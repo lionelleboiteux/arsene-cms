@@ -202,3 +202,84 @@ export const imageFixture = (
   declared_content_type: string,
   bytes: Uint8Array,
 ): ImageFixture => ({ id, filename, declared_content_type, bytes });
+
+// ===========================================================================
+// Real photographic fixtures — added by the remediation pass.
+//
+// 05-verification.v1.md §5 showed why the padded fixtures above cannot answer
+// the question ADR-0004 exists to answer: they pad file *size* around a 1x1
+// pixel, so the codec decodes one pixel however many megabytes the file is.
+// Everything below carries genuine multi-megapixel content: smooth gradients
+// (spatially correlated, like a photograph) plus deterministic pseudo-random
+// noise (so the encoder cannot trivially collapse it).
+//
+// `sharp` is loaded lazily, inside the functions, for the same reason every
+// seam loader is lazy: a missing/broken native binding must fail the image
+// tests, not collapse every file that imports this module.
+// ===========================================================================
+
+export type RawPixels = { width: number; height: number; channels: 3; data: Uint8Array };
+
+/**
+ * Deterministic photographic-looking RGB pixels. Pure: no codec, no I/O, no
+ * randomness that differs between runs — the same bytes on every machine.
+ */
+export function photographicPixels(width: number, height: number): RawPixels {
+  const data = new Uint8Array(width * height * 3);
+  let seed = 0x2f6e2b1;
+  const noise = (): number => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+  const clamp = (v: number): number => (v < 0 ? 0 : v > 255 ? 255 : Math.round(v));
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const i = (y * width + x) * 3;
+      data[i] = clamp(126 + 90 * Math.sin(x / 37) + 26 * noise());
+      data[i + 1] = clamp(118 + 82 * Math.cos(y / 29) + 26 * noise());
+      data[i + 2] = clamp(104 + 74 * Math.sin((x + y) / 53) + 26 * noise());
+    }
+  }
+  return { width, height, channels: 3, data };
+}
+
+/** Source formats ADR-0004 says `sharp` decodes in one library. */
+export type PhotoFormat = 'jpeg' | 'png' | 'webp' | 'avif';
+
+/**
+ * A genuinely encoded image with real pixel content, in one of the source
+ * formats the contract advertises. Encoded with `sharp` because no encoder for
+ * these formats exists elsewhere in this dependency set; the *content* is
+ * generated independently of any codec by `photographicPixels`.
+ */
+export async function realPhoto(
+  format: PhotoFormat,
+  opts: { width?: number; height?: number; quality?: number } = {},
+): Promise<Uint8Array> {
+  const { default: sharp } = await import('sharp');
+  const px = photographicPixels(opts.width ?? 320, opts.height ?? 240);
+  const image = sharp(Buffer.from(px.data), {
+    raw: { width: px.width, height: px.height, channels: 3 },
+  });
+  const quality = opts.quality ?? 80;
+  const encoded =
+    format === 'jpeg'
+      ? await image.jpeg({ quality }).toBuffer()
+      : format === 'png'
+        ? await image.png().toBuffer()
+        : format === 'webp'
+          ? await image.webp({ quality }).toBuffer()
+          : await image.avif({ quality }).toBuffer();
+  return Uint8Array.from(encoded);
+}
+
+/**
+ * ~6 megapixels of real content — the size class 05-verification.v1.md §5
+ * measured the WASM codec at 1.4-2.6s on, and the reason ADR-0004 moved the
+ * work to Lambda. Used by NFR-IMGCPU-01.
+ */
+export const realPhotoJpeg6MP = (): Promise<Uint8Array> =>
+  realPhoto('jpeg', { width: 3000, height: 2000, quality: 85 });
+
+export { REAL_HEIC } from './heicFixture.js';
