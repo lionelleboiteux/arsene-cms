@@ -284,3 +284,34 @@ notes:
   response is the binding limit (20MB) — §7's table has been corrected to match. The
   contract is a promise already made to callers; the architecture note was the stale
   one.
+
+## 10. Addendum — remediation after the verify gate
+
+`05-verification.v1.md` found the green-gate build did not implement what this
+document already specified in two places, plus one genuine architecture change:
+
+- **Auth.** §7 already said "Supabase Auth for writers… RLS keyed on `auth.uid()`" —
+  this was never ambiguous. What shipped at green was a placeholder (one static
+  shared-secret comparison) that was never replaced with real verification. The fix
+  is implementation catching up to what was already decided here, not a new
+  decision: verify real Supabase-issued JWTs (signature + `sub` claim → `writer_id`).
+  Writer accounts themselves are managed through Supabase Auth's own tooling
+  (dashboard/CLI) — Arsène does not get a custom writer-management screen; at
+  2-5 writers who change rarely, building one would be scope this product doesn't
+  need.
+- **Draft creation.** Also implementation catching up to §9 above, not a new
+  decision: `src/api/createDraft.ts` gets wired to the real repository (which
+  needs `insertDraft`/`takeLock` added) and to an actual route, exactly as §9
+  already specified.
+- **Image optimization moves to S3 + Lambda.** This *is* a genuine change from
+  the Supabase-Edge-Function approach this document originally specified — see
+  `adr/0004-s3-lambda-image-pipeline.md` for the full reasoning. In short:
+  verify found the WASM codec takes 1.4-4.0s against real photos, at or above
+  Supabase Edge Functions' 2s CPU budget, for an ordinary upload. Uploads now
+  land in S3; a Lambda function (real `sharp`, no CPU ceiling problem, and
+  every format the contract advertises) does the conversion and calls back to
+  flip `article_images.status` from `processing` to `ready`/`failed`. The
+  `processing`/`ready`/`failed` state machine `article_images.status` was
+  already built to express — the contract, the public-site rendering, and
+  `publishArticle.ts`'s `IMAGE_NOT_READY` check all needed no shape change,
+  only a different system flipping the status.
