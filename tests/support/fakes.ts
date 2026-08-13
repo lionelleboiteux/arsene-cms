@@ -24,7 +24,7 @@ import type {
   UploadDeps,
   WriterId,
 } from './seams.js';
-import { ARTICLE_ID, WRITER_B, WRITER_B_NAME } from './fixtures.js';
+import { ARTICLE_ID, WRITER_A_NAME, WRITER_B, WRITER_B_NAME } from './fixtures.js';
 
 export function fakeSink(): TelemetrySink {
   const events: TelemetryEvent[] = [];
@@ -163,6 +163,8 @@ export type UploadDepsOverrides = {
   optimizeResult?: OptimizeResult;
   previousCoverId?: string | null;
   rateLimit?: number;
+  /** M-V4-02: whose name a `409 DRAFT_LOCKED` from upload would carry. */
+  display_name?: string;
 };
 
 export type BuiltUploadDeps = {
@@ -198,6 +200,12 @@ export function buildUploadDeps(o: UploadDepsOverrides = {}): BuiltUploadDeps {
         state.demoteCalls += 1;
         return o.previousCoverId ?? null;
       },
+      // Additive, for M-V4-02: publish's `409 DRAFT_LOCKED` envelope names the
+      // writer holding the lock, and upload is required to answer with the same
+      // shape. Present so a fix that mirrors `publishArticle.ts` exactly runs
+      // against this fake instead of tripping over a missing collaborator; no
+      // pre-existing test calls it.
+      getWriterDisplayName: async () => o.display_name ?? WRITER_A_NAME,
     },
     storage: {
       put: async (key: string, bytes: Uint8Array) => {

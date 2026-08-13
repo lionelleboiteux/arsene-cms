@@ -506,6 +506,14 @@ export type UploadDeps = {
       replaced_cover_image_id: string | null;
     }): Promise<{ id: string; created_at: Date }>;
     demoteCurrentCover(article_id: string): Promise<string | null>;
+    /**
+     * M-V4-02 (`05-verification.v4.md` §6), fifth remediation pass: upload has
+     * to answer the draft lock the way publish already does, and publish's
+     * `409 DRAFT_LOCKED` envelope names the writer holding it. Optional, so
+     * every pre-existing caller of this seam is unchanged, and so a fix that
+     * builds the envelope from `article.locked_by` alone is equally admissible.
+     */
+    getWriterDisplayName?(writer_id: WriterId): Promise<string>;
   };
   storage: { put(key: string, bytes: Uint8Array): Promise<{ url: string }> };
   optimizer: {

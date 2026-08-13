@@ -116,6 +116,20 @@ const ERROR_CASES = [
     expectedCode: 'DRAFT_LOCKED',
     why: 'so the editor names the writer holding the lock, the same way publish’s own DRAFT_LOCKED does',
   },
+  {
+    // M-V4-02 (05-verification.v4.md §6), fifth remediation pass: the consumer
+    // half of the refusal tests/unit/uploadImageLock.test.ts requires of the
+    // server. `uploadArticleImage` declares 201/400/401/404/413/422/default and
+    // no 409 at all today, so this branch does not exist for the editor to
+    // render — the contract has to grow the same `DRAFT_LOCKED` response
+    // `publish` and `open` already carry, and the client has to surface it as a
+    // branchable code rather than a generic failure.
+    id: 'NFR-UPLOAD-LOCK-03',
+    operationId: 'uploadArticleImage',
+    prefer: 'code=409, example=draftLocked',
+    expectedCode: 'DRAFT_LOCKED',
+    why: 'so a writer whose colleague is mid-edit is told who holds the draft, instead of the upload silently replacing their cover',
+  },
 ] as const;
 
 const callOperation = (client: any, operationId: string) => {
