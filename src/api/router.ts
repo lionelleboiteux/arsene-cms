@@ -149,15 +149,15 @@ const observability = {
     void process.stderr.write(`${JSON.stringify({ level: 'info', ...entry })}\n`),
 };
 
-function publishDeps(opts: ServerOptions, repo: Repo, shared: Shared): PublishDeps {
+function publishDeps(ctx: Ctx): PublishDeps {
   const sink = createTelemetrySink();
   return {
     now: () => new Date(),
-    auth: { verifyBearer: async (token) => verify(token, opts) },
-    repo,
+    auth: { verifyBearer: async (token) => verify(token, ctx) },
+    repo: ctx.repo,
     telemetry: sink,
-    rateLimiter: shared.rateLimiter,
-    idempotency: shared.idempotency,
+    rateLimiter: ctx.shared.rateLimiter,
+    idempotency: ctx.shared.idempotency,
     // traceability.md §7: the Cloudflare purge itself is a deploy concern, so
     // this entry point records the call rather than performing it.
     revalidation: { revalidate: async () => ({ ok: true }) },
@@ -165,23 +165,23 @@ function publishDeps(opts: ServerOptions, repo: Repo, shared: Shared): PublishDe
   };
 }
 
-function uploadDeps(opts: ServerOptions, repo: Repo, shared: Shared): UploadDeps {
+function uploadDeps(ctx: Ctx): UploadDeps {
   return {
     now: () => new Date(),
-    auth: { verifyBearer: async (token) => verify(token, opts) },
-    repo,
-    storage: shared.storage,
-    rateLimiter: shared.rateLimiter,
-    idempotency: shared.idempotency,
+    auth: { verifyBearer: async (token) => verify(token, ctx) },
+    repo: ctx.repo,
+    storage: ctx.shared.storage,
+    rateLimiter: ctx.shared.rateLimiter,
+    idempotency: ctx.shared.idempotency,
     observability,
   };
 }
 
-function draftDeps(opts: ServerOptions, repo: Repo): CreateDraftDeps {
+function draftDeps(ctx: Ctx): CreateDraftDeps {
   return {
     now: () => new Date(),
-    auth: { verifyBearer: async (token) => verify(token, opts) },
-    repo,
+    auth: { verifyBearer: async (token) => verify(token, ctx) },
+    repo: ctx.repo,
     telemetry: createTelemetrySink(),
   };
 }
@@ -196,14 +196,31 @@ function draftDeps(opts: ServerOptions, repo: Repo): CreateDraftDeps {
  * static secret. A shared secret that still worked in parallel with real
  * per-writer verification would leave finding #3 open in substance while
  * closed in appearance.
+ *
+ * H-V3-01 (05-verification.v3.md §2): a signature-valid token says who is
+ * calling, not that they may write. `service_role` (db/migrations/0002) bypasses
+ * the RLS 02-architecture.v1.md §7 named as the only authorization mechanism, so
+ * the `sub` is resolved against `writers` here — the one seam every writer-facing
+ * route already passes through, before `route()` reads a body or dispatches
+ * anything, so no mutation can precede the decision. The legacy static-token
+ * branch needs no such lookup: its `writer_id` is deployment configuration, not
+ * a claim the caller supplied.
  */
 async function verify(
   token: string | null,
-  opts: ServerOptions,
+  ctx: Ctx,
 ): Promise<{ valid: boolean; writer_id?: string }> {
+  const { opts } = ctx;
   if (opts.jwtSecret !== undefined) {
-    const jwt = await verifySupabaseJwt(token, { secret: opts.jwtSecret, now: new Date() });
-    return jwt.valid ? { valid: true, writer_id: jwt.writer_id } : { valid: false };
+    const jwt = await verifySupabaseJwt(token, {
+      secret: opts.jwtSecret,
+      now: new Date(),
+      ...(opts.jwtIssuer === undefined ? {} : { issuer: opts.jwtIssuer }),
+    });
+    if (jwt.writer_id === undefined || !jwt.valid) return { valid: false };
+    return (await ctx.repo.isWriter(jwt.writer_id))
+      ? { valid: true, writer_id: jwt.writer_id }
+      : { valid: false };
   }
   return verifySharedSecret(token, opts.writerToken)
     ? { valid: true, writer_id: opts.writerId }
@@ -230,7 +247,7 @@ async function publish(
     });
   }
 
-  const deps = publishDeps(ctx.opts, ctx.repo, ctx.shared);
+  const deps = publishDeps(ctx);
   const response = await handlePublishArticle(
     {
       article_id,
@@ -276,7 +293,7 @@ async function upload(
       role,
       file: { filename: file.name, content_type: file.type, bytes },
     },
-    uploadDeps(ctx.opts, ctx.repo, ctx.shared),
+    uploadDeps(ctx),
   );
 
   if (response.body.status === 'processing') {
@@ -339,7 +356,7 @@ async function createDraft(req: http.IncomingMessage, raw: Buffer, ctx: Ctx): Pr
     });
   }
 
-  const deps = draftDeps(ctx.opts, ctx.repo);
+  const deps = draftDeps(ctx);
   const response = await handleCreateDraft(
     {
       authorization: req.headers.authorization ?? null,
@@ -354,7 +371,13 @@ async function createDraft(req: http.IncomingMessage, raw: Buffer, ctx: Ctx): Pr
   return response;
 }
 
-/** A signed token whose `sub` has no `writers` row cannot create anything. */
+/**
+ * No longer the authorization mechanism — `verify()` resolves the caller
+ * against `writers` before this is ever reached (H-V3-01). What is left is the
+ * legacy static-token mode, where `writer_id` is the configured `writerId` and
+ * no lookup applies: a deployment (or the contract-fuzzing harness) pointed at
+ * an id with no row still has to be answered, and 401 is that answer.
+ */
 function unknownWriter(err: unknown): HandlerResponse {
   if ((err as { code?: string }).code !== FOREIGN_KEY_VIOLATION) throw err;
   return errorResponse(401, 'UNAUTHORIZED', 'This account is not a registered writer.');
@@ -367,7 +390,7 @@ const openDraft = (req: http.IncomingMessage, article_id: string, ctx: Ctx) =>
       authorization: req.headers.authorization ?? null,
       client_ip: req.socket.remoteAddress ?? 'unknown',
     },
-    draftDeps(ctx.opts, ctx.repo),
+    draftDeps(ctx),
   );
 
 async function imageStatus(
@@ -413,6 +436,12 @@ export type ServerOptions = {
   writerId: string;
   /** The Supabase project's HS256 JWT secret. */
   jwtSecret?: string;
+  /**
+   * The Supabase project's token issuer, `https://<ref>.supabase.co/auth/v1`.
+   * Contains the project ref, so it is configuration and not a constant; `iss`
+   * is pinned only when a deployment supplies it (L-V3-02).
+   */
+  jwtIssuer?: string;
   /** ADR-0004's Lambda status-callback shared secret. */
   imageCallbackSecret?: string;
   /** How long a request may take to deliver its body; `DEFAULT_READ_TIMEOUT_MS`
@@ -545,7 +574,7 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse, ctx: C
       send(res, errorResponse(401, 'UNAUTHORIZED', 'A valid image-callback secret is required.'));
       return;
     }
-  } else if (!(await verify(bearerToken(req.headers.authorization ?? null), ctx.opts)).valid) {
+  } else if (!(await verify(bearerToken(req.headers.authorization ?? null), ctx)).valid) {
     send(res, errorResponse(401, 'UNAUTHORIZED', 'A valid Supabase Auth bearer token is required.'));
     return;
   }

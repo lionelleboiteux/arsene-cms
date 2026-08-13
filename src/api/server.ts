@@ -53,6 +53,7 @@ export async function startServer(opts: SpawnedServerOptions): Promise<RunningSe
         ...(opts.imageCallbackSecret !== undefined
           ? { IMAGE_CALLBACK_SECRET: opts.imageCallbackSecret }
           : {}),
+        ...(opts.jwtIssuer !== undefined ? { SUPABASE_JWT_ISSUER: opts.jwtIssuer } : {}),
         ...(opts.allowLegacyAuth === true ? { ALLOW_LEGACY_STATIC_AUTH: 'true' } : {}),
       },
     },

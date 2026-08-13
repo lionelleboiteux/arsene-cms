@@ -15,7 +15,10 @@ export type RgbaImage = { data: Uint8Array; width: number; height: number };
 const CHANNELS = 4;
 
 export async function decodeHeic(bytes: Uint8Array): Promise<RgbaImage> {
-  const { default: libheif } = await import('libheif-js/wasm-bundle');
+  // The `.js` is load-bearing: `libheif-js@1.19.8` publishes no `exports` map,
+  // and plain Node's ESM resolver — unlike Vite's — does not guess an extension
+  // (05-verification.v3.md §3).
+  const { default: libheif } = await import('libheif-js/wasm-bundle.js');
   const [image] = new libheif.HeifDecoder().decode(bytes);
   if (image === undefined) throw new Error('the HEIF container holds no image');
 

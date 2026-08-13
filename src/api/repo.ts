@@ -148,6 +148,18 @@ export function createRepo(pool: pg.Pool) {
       return res.rows;
     },
 
+    /**
+     * H-V3-01: a token's `sub` is a claim about who is calling, not permission
+     * to write. Non-UUID ids are answered `false` rather than handed to
+     * Postgres, so a `sub` shaped like anything at all is a decision here and
+     * never a database error somewhere downstream.
+     */
+    async isWriter(writer_id: string): Promise<boolean> {
+      if (!UUID.test(writer_id)) return false;
+      const res = await pool.query(`select 1 from writers where id = $1`, [writer_id]);
+      return res.rowCount === 1;
+    },
+
     async getWriterDisplayName(writer_id: string): Promise<string> {
       const res = await pool.query<{ display_name: string }>(
         `select display_name from writers where id = $1`,

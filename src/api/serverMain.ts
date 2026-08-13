@@ -48,6 +48,7 @@ const server = await startHttpServer({
   // Secrets are environment configuration, never argv: they must not show up
   // in a process listing (verify finding #3, ADR-0004).
   jwtSecret: process.env.SUPABASE_JWT_SECRET,
+  jwtIssuer: process.env.SUPABASE_JWT_ISSUER,
   imageCallbackSecret: process.env.IMAGE_CALLBACK_SECRET,
 });
 

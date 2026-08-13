@@ -2,7 +2,7 @@
  * `libheif-js` ships no type declarations. Only the three members `heic.ts`
  * uses are declared here — the rest of its surface is not this build's concern.
  */
-declare module 'libheif-js/wasm-bundle' {
+declare module 'libheif-js/wasm-bundle.js' {
   export type HeifImage = {
     get_width(): number;
     get_height(): number;
