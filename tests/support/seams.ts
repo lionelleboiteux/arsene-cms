@@ -732,7 +732,20 @@ export interface AuthModule {
    */
   verifySupabaseJwt(
     token: string | null,
-    opts: { secret: string; now: Date },
+    opts: {
+      secret: string;
+      now: Date;
+      /**
+       * L-V3-02 (`05-verification.v3.md` §6), fourth remediation pass: the
+       * Supabase project's own token issuer — `https://<ref>.supabase.co/auth/v1`
+       * — which the verifier must pin `iss` to. Project-specific, so it is
+       * configuration rather than a constant; optional so the six existing
+       * `NFR-JWT-*` cases keep calling this seam unchanged. `aud` and `role`
+       * need no option: Supabase always issues `authenticated` for both, so
+       * those are fixed expectations, not configuration.
+       */
+      issuer?: string;
+    },
   ): Promise<JwtVerification>;
   /** Constant-time comparison for the Lambda status-callback shared secret. */
   verifySharedSecret(provided: string | null, expected: string): boolean;

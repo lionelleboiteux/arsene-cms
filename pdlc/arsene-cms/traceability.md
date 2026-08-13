@@ -225,6 +225,33 @@ grepping the runner output: `VERIFY-01a`/`VERIFY-01b` (#1), `NFR-DOS-01/02`
 `AC-07/D7-*` + `NFR-IMGCPU-01` (#5), `VERIFY-06` (#6), `VERIFY-07` (#7),
 `NFR-RATE-02*` (#8), `NFR-TIMING-01` (#9).
 
+### Added by the fourth remediation pass (v4)
+
+Source: `05-verification.v3.md` §2 (H-V3-01) and §6 (L-V3-02), plus §3 (the
+HEIC decode gap found by the perf-analyst during v3's re-check).
+
+| NFR id | Obligation (source) | Test file | Test name(s) |
+|---|---|---|---|
+| NFR-AUTHZ-01 | Every writer-facing operation (create-draft, open, publish, upload) refuses 401 a signature-valid JWT whose `sub` has no row in `writers` — authentication is not authorization, and `service_role` bypasses the RLS that used to be the only check (H-V3-01) | `tests/e2e/writerAuthorization.test.ts` | `NFR-AUTHZ-01a` (create-draft), `NFR-AUTHZ-01b` (open), `NFR-AUTHZ-01c` (publish), `NFR-AUTHZ-01d` (upload) |
+| NFR-AUTHZ-02 | The both-sides half: a registered writer's own signed token keeps working on all four operations, so the missing check cannot be closed by refusing everybody (H-V3-01) | `tests/e2e/writerAuthorization.test.ts` | `NFR-AUTHZ-02: a registered writer's own signed token still succeeds on all four writer-facing operations…` |
+| NFR-AUTHZ-03 | A signature-valid token whose `sub` is not even shaped like a writer id is refused 401, not answered 500 — the refusal must come from a deliberate authorization decision, not from whatever the database happens to say about the value (H-V3-01, the case the foreign-key accident can't answer) | `tests/e2e/writerAuthorization.test.ts` | `NFR-AUTHZ-03: a signature-valid token whose sub is not even shaped like a writer id is refused 401 UNAUTHORIZED, not answered 500…` |
+| NFR-AUTHZ-04 | A stranger's publish must leave the embargoed draft unpublished and still invisible to `anon` — a guard that answers 401 only after `markPublished` has committed does not count as closing this (H-V3-01, world-state assertion, not just the response) | `tests/e2e/writerAuthorization.test.ts` | `NFR-AUTHZ-04: a stranger's publish leaves the embargoed draft unpublished and still invisible to the anon role…` |
+| NFR-AUTHZ-05 | A stranger's cover upload against a published article must leave that article's cover image exactly as it was — the defacement path is closed at the write, not only in the response (H-V3-01, world-state assertion) | `tests/e2e/writerAuthorization.test.ts` | `NFR-AUTHZ-05: a stranger's cover upload against a live article leaves that article's cover image exactly as it was…` |
+| NFR-JWT-07 | A correctly signed token carrying no `exp` claim at all — which therefore never expires — is refused (L-V3-02) | `tests/unit/authClaims.test.ts` | `NFR-JWT-07: a correctly signed token carrying no exp claim at all… is refused…` |
+| NFR-JWT-08 | A token whose `iss` names a different Supabase project than the one this deployment trusts is refused (L-V3-02) | `tests/unit/authClaims.test.ts` | `NFR-JWT-08: a token whose iss names a different Supabase project… is refused…` |
+| NFR-JWT-09 | A token whose `aud` is not this API at all is refused (L-V3-02) | `tests/unit/authClaims.test.ts` | `NFR-JWT-09: a token whose aud is not this API at all is refused…` |
+| NFR-JWT-10 | A token whose `role` is `anon` rather than `authenticated` — the claim the project's public anon key itself carries — is refused (L-V3-02) | `tests/unit/authClaims.test.ts` | `NFR-JWT-10: a token whose role is anon rather than authenticated… is refused…` |
+| NFR-JWT-11 | The both-sides half: a fully Supabase-shaped token (signed, unexpired, correct issuer/aud/role) is still accepted, with `writer_id` from `sub` (L-V3-02) | `tests/unit/authClaims.test.ts` | `NFR-JWT-11: a fully Supabase-shaped token… is accepted, with writer_id taken from its sub claim` |
+| VERIFY-HEIC-01 | The exact `libheif-js` import specifier `src/images/heic.ts` ships resolves under plain Node's ESM resolver, not only under the test runner's more forgiving one — read from the source at test time, not hardcoded, so the assertion tracks production rather than drifting from it (verify v3 §3) | `tests/e2e/heicDeployedRuntime.test.ts` | `VERIFY-HEIC-01: the libheif specifier src/images/heic.ts ships resolves under plain Node's ESM resolver…` |
+| VERIFY-HEIC-02 / AC-07 | A real HEVC-compressed HEIC uploaded to the real spawned server (not the in-process shortcut) is converted and its `article_images` row reaches `ready` — the format the contract advertises must work in the process a deployment actually runs (verify v3 §3) | `tests/e2e/heicDeployedRuntime.test.ts` | `VERIFY-HEIC-02 / AC-07: a real HEVC-compressed HEIC uploaded to the real spawned server is converted and its image row reaches ready…` |
+
+`tests/support/jwt.ts`'s `mintSupabaseJwt` gained four additive claim
+overrides (`noExpiry`, `issuer`, `audience`, `role`) for this pass, all
+defaulting to exactly what the pre-existing signature produced — no
+already-minted token in an existing test changes shape. `tests/support/seams.ts`'s
+`AuthModule.verifySupabaseJwt` gained an optional `issuer` parameter for the
+same reason; the six pre-existing `NFR-JWT-01`-`06` cases call it unchanged.
+
 ### Property-based invariants
 
 | Id | Invariant | Test file |
