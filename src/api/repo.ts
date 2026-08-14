@@ -203,11 +203,18 @@ export function createRepo(pool: pg.Pool) {
       return { first_published_at: res.rows[0]?.first_published_at ?? input.published_at };
     },
 
-    /** AC-06: at most one cover per article, decided in this transaction. */
+    /**
+     * AC-06: at most one cover per article, decided in this transaction.
+     *
+     * M-V4-01: `status <> 'failed'` demotes the cover the article was actually
+     * using and leaves rejected cover uploads where they are. Promoting one of
+     * those into the body slot would make it an image the article is genuinely
+     * using again — permanently unpublishable, since no writer can delete it.
+     */
     async demoteCurrentCover(article_id: string): Promise<string | null> {
       const res = await pool.query<{ id: string }>(
         `update article_images set role = 'body'
-          where article_id = $1 and role = 'cover' returning id`,
+          where article_id = $1 and role = 'cover' and status <> 'failed' returning id`,
         [article_id],
       );
       return res.rows[0]?.id ?? null;

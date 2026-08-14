@@ -8,10 +8,12 @@
  * runs in Lambda (`src/images/lambdaHandler.ts`) and reports back through
  * `POST /internal/images/{imageId}/status`, so no writer upload can exceed the
  * Edge Function's CPU budget (verify finding #5). What stays here is what is
- * cheap and must be answered now: the size limit, the container sniff, cover
- * uniqueness, and the alt text the article's own text already determines.
+ * cheap and must be answered now: the draft lock, the size limit, the container
+ * sniff, cover uniqueness, and the alt text the article's own text already
+ * determines.
  */
 
+import { evaluateLock } from '../domain/lock.ts';
 import { generateAltText, htmlToText } from '../domain/seo.ts';
 import { sniffImageFormat, isDamagedContainer } from '../images/format.ts';
 import { MAX_UPLOAD_BYTES } from '../images/optimize.ts';
@@ -51,6 +53,8 @@ export type UploadDeps = {
       replaced_cover_image_id: string | null;
     }): Promise<{ id: string; created_at: Date }>;
     demoteCurrentCover(article_id: string): Promise<string | null>;
+    /** M-V4-02: named in this route's `409 DRAFT_LOCKED`, exactly as publish's. */
+    getWriterDisplayName(writer_id: string): Promise<string>;
   };
   storage: { put(key: string, bytes: Uint8Array): Promise<{ url: string }> };
   rateLimiter: RateLimiter;
@@ -72,7 +76,7 @@ export async function handleUploadImage(
   deps: UploadDeps,
 ): Promise<HandlerResponse> {
   const auth = await deps.auth.verifyBearer(bearerToken(req.authorization));
-  if (!auth.valid) {
+  if (!auth.valid || auth.writer_id === undefined) {
     return errorResponse(401, 'UNAUTHORIZED', 'A valid Supabase Auth bearer token is required.');
   }
   if (req.idempotency_key === null) {
@@ -96,6 +100,27 @@ export async function handleUploadImage(
   const rate = deps.rateLimiter.check(`upload:${req.client_ip}`, deps.now());
   if (!rate.allowed) {
     return errorResponse(429, 'CONFLICT', `More than ${rate.limit} uploads per minute.`);
+  }
+
+  // M-V4-02: AC-05's lock is a property of the draft, not of one route. A
+  // writer refused `409 DRAFT_LOCKED` on publish used to walk in through here
+  // and replace the cover of a draft a colleague was mid-session on. Same
+  // `evaluateLock` call, same envelope — including the staleness window, so
+  // AC-05's takeover of an abandoned lock keeps working for uploads too.
+  const lock = evaluateLock({
+    now: deps.now(),
+    lock: {
+      locked_by: article.locked_by,
+      locked_at: article.locked_at,
+      locked_by_display_name: null,
+    },
+    requesting_writer_id: auth.writer_id,
+  });
+  if (!lock.editable) {
+    return errorResponse(409, 'DRAFT_LOCKED', 'This draft is currently locked by another writer.', {
+      locked_by_writer_id: lock.locked_by_writer_id,
+      locked_by_display_name: await deps.repo.getWriterDisplayName(lock.locked_by_writer_id),
+    });
   }
 
   if (req.file.bytes.byteLength > MAX_UPLOAD_BYTES) {
@@ -133,13 +158,17 @@ async function createImage(
   }
 
   const id = crypto.randomUUID();
-  const replaced_cover_image_id =
-    req.role === 'cover' ? await deps.repo.demoteCurrentCover(article.id) : null;
 
   if (isDamagedContainer(req.file.bytes, format)) {
     // AC-08: the row exists and says why, so the writer is told to replace it
     // and the publish endpoint refuses the article until they do. Nothing is
     // stored: a truncated file has nothing worth converting.
+    //
+    // M-V4-01: and nothing is *demoted* either. A file this route is about to
+    // reject never displaces the cover the article already has — otherwise one
+    // fat-fingered upload blanks a live article's cover, which is exactly what
+    // the verify pass reproduced. `replaced_cover_image_id` is `null` because
+    // this upload genuinely replaced nothing.
     return insert(id, req, deps, {
       status: 'failed',
       alt_text: null,
@@ -148,9 +177,12 @@ async function createImage(
         code: 'CORRUPTED_FILE',
         message: `${req.file.filename} passed format detection but could not be decoded.`,
       },
-      replaced_cover_image_id,
+      replaced_cover_image_id: null,
     });
   }
+
+  const replaced_cover_image_id =
+    req.role === 'cover' ? await deps.repo.demoteCurrentCover(article.id) : null;
 
   // AC-15: alt text comes from the article's own words, not from the pixels, so
   // it is ready the moment conversion completes rather than computed later.

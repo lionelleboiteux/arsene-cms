@@ -417,14 +417,18 @@ paths:
         error banner.
 
         **A broken or still-processing image blocks publish (AC-08),
-        cover or body.** If any image attached to the article — the cover,
-        or any image embedded in the body — has `status: processing` or
-        `status: failed` (see `POST .../images`), this returns `409
+        cover or body.** If any image the article is actually using — the
+        cover, or any image embedded in the body — has `status: processing`
+        or `status: failed` (see `POST .../images`), this returns `409
         IMAGE_NOT_READY` with `details.image_id`, `details.role`, and
         `details.status` identifying exactly which image is the problem.
         This is distinct from `COVER_IMAGE_REQUIRED`: that code means no
         cover image is set at all; this one means an image *is* set but
-        is not yet safe to publish.
+        is not yet safe to publish. The one exception is a `failed` cover
+        upload that never became the article's cover, or was superseded by
+        a working one: since the article has a usable cover beside it, that
+        rejected attempt does not block publishing (it cannot be deleted
+        through this API, so counting it would block the article forever).
 
         **Draft locking (AC-05) is enforced here too.** If the calling
         writer does not currently hold the edit lock on this article's
@@ -649,7 +653,15 @@ paths:
         image that was previously this article's cover to `role: body` in
         the same transaction as the new upload; `replaced_cover_image_id`
         carries the id of the image that was just demoted, or `null` if
-        there was none (always `null` for `role: body` uploads).
+        there was none (always `null` for `role: body` uploads). A file
+        this endpoint rejects demotes nothing: the article keeps the cover
+        it already had, and `replaced_cover_image_id` is `null`.
+
+        **Draft locking (AC-05) is enforced here too.** If the edit lock on
+        this article's draft is currently held by another writer and is not
+        yet stale, this returns `409 DRAFT_LOCKED` and stores nothing —
+        exactly as `POST .../publish` does, so a writer refused there cannot
+        replace the same colleague's cover through here.
       security:
         - supabaseWriterAuth: []
       parameters:
@@ -735,6 +747,23 @@ paths:
                     max_bytes: 20971520
                     received_bytes: 35651584
                   request_id: 6f6f6f6f-6666-4a2b-9c3d-ffffffffffff
+        '409':
+          description: The draft is currently locked for editing by another writer (AC-05).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                draftLocked:
+                  summary: another writer currently holds the edit lock and their lock has not gone stale
+                  value:
+                    error:
+                      code: DRAFT_LOCKED
+                      message: This draft is currently locked for editing by another writer.
+                      details:
+                        locked_by_writer_id: e5e5e5e5-0000-4a2b-9c3d-eeeeeeeeeeee
+                        locked_by_display_name: Marie D.
+                      request_id: 5e5e5e5e-5555-4a2b-9c3d-eeeeeeeeeeee
         '422':
           description: >-
             The uploaded file's format could not even be recognised

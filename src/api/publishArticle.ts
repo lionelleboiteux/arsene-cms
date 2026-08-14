@@ -168,7 +168,9 @@ async function refusePublish(
     return errorResponse(400, 'VALIDATION_FAILED', 'Request failed validation.', { fields });
   }
 
-  const unready = images.find((image) => image.status !== 'ready');
+  const unready = images.find(
+    (image) => image.status !== 'ready' && !isRejectedAttempt(image, images),
+  );
   if (unready !== undefined) {
     return errorResponse(409, 'IMAGE_NOT_READY', 'An image of this article is not ready yet.', {
       image_id: unready.id,
@@ -177,6 +179,27 @@ async function refusePublish(
     });
   }
   return null;
+}
+
+/**
+ * M-V4-01: a `failed` cover row sitting next to a cover the article can
+ * actually use is a rejected upload attempt, not the article's cover — it was
+ * never adopted (`uploadImage.ts` no longer demotes for a file it rejects), or
+ * it was superseded by a later, working one. No writer can delete such a row
+ * (`authenticated` has no `delete` grant on `article_images`), so counting it
+ * would block republication permanently, which is what the verify pass proved.
+ *
+ * Deliberately narrow: only the cover has a slot another image can take over.
+ * A `failed` body image is still embedded in the body and still refuses the
+ * publish (AC-08), and a `failed` cover with no usable cover beside it is the
+ * article's cover and still refuses it too.
+ */
+function isRejectedAttempt(image: ImageRecord, images: ImageRecord[]): boolean {
+  return (
+    image.role === 'cover' &&
+    image.status === 'failed' &&
+    images.some((other) => other.role === 'cover' && other.status !== 'failed')
+  );
 }
 
 function invalidPronosFields(
@@ -220,7 +243,12 @@ async function publishNow(
     writer_display_name: await deps.repo.getWriterDisplayName(article.writer_id),
     // §6.4: the URL the cover was actually stored under, never one built from
     // the article id — this value is persisted into `structured_data`.
-    cover_image_url: images.find((image) => image.role === 'cover')?.optimized_url ?? '',
+    // M-V4-01: `role === 'cover'` alone is no longer enough to identify the
+    // cover — a rejected upload can leave a second, `failed` cover row beside
+    // it — so this reads the one the public render pass reads (`src/site/render.ts`).
+    cover_image_url:
+      images.find((image) => image.role === 'cover' && image.status === 'ready')?.optimized_url ??
+      '',
     published_at: now.toISOString(),
     first_published_at: (article.first_published_at ?? now).toISOString(),
   };
