@@ -633,6 +633,17 @@ export interface ApiServerModule {
     jwtSecret?: string;
     imageCallbackSecret?: string;
     /**
+     * M-V3-04 (`05-verification.v3.md` §6), sixth remediation pass: the CDN
+     * origin inbound `optimized_url` values are validated against is a
+     * compile-time `.example` placeholder in `router.ts`, not configuration, so
+     * no real deployment's Lambda callback can ever be accepted. Declared here
+     * the same way `jwtSecret`/`imageCallbackSecret` are, and **optional**, so
+     * every existing caller of this seam is unchanged and a fix that reads
+     * `process.env.CDN_ORIGIN` instead of taking an option is equally
+     * admissible (tests/e2e/cdnOriginConfig.test.ts supplies both).
+     */
+    cdnOrigin?: string;
+    /**
      * M3 (05-verification.v2.md, third pass): running with no JWT secret at
      * all is a legitimate, documented mode (`router.ts`'s `verify()` comment,
      * and the pre-JWT end-to-end suite below), but it must be *chosen*, never
