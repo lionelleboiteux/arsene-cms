@@ -256,7 +256,9 @@ paths:
           description: >-
             The request body doesn't match its `status`: a `ready` call
             missing `optimized_url`, or a `failed` call missing `failure`,
-            or an unrecognised `status` value. No row is touched.
+            or an unrecognised `status` value, or an `optimized_url` whose
+            origin is not the deployment's configured CDN origin. No row is
+            touched.
           content:
             application/json:
               schema:
@@ -447,7 +449,12 @@ components:
                 The processed asset's URL on the CDN-fronted bucket (see
                 ADR-0004's "Neutral / accepted" — `urls.optimized` on the
                 public contract's `ArticleImage` is unaffected by which
-                system originates this URL).
+                system originates this URL). Its origin must be the CDN
+                origin this deployment is configured with (`CDN_ORIGIN`);
+                any other origin is `400 VALIDATION_FAILED`. That value is
+                per-deployment, so it is not expressible as a `pattern`
+                here — the example below is the placeholder an unconfigured
+                deployment falls back to, not a fixed requirement.
               example: 'https://cdn.fantasycoach.example/articles/c3c3c3c3-0000-4a2b-9c3d-cccccccccccc-optimized.webp'
             failure:
               type: 'null'

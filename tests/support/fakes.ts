@@ -135,6 +135,13 @@ export function buildPublishDeps(o: PublishDepsOverrides = {}): BuiltPublishDeps
         };
       },
       getWriterDisplayName: async () => o.display_name ?? WRITER_B_NAME,
+      // Additive, for M-V5-05: publishing has to know which slugs are already
+      // taken before it can honour AC-14's "collision-free, with no writer
+      // action". Nothing is taken in these fakes, so every pre-existing
+      // expectation about the slug a publish produces is unchanged; the real
+      // collision is proved end-to-end, against the real `unique` index
+      // (AC-14-collision-01).
+      takenSlugs: async () => [],
     },
     telemetry: sink,
     rateLimiter: fakeRateLimiter(o.rateLimit ?? 1_000_000),

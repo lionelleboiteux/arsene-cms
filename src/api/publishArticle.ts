@@ -31,6 +31,13 @@ export type ImageRecord = {
   alt_text: string | null;
   /** The converted asset's real CDN URL, written by ADR-0004's callback. */
   optimized_url?: string | null;
+  /**
+   * The as-uploaded original in Supabase Storage. `null` on a row `uploadImage`
+   * created while refusing the file, so nothing was ever stored for it.
+   */
+  original_url?: string | null;
+  /** Written by a later cover upload onto the row whose slot it took over. */
+  replaced_cover_image_id?: string | null;
 };
 
 export type ArticleRecord = {
@@ -78,6 +85,8 @@ export type PublishDeps = {
       structured_data: Record<string, unknown>;
     }): Promise<{ first_published_at: Date }>;
     getWriterDisplayName(writer_id: string): Promise<string>;
+    /** The slugs already taken that `base_slug` would have to avoid (AC-14). */
+    takenSlugs(base_slug: string): Promise<string[]>;
   };
   telemetry: TelemetrySink;
   rateLimiter: RateLimiter;
@@ -169,7 +178,7 @@ async function refusePublish(
   }
 
   const unready = images.find(
-    (image) => image.status !== 'ready' && !isRejectedAttempt(image, images),
+    (image) => image.status !== 'ready' && articleDependsOn(image, images),
   );
   if (unready !== undefined) {
     return errorResponse(409, 'IMAGE_NOT_READY', 'An image of this article is not ready yet.', {
@@ -182,23 +191,37 @@ async function refusePublish(
 }
 
 /**
- * M-V4-01: a `failed` cover row sitting next to a cover the article can
- * actually use is a rejected upload attempt, not the article's cover — it was
- * never adopted (`uploadImage.ts` no longer demotes for a file it rejects), or
- * it was superseded by a later, working one. No writer can delete such a row
- * (`authenticated` has no `delete` grant on `article_images`), so counting it
- * would block republication permanently, which is what the verify pass proved.
+ * Whether the article actually depends on this image row — and therefore
+ * whether the row gets to decide the publish. No writer can delete a row
+ * (`authenticated` has no `delete` grant on `article_images`, and no route
+ * removes one), so a row the article does not depend on would otherwise block
+ * republication permanently: M-V4-01, and M-V5-01 for the same trap on the
+ * `body` slot.
  *
- * Deliberately narrow: only the cover has a slot another image can take over.
- * A `failed` body image is still embedded in the body and still refuses the
- * publish (AC-08), and a `failed` cover with no usable cover beside it is the
- * article's cover and still refuses it too.
+ * Neither exclusion below reads `role`. `role` is the one `article_images`
+ * column `authenticated` may write directly (`db/migrations/0001_initial_schema.sql`,
+ * `grant update (role, alt_text)`), so a gate keyed on it was a gate a writer
+ * could open by renaming a broken, genuinely-embedded image to `cover`
+ * (M-V5-03).
+ *
+ * - **Never adopted** — `original_url is null`. `uploadImage.ts` stores the
+ *   original *before* it hands anything to the pipeline, and writes
+ *   `original_url: null` on every path where it refuses the file instead. A row
+ *   with no stored original was never embeddable in the body and was never
+ *   usable as a cover, whatever its `role`. A row read from the repository
+ *   always carries this column, so `null` is the database's own answer and not
+ *   an unmodelled field.
+ * - **Superseded in the cover slot** — a later cover upload took the slot and
+ *   recorded, on itself, which row it took it from
+ *   (`replaced_cover_image_id`, written by the server; `authenticated` cannot
+ *   write it). Whether the superseded upload converts or fails is settled
+ *   afterwards by ADR-0004's asynchronous callback, which is why that decision
+ *   cannot be taken at demote time (M-V5-02).
  */
-function isRejectedAttempt(image: ImageRecord, images: ImageRecord[]): boolean {
+function articleDependsOn(image: ImageRecord, images: ImageRecord[]): boolean {
   return (
-    image.role === 'cover' &&
-    image.status === 'failed' &&
-    images.some((other) => other.role === 'cover' && other.status !== 'failed')
+    image.original_url !== null &&
+    !images.some((other) => other.replaced_cover_image_id === image.id)
   );
 }
 
@@ -214,6 +237,19 @@ function invalidPronosFields(
           message: error.message,
         }));
   });
+}
+
+/**
+ * AC-14 promises "a collision-free slug, with no writer action", and
+ * `articles.slug` is `unique` — so `generateSlug`'s own dedup has to be given
+ * the slugs actually taken. Called with none, it returned the bare slug and the
+ * second article sharing a title died on an unmapped `23505`, permanently
+ * (M-V5-05); `createDraft`'s default title makes two untitled drafts collide
+ * immediately.
+ */
+async function uniqueSlug(title: string, deps: PublishDeps): Promise<string> {
+  const existingSlugs = await deps.repo.takenSlugs(generateSlug(title));
+  return generateSlug(title, { existingSlugs });
 }
 
 async function publishNow(
@@ -237,7 +273,7 @@ async function publishNow(
   const view: PublishedArticleView = {
     article_id: article.id,
     title: article.title,
-    slug: article.slug ?? generateSlug(article.title),
+    slug: article.slug ?? (await uniqueSlug(article.title, deps)),
     league_name: article.league_name,
     type_name: article.type_name,
     writer_display_name: await deps.repo.getWriterDisplayName(article.writer_id),

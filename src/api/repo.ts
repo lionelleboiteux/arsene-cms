@@ -141,11 +141,25 @@ export function createRepo(pool: pg.Pool) {
     async getArticleImages(article_id: string): Promise<ImageRecord[]> {
       if (!UUID.test(article_id)) return [];
       const res = await pool.query<ImageRecord>(
-        `select id, article_id, role, status, alt_text, optimized_url
+        `select id, article_id, role, status, alt_text, optimized_url,
+                original_url, replaced_cover_image_id
            from article_images where article_id = $1`,
         [article_id],
       );
       return res.rows;
+    },
+
+    /**
+     * AC-14: the slugs a new one has to avoid — the base and every variant
+     * `generateSlug` could derive from it. `toSlug` emits `[a-z0-9-]` only, so
+     * the base carries no `like` metacharacter.
+     */
+    async takenSlugs(base_slug: string): Promise<string[]> {
+      const res = await pool.query<{ slug: string }>(
+        `select slug from articles where slug = $1 or slug like $1 || '-%'`,
+        [base_slug],
+      );
+      return res.rows.map((row) => row.slug);
     },
 
     /**
@@ -206,15 +220,24 @@ export function createRepo(pool: pg.Pool) {
     /**
      * AC-06: at most one cover per article, decided in this transaction.
      *
-     * M-V4-01: `status <> 'failed'` demotes the cover the article was actually
-     * using and leaves rejected cover uploads where they are. Promoting one of
-     * those into the body slot would make it an image the article is genuinely
-     * using again — permanently unpublishable, since no writer can delete it.
+     * Whatever held the slot loses it, `status` notwithstanding. The id
+     * returned here is what the new row records as `replaced_cover_image_id`,
+     * and that record is the only durable evidence that this row's slot was
+     * taken over — `publishArticle.ts` reads it instead of `role`, and the
+     * superseded upload's own outcome may arrive long afterwards, from
+     * ADR-0004's callback (M-V5-02). Green v5 excluded `failed` rows here to
+     * stop a rejected upload being promoted into the body slot; that is no
+     * longer what keeps it from blocking a publish — a row nothing was ever
+     * stored for is excluded whatever slot it sits in — and excluding them
+     * left an asynchronously-failed cover unsuperseded and so blocking
+     * forever, which is the very trap this is all about. This route never
+     * reaches here for a file it is rejecting, so a cover the article can use
+     * is still never displaced by one it cannot (M-V4-01).
      */
     async demoteCurrentCover(article_id: string): Promise<string | null> {
       const res = await pool.query<{ id: string }>(
         `update article_images set role = 'body'
-          where article_id = $1 and role = 'cover' and status <> 'failed' returning id`,
+          where article_id = $1 and role = 'cover' returning id`,
         [article_id],
       );
       return res.rows[0]?.id ?? null;

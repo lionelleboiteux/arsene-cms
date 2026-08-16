@@ -50,6 +50,10 @@ const server = await startHttpServer({
   jwtSecret: process.env.SUPABASE_JWT_SECRET,
   jwtIssuer: process.env.SUPABASE_JWT_ISSUER,
   imageCallbackSecret: process.env.IMAGE_CALLBACK_SECRET,
+  // M-V3-04: the CDN origin is this deployment's, not a compile-time
+  // placeholder on the reserved `.example` TLD. Not a secret, but read from
+  // the same place for the same reason: it differs per deployment.
+  cdnOrigin: process.env.CDN_ORIGIN,
 });
 
 process.stdout.write(`listening ${server.url}\n`);

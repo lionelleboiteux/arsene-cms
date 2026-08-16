@@ -424,11 +424,14 @@ paths:
         `details.status` identifying exactly which image is the problem.
         This is distinct from `COVER_IMAGE_REQUIRED`: that code means no
         cover image is set at all; this one means an image *is* set but
-        is not yet safe to publish. The one exception is a `failed` cover
-        upload that never became the article's cover, or was superseded by
-        a working one: since the article has a usable cover beside it, that
-        rejected attempt does not block publishing (it cannot be deleted
-        through this API, so counting it would block the article forever).
+        is not yet safe to publish. Two kinds of row are not "an image the
+        article is actually using", whatever their `role`, and never block:
+        an upload this API refused before storing anything (so nothing was
+        ever embeddable in the body or usable as a cover), and an image
+        whose cover slot a later upload took over — the row named by some
+        other image's `replaced_cover_image_id`, whose own conversion may
+        only be reported as failed afterwards. Neither can be deleted
+        through this API, so counting them would block the article forever.
 
         **Draft locking (AC-05) is enforced here too.** If the calling
         writer does not currently hold the edit lock on this article's

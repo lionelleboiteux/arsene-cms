@@ -27,8 +27,16 @@ const ARTICLE_ROUTE = /^\/v1\/articles\/([^/]+)\/(publish|images|open)$/;
 const CREATE_DRAFT_ROUTE = '/v1/articles';
 const IMAGE_STATUS_ROUTE = /^\/internal\/images\/([^/]+)\/status$/;
 
-/** Assets are served through the CDN, never from Supabase Storage (§4). */
-const CDN_ORIGIN = 'https://cdn.fantasycoach.example';
+/**
+ * Assets are served through the CDN, never from Supabase Storage (§4). The
+ * origin itself is deployment configuration (`ServerOptions.cdnOrigin`,
+ * `CDN_ORIGIN`): `.example` is IANA-reserved, so a compile-time constant meant
+ * every genuine Lambda callback was refused `400`, every image stayed
+ * `processing` and every publish answered `409 IMAGE_NOT_READY`, silently
+ * (M-V3-04). This placeholder is only the value an unconfigured deployment
+ * falls back to.
+ */
+const DEFAULT_CDN_ORIGIN = 'https://cdn.fantasycoach.example';
 
 /** A Postgres foreign-key violation: this token's `sub` is not a writer here. */
 const FOREIGN_KEY_VIOLATION = '23503';
@@ -58,30 +66,35 @@ const CreateDraftBody = z.object({
 
 /**
  * 05-verification.v2.md L2: the callback may only publish assets from the
- * trusted CDN. A real origin comparison, not a prefix test — `startsWith`
- * would accept `https://cdn.fantasycoach.example.attacker.test/…`.
+ * trusted CDN — this deployment's, which is why the origin is a parameter. A
+ * real origin comparison, not a prefix test: `startsWith` would accept
+ * `https://cdn.fantasycoach.example.attacker.test/…`.
  */
-const isCdnUrl = (value: string): boolean => {
+const isCdnUrl = (value: string, cdnOrigin: string): boolean => {
   try {
-    return new URL(value).origin === CDN_ORIGIN;
+    return new URL(value).origin === cdnOrigin;
   } catch {
     return false;
   }
 };
 
 /** contracts/internal-openapi.yaml: `ready` needs a URL, `failed` a reason. */
-const ImageStatusBody = z.discriminatedUnion('status', [
-  z.object({
-    status: z.literal('ready'),
-    optimized_url: z.string().min(1).refine(isCdnUrl, `must be a URL on ${CDN_ORIGIN}`),
-    failure: z.null().optional(),
-  }),
-  z.object({
-    status: z.literal('failed'),
-    optimized_url: z.null().optional(),
-    failure: z.object({ code: z.string(), message: z.string() }),
-  }),
-]);
+const imageStatusBody = (cdnOrigin: string) =>
+  z.discriminatedUnion('status', [
+    z.object({
+      status: z.literal('ready'),
+      optimized_url: z
+        .string()
+        .min(1)
+        .refine((value) => isCdnUrl(value, cdnOrigin), `must be a URL on ${cdnOrigin}`),
+      failure: z.null().optional(),
+    }),
+    z.object({
+      status: z.literal('failed'),
+      optimized_url: z.null().optional(),
+      failure: z.object({ code: z.string(), message: z.string() }),
+    }),
+  ]);
 
 type RunningServer = { url: string; stop(): Promise<void> };
 
@@ -120,22 +133,31 @@ function parseJson(raw: Buffer): unknown {
   }
 }
 
+/**
+ * One map, but one namespace per operation: the contract declares
+ * `Idempotency-Key` as an arbitrary opaque string, so a client (or a retry
+ * helper) reusing one key across an editing session used to get `publish`'s
+ * cached answer for an `upload` and vice versa — a "Publish" click answered
+ * `2xx` while the article stayed a draft, and a 20 MB file silently discarded
+ * (M-V5-04).
+ */
 function createIdempotencyStore() {
   const store = new Map<string, HandlerResponse>();
-  return {
-    lookup: (key: string, article_id: string) => store.get(`${key}::${article_id}`) ?? null,
+  return (operation: 'publish' | 'upload') => ({
+    lookup: (key: string, article_id: string) =>
+      store.get(`${operation}::${key}::${article_id}`) ?? null,
     store: (key: string, article_id: string, response: HandlerResponse) =>
-      void store.set(`${key}::${article_id}`, response),
-  };
+      void store.set(`${operation}::${key}::${article_id}`, response),
+  });
 }
 
 /** Stands in for Supabase Storage: the URL shape is what the site consumes. */
-function createObjectStore() {
+function createObjectStore(cdnOrigin: string) {
   const objects = new Map<string, Uint8Array>();
   return {
     put: async (key: string, bytes: Uint8Array) => {
       objects.set(key, bytes);
-      return { url: `${CDN_ORIGIN}/articles/${key}` };
+      return { url: `${cdnOrigin}/articles/${key}` };
     },
   };
 }
@@ -157,7 +179,7 @@ function publishDeps(ctx: Ctx): PublishDeps {
     repo: ctx.repo,
     telemetry: sink,
     rateLimiter: ctx.shared.rateLimiter,
-    idempotency: ctx.shared.idempotency,
+    idempotency: ctx.shared.idempotency('publish'),
     // traceability.md §7: the Cloudflare purge itself is a deploy concern, so
     // this entry point records the call rather than performing it.
     revalidation: { revalidate: async () => ({ ok: true }) },
@@ -172,7 +194,7 @@ function uploadDeps(ctx: Ctx): UploadDeps {
     repo: ctx.repo,
     storage: ctx.shared.storage,
     rateLimiter: ctx.shared.rateLimiter,
-    idempotency: ctx.shared.idempotency,
+    idempotency: ctx.shared.idempotency('upload'),
     observability,
   };
 }
@@ -399,7 +421,7 @@ async function imageStatus(
   raw: Buffer,
   ctx: Ctx,
 ): Promise<HandlerResponse> {
-  const parsed = ImageStatusBody.safeParse(parseJson(raw));
+  const parsed = ctx.shared.imageStatusBody.safeParse(parseJson(raw));
   if (!parsed.success) {
     return errorResponse(400, 'VALIDATION_FAILED', 'Request failed validation.', {
       fields: parsed.error.issues.map((issue) => ({
@@ -444,6 +466,12 @@ export type ServerOptions = {
   jwtIssuer?: string;
   /** ADR-0004's Lambda status-callback shared secret. */
   imageCallbackSecret?: string;
+  /**
+   * The origin converted assets are served from — the one an inbound status
+   * callback's `optimized_url` must be on, and the one this process's object
+   * store writes. `DEFAULT_CDN_ORIGIN` when unset (M-V3-04).
+   */
+  cdnOrigin?: string;
   /** How long a request may take to deliver its body; `DEFAULT_READ_TIMEOUT_MS`
    * when unset. */
   readTimeoutMs?: number;
@@ -453,6 +481,8 @@ type Shared = {
   rateLimiter: ReturnType<typeof createRateLimiter>;
   idempotency: ReturnType<typeof createIdempotencyStore>;
   storage: ReturnType<typeof createObjectStore>;
+  /** Built once, because the origin it validates against is per-deployment. */
+  imageStatusBody: ReturnType<typeof imageStatusBody>;
 };
 
 type Ctx = { opts: ServerOptions; repo: Repo; shared: Shared };
@@ -463,6 +493,7 @@ export async function startHttpServer(opts: ServerOptions): Promise<RunningServe
   // db/migrations/0002: the server-side seams write rows `authenticated` is
   // deliberately not granted (draft creation, publish-controlled columns).
   pool.on('connect', (client) => void client.query('set role service_role'));
+  const cdnOrigin = opts.cdnOrigin ?? DEFAULT_CDN_ORIGIN;
   const ctx: Ctx = {
     opts,
     repo: createRepo(pool),
@@ -472,7 +503,8 @@ export async function startHttpServer(opts: ServerOptions): Promise<RunningServe
         window_ms: 60_000,
       }),
       idempotency: createIdempotencyStore(),
-      storage: createObjectStore(),
+      storage: createObjectStore(cdnOrigin),
+      imageStatusBody: imageStatusBody(cdnOrigin),
     },
   };
 

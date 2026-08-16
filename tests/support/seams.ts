@@ -448,6 +448,14 @@ export type PublishDeps = {
       structured_data: Record<string, unknown>;
     }): Promise<{ first_published_at: Date }>;
     getWriterDisplayName(writer_id: WriterId): Promise<string>;
+    /**
+     * M-V5-05 (`05-verification.v5.md` §5), sixth remediation pass: AC-14's
+     * collision-free slug needs the slugs already taken, which only the
+     * database knows. Optional, so every pre-existing caller of this seam is
+     * unchanged, and so a fix that resolves the collision another way (mapping
+     * the `23505` and retrying, say) is equally admissible.
+     */
+    takenSlugs?(base_slug: string): Promise<string[]>;
   };
   telemetry: TelemetrySink;
   rateLimiter: { check(key: string, now: Date): { allowed: boolean; limit: number } };
