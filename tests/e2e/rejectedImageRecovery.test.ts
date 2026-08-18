@@ -109,6 +109,47 @@ import { corruptedJpeg, validJpeg } from '../support/imageFixtures.js';
  * reason (`router.ts`'s `verify()` comment; tests/e2e/failClosedConfig.test.ts
  * for the mechanism that makes it a choice). Setup only: authorization is not
  * what any assertion in this file is about.
+ *
+ * ===========================================================================
+ * ADDED BY THE SEVENTH REMEDIATION PASS — M-V6-02 (`05-verification.v6.md` §3)
+ * ===========================================================================
+ *
+ * `04-green-evidence.v6.md` §6.3 disclosed, as an accepted residual, that a
+ * writer can still influence *which* row gets treated as "superseded" by
+ * flipping `role` before uploading a replacement cover — describing it as
+ * "bounded, **non-deterministic** (depends on which row `returning id` yields
+ * first)". Both verify agents chased it independently and both concluded the
+ * "non-deterministic" half is wrong. The security auditor's construction
+ * removes the ordering question entirely by reducing `demoteCurrentCover()`'s
+ * match set to exactly one row first:
+ *
+ *   draft: cover A (ready) + body image B (adopted, failed, in body_html)
+ *   publish                                    -> 409 IMAGE_NOT_READY   correct
+ *
+ *   as `authenticated`, over the one `article_images` grant that exists:
+ *     update article_images set role='body'  where id = A   -- vacate the slot
+ *     update article_images set role='cover' where id = B   -- put B in it
+ *
+ *   POST .../images  role=cover  (an ordinary good file)
+ *     -> `update … where role='cover' returning id` matches EXACTLY ONE row (B)
+ *     -> the new cover records replaced_cover_image_id = B, on every run
+ *
+ *   publish                                    -> 200, live               WRONG
+ *
+ * `NFR-IMAGE-ROLE-02` below is that sequence. It asserts the same thing
+ * `NFR-IMAGE-ROLE-01` does and for the same reason — publish still refuses,
+ * the draft stays a draft — and, like it, asserts **no SQLSTATE** on either
+ * direct write, so the fix the verify report recommends (`revoke update (role)
+ * on article_images from authenticated`, paired with a server-side route for
+ * cover selection) and a fix that keeps the grant but stops letting
+ * supersession excuse a row the article still genuinely uses are equally
+ * admissible. Both produce `409 IMAGE_NOT_READY` here: under the revocation,
+ * both writes are refused, A keeps the slot, the replacement supersedes A, and
+ * B — adopted, failed, still referenced from `body_html` — goes on blocking.
+ *
+ * `NFR-IMAGE-ROLE-01` is unaffected by that revocation for the same reason: it
+ * already tolerates the write being refused, and the row it targets keeps
+ * blocking either way.
  */
 
 const WRITER_TOKEN = 'red-gate-writer-token';
@@ -128,6 +169,12 @@ type Fixtures = {
   /** M-V5-03: the same shape, as a draft, for the `role`-flip bypass. */
   role_flip_article: string;
   role_flip_image: string;
+  /** M-V6-02: the same shape again, for the deterministic slot swap. */
+  slot_swap_article: string;
+  /** The article's real, converted cover — the row the swap vacates. */
+  slot_swap_cover: string;
+  /** The broken, genuinely-used body image the swap moves into the slot. */
+  slot_swap_image: string;
 };
 
 type Ctx = {
@@ -250,6 +297,26 @@ async function seedFixtures(db: TestDatabase, writer_id: string): Promise<Fixtur
     'illustration-cassee.jpg',
   );
 
+  // --- M-V6-02 -------------------------------------------------------------
+  // Identical in shape to the M-V5-03 fixture above, and deliberately a
+  // separate article: the swap needs its own untouched cover row to vacate.
+  const slot_swap_article = await seedArticle(db.client, {
+    writer_id,
+    title: 'Brouillon dont l’emplacement de couverture est libéré puis repris',
+    league_name: 'Liga',
+    type_name: 'Pronos',
+  });
+  const slot_swap_cover = await seedImage(db.client, {
+    article_id: slot_swap_article,
+    role: 'cover',
+    status: 'ready',
+  });
+  const slot_swap_image = await embedFailedBodyImage(
+    db,
+    slot_swap_article,
+    'illustration-toujours-utilisee.jpg',
+  );
+
   return {
     body_reject_article,
     demoted_cover_article,
@@ -257,6 +324,9 @@ async function seedFixtures(db: TestDatabase, writer_id: string): Promise<Fixtur
     in_use_body_article,
     role_flip_article,
     role_flip_image,
+    slot_swap_article,
+    slot_swap_cover,
+    slot_swap_image,
   };
 }
 
@@ -511,6 +581,60 @@ describe('recovering from rejected and superseded image uploads (verify v5, §3)
     }).toEqual({
       publish_status: 409,
       error_code: 'IMAGE_NOT_READY',
+      article_status: 'draft',
+    });
+  });
+
+  it('NFR-IMAGE-ROLE-02: a writer who vacates the cover slot and moves a broken, genuinely-used body image into it before uploading a replacement cover still cannot publish — choosing which row the next upload supersedes is choosing which row stops blocking, and one image row per article is not a decision a writer gets to make about their own article’s integrity', async () => {
+    const { db, server, fx } = ctx();
+
+    // AC-08 is working before the swap: the broken body image blocks.
+    const before = await publish(server.url, fx.slot_swap_article);
+    const before_code = await errorCode(before);
+
+    // The security auditor's construction, as `05-verification.v6.md` §3 gives
+    // it: two writes over the one `article_images` grant `authenticated` holds
+    // (`grant update (role, alt_text)`), executed as the role itself against
+    // real RLS, exactly as NFR-IMAGE-ROLE-01 and NFR-LOCK-GRANT-01 do. Vacating
+    // the slot first leaves the next demote exactly one row to match, so the
+    // outcome is forced rather than raced. Neither write's SQLSTATE is
+    // asserted: revoking the grant is as admissible a fix as any other.
+    await db.client.query('set role authenticated');
+    try {
+      await db.client
+        .query(`update article_images set role = 'body' where id = $1`, [fx.slot_swap_cover])
+        .catch(() => undefined);
+      await db.client
+        .query(`update article_images set role = 'cover' where id = $1`, [fx.slot_swap_image])
+        .catch(() => undefined);
+    } finally {
+      await db.client.query('reset role');
+    }
+
+    // An ordinary, valid cover upload — nothing about this request is hostile.
+    const replacement = await upload(server.url, fx.slot_swap_article, {
+      role: 'cover',
+      filename: 'couverture-de-remplacement.jpg',
+      bytes: validJpeg(),
+      key: `slot-swap-${fx.slot_swap_article}`,
+    });
+    // The replacement must really be ready, or the publish below would be
+    // refused for the replacement's own sake and prove nothing.
+    const replacement_status = await waitForImage(db, String(replacement.body.id));
+
+    const after = await publish(server.url, fx.slot_swap_article);
+    const after_code = await errorCode(after);
+    const article = await articleState(db, fx.slot_swap_article);
+
+    expect({
+      publish_before_the_swap: `${before.status} ${before_code}`,
+      replacement_cover: replacement_status,
+      publish_after_the_swap: `${after.status} ${after_code}`,
+      article_status: article.status,
+    }).toEqual({
+      publish_before_the_swap: '409 IMAGE_NOT_READY',
+      replacement_cover: 'ready',
+      publish_after_the_swap: '409 IMAGE_NOT_READY',
       article_status: 'draft',
     });
   });
