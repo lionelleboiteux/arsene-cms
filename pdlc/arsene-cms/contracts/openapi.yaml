@@ -670,13 +670,36 @@ paths:
         publish endpoint above independently refuses to publish an article
         with any image not in `status: ready`.
 
+        **Discarding an image that will never be ready.** An image row that
+        is not `status: ready` — a conversion that failed for good, an
+        upload superseded by a retry — is removed with `DELETE
+        /v1/articles/{articleId}/images/{imageId}`, which answers `200` on
+        success and `409 CONFLICT` for a row that *is* `ready`. That
+        restriction is the whole safety property: a `ready` image is one
+        the article can currently be published with (its live cover, or a
+        body image its `body_html` embeds), so this is never a way around
+        the publish endpoint's `IMAGE_NOT_READY`. It is the only writer-facing
+        way to clear such a row: `article_images.role` is not writable
+        through PostgREST (see "Cover uniqueness" below).
+
+        > **Contract status.** This operation is implemented and exercised
+        > end to end (`AC-08-recovery-09/10/11`, `NFR-RECOVERY-INVARIANT-01`)
+        > but is documented here in prose rather than as its own path item.
+        > Declaring it as an operation requires a consumer test to exist for
+        > it (`CONTRACT-COVERAGE` in tests/contract/consumer.prism.test.ts)
+        > and a client method to call — both of which are test-suite work for
+        > a red gate, not a green one. See `04-green-evidence.v8.md` §7.
+
         **Cover uniqueness.** Uploading with `role: cover` demotes any
         image that was previously this article's cover to `role: body` in
         the same transaction as the new upload; `replaced_cover_image_id`
         carries the id of the image that was just demoted, or `null` if
         there was none (always `null` for `role: body` uploads). A file
         this endpoint rejects demotes nothing: the article keeps the cover
-        it already had, and `replaced_cover_image_id` is `null`.
+        it already had, and `replaced_cover_image_id` is `null`. Since
+        migration `0005` the database itself refuses a second `ready` cover
+        row on one article, so "one cover per article" no longer depends on
+        this endpoint's ordering alone.
 
         **Draft locking (AC-05) is enforced here too.** If the edit lock on
         this article's draft is currently held by another writer and is not

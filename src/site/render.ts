@@ -35,14 +35,35 @@ type ArticleRow = {
   first_published_at: Date;
 };
 
+/**
+ * M-V7-02 (`05-verification.v7.md` §5): the cover is resolved live, but the
+ * cover *slot* is vacated the moment a replacement upload is accepted —
+ * `uploadImage.ts` demotes before ADR-0004 has converted anything, by design.
+ * Between those two facts the live query returned nothing for a page that was
+ * already published and already correct: `og:image ""`, `image: [""]` in the
+ * schema.org block and no `<img>` at all on the listing card, transiently
+ * during every ordinary replacement and permanently when the replacement's
+ * conversion failed — H-V6-01's exact public symptom, through a path
+ * `usableCover()` does not govern.
+ *
+ * So the live row wins when there is one, and otherwise the page falls back to
+ * `structured_data.image`, which `markPublished` persisted at this article's
+ * last successful publish: the cover it was genuinely published with, and the
+ * one visitors were already being served. `nullif` keeps a legacy row whose
+ * persisted image is `''` rendering as "no cover" rather than as an empty
+ * `<img src="">`.
+ */
 const PUBLISHED_ARTICLES_SQL = `
   select a.id, a.title, a.slug, a.body_html,
          l.name as league_name, c.name as type_name,
          w.display_name as writer_display_name,
-         (select i.optimized_url
-            from article_images i
-           where i.article_id = a.id and i.role = 'cover' and i.status = 'ready'
-           limit 1) as cover_image_url,
+         coalesce(
+           (select i.optimized_url
+              from article_images i
+             where i.article_id = a.id and i.role = 'cover' and i.status = 'ready'
+             limit 1),
+           nullif(a.structured_data -> 'image' ->> 0, '')
+         ) as cover_image_url,
          a.published_at,
          coalesce(a.first_published_at, a.published_at) as first_published_at
     from articles a

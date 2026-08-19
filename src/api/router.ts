@@ -16,6 +16,7 @@ import { MAX_UPLOAD_BYTES } from '../images/optimize.ts';
 import { createTelemetrySink } from '../telemetry/events.ts';
 import { verifySupabaseJwt, verifySharedSecret } from './auth.ts';
 import { handleCreateDraft, handleOpenDraft, type CreateDraftDeps } from './createDraft.ts';
+import { handleDiscardImage, type DiscardImageDeps } from './discardImage.ts';
 import { bearerToken, errorResponse, type HandlerResponse } from './http.ts';
 import { handleImageStatusCallback } from './imageStatus.ts';
 import { handlePublishArticle, type PublishDeps } from './publishArticle.ts';
@@ -24,6 +25,7 @@ import { createRepo, type Repo } from './repo.ts';
 import { handleUploadImage, type UploadDeps } from './uploadImage.ts';
 
 const ARTICLE_ROUTE = /^\/v1\/articles\/([^/]+)\/(publish|images|open)$/;
+const ARTICLE_IMAGE_ROUTE = /^\/v1\/articles\/([^/]+)\/images\/([^/]+)$/;
 const CREATE_DRAFT_ROUTE = '/v1/articles';
 const IMAGE_STATUS_ROUTE = /^\/internal\/images\/([^/]+)\/status$/;
 
@@ -196,6 +198,14 @@ function uploadDeps(ctx: Ctx): UploadDeps {
     rateLimiter: ctx.shared.rateLimiter,
     idempotency: ctx.shared.idempotency('upload'),
     observability,
+  };
+}
+
+function discardDeps(ctx: Ctx): DiscardImageDeps {
+  return {
+    now: () => new Date(),
+    auth: { verifyBearer: async (token) => verify(token, ctx) },
+    repo: ctx.repo,
   };
 }
 
@@ -538,6 +548,7 @@ export async function startHttpServer(opts: ServerOptions): Promise<RunningServe
 
 type Operation =
   | { kind: 'publish' | 'images' | 'open'; article_id: string }
+  | { kind: 'discard-image'; article_id: string; image_id: string }
   | { kind: 'create-draft' }
   | { kind: 'image-status'; image_id: string };
 
@@ -549,9 +560,17 @@ function matchRoute(path: string): Operation | null {
     return { kind: article[2] as 'publish' | 'images' | 'open', article_id: article[1] };
   }
 
+  const articleImage = ARTICLE_IMAGE_ROUTE.exec(path);
+  if (articleImage?.[1] !== undefined && articleImage[2] !== undefined) {
+    return { kind: 'discard-image', article_id: articleImage[1], image_id: articleImage[2] };
+  }
+
   const image = IMAGE_STATUS_ROUTE.exec(path);
   return image?.[1] === undefined ? null : { kind: 'image-status', image_id: image[1] };
 }
+
+/** Every operation is a `POST` bar the one that removes a resource. */
+const methodOf = (op: Operation): string => (op.kind === 'discard-image' ? 'DELETE' : 'POST');
 
 function dispatch(
   req: http.IncomingMessage,
@@ -568,6 +587,15 @@ function dispatch(
       return publish(req, op.article_id, raw, ctx);
     case 'images':
       return upload(req, op.article_id, raw, ctx);
+    case 'discard-image':
+      return handleDiscardImage(
+        {
+          article_id: op.article_id,
+          image_id: op.image_id,
+          authorization: req.headers.authorization ?? null,
+        },
+        discardDeps(ctx),
+      );
     case 'image-status':
       return imageStatus(req, op.image_id, raw, ctx);
   }
@@ -586,9 +614,10 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse, ctx: C
     send(res, errorResponse(404, 'NOT_FOUND', 'No operation matches this path.'));
     return;
   }
-  if (req.method !== 'POST') {
-    res.setHeader('allow', 'POST');
-    send(res, errorResponse(405, 'CONFLICT', 'Only POST is supported on this path.'));
+  const method = methodOf(op);
+  if (req.method !== method) {
+    res.setHeader('allow', method);
+    send(res, errorResponse(405, 'CONFLICT', `Only ${method} is supported on this path.`));
     return;
   }
   if (Number(req.headers['content-length'] ?? 0) > MAX_UPLOAD_BYTES) {

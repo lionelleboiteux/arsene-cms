@@ -71,6 +71,28 @@ const SET_IMAGE_STATUS_SQL = `
   returning id
 `;
 
+/**
+ * The same compare-and-swap, settling the row as a body image instead. Used
+ * only when the statement above is refused by `0005`'s one-ready-cover index:
+ * two cover uploads raced, and this one reached `ready` second. Demoting the
+ * late arrival is what `demoteCurrentCover` would have done had the two
+ * uploads not overlapped — and it is the alternative to failing an ADR-0004
+ * callback that has nothing wrong with it.
+ */
+const SET_IMAGE_STATUS_AS_BODY_SQL = `
+  update article_images
+     set role = 'body',
+         status = $2,
+         optimized_url = $3,
+         failure_code = $4,
+         failure_message = $5
+   where id = $1 and status = 'processing'
+  returning id
+`;
+
+/** Postgres unique-violation: `0005`'s one-ready-cover-per-article index. */
+const UNIQUE_VIOLATION = '23505';
+
 export type ImageInsert = {
   id: string;
   article_id: string;
@@ -122,14 +144,25 @@ export function createRepo(pool: pg.Pool) {
       failure: { code: string; message: string } | null;
     }): Promise<boolean> {
       if (!UUID.test(input.image_id)) return false;
-      const res = await pool.query(SET_IMAGE_STATUS_SQL, [
+      const params = [
         input.image_id,
         input.status,
         input.optimized_url,
         input.failure?.code ?? null,
         input.failure?.message ?? null,
-      ]);
-      return res.rowCount === 1;
+      ];
+      try {
+        const res = await pool.query(SET_IMAGE_STATUS_SQL, params);
+        return res.rowCount === 1;
+      } catch (err) {
+        if ((err as { code?: string }).code !== UNIQUE_VIOLATION) throw err;
+        // The article already holds a `ready` cover (`0005`): a concurrent
+        // cover upload converted first. Settle this one as a body image rather
+        // than failing a callback that is not at fault — the alternative is a
+        // row stuck `processing` forever, blocking the publish.
+        const res = await pool.query(SET_IMAGE_STATUS_AS_BODY_SQL, params);
+        return res.rowCount === 1;
+      }
     },
 
     async getArticle(article_id: string): Promise<ArticleRecord | null> {
@@ -266,6 +299,26 @@ export function createRepo(pool: pg.Pool) {
         ],
       );
       return { id: res.rows[0]?.id ?? input.id, created_at: res.rows[0]?.created_at ?? new Date() };
+    },
+
+    /**
+     * `05-verification.v7.md` §4: the writer's way out of an image row the
+     * article can never be published with. `status <> 'ready'` is repeated
+     * here, in the statement itself, rather than trusted from
+     * `discardImage.ts`'s read: the ADR-0004 callback settles rows
+     * asynchronously, so a row that was `processing` when the handler looked
+     * can be `ready` by the time this runs, and a delete that is not a
+     * compare-and-swap would remove exactly the cover the article had just
+     * become publishable with.
+     */
+    async deleteImage(input: { image_id: string; article_id: string }): Promise<boolean> {
+      if (!UUID.test(input.image_id) || !UUID.test(input.article_id)) return false;
+      const res = await pool.query(
+        `delete from article_images
+          where id = $1 and article_id = $2 and status <> 'ready'`,
+        [input.image_id, input.article_id],
+      );
+      return res.rowCount === 1;
     },
 
     /**
