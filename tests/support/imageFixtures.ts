@@ -182,6 +182,38 @@ export function corruptedJpeg(): Uint8Array {
   return out;
 }
 
+/**
+ * The file that reaches `05-verification.v7.md` §4.1's terminal state through
+ * product routes alone — **adopted, then permanently failed**.
+ *
+ * `corruptedJpeg()` above is refused *synchronously*: it stops short of EOI, so
+ * `isDamagedContainer()` catches it inside the request, `uploadImage.ts` stores
+ * nothing and writes `original_url: null`, and `articleDependsOn()` therefore
+ * correctly never lets that row block a publish. That is the whole reason it
+ * cannot reproduce §4.1.
+ *
+ * This one carries a complete container — SOI, APP0 magic, and a real EOI
+ * terminator — so `sniffImageFormat()` returns `jpeg`, `isDamagedContainer()`
+ * returns `false`, and the upload route **adopts** it: the original is really
+ * stored, `original_url` is really written, the row is really `processing`. Its
+ * interior is garbage, so it carries no SOF/SOS/Huffman tables and the real
+ * conversion (`optimizeImageBuffer` → `sharp`, ADR-0004) can only fail — which
+ * it reports back asynchronously, exactly as a CMYK JPEG, a timeout or an OOM
+ * would. Verified against the real codec before use: `sniff = jpeg`,
+ * `isDamagedContainer = false`, `optimize = { ok: false, code: CORRUPTED_FILE }`.
+ *
+ * Nothing about the resulting row is seeded: it is what the product itself
+ * writes for a file it accepted and could not convert.
+ */
+export function undecodableJpeg(): Uint8Array {
+  const out = new Uint8Array(4096);
+  out.set([0xff, 0xd8, 0xff, 0xe0], 0); // SOI + APP0: sniffs as a real JPEG
+  for (let i = 4; i < out.length - 2; i += 1) out[i] = (i * 37 + 11) % 256;
+  out[out.length - 2] = 0xff; // EOI: the container is complete, so the upload
+  out[out.length - 1] = 0xd9; // route accepts it and the pipeline must decide
+  return out;
+}
+
 /** AC-08: a container the pipeline does not support at all. */
 export function unsupportedFile(): Uint8Array {
   return Uint8Array.from(

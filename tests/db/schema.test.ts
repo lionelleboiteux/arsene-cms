@@ -470,6 +470,124 @@ describe('write protection and disclosure', () => {
   });
 });
 
+/**
+ * L-V7-01 (`05-verification.v7.md` §6) — **AC-06's "one cover per article" is
+ * unenforced at the data layer**, and the verify report recommends closing it
+ * alongside §4 because they share one root cause.
+ *
+ * `04-green-evidence.v7.md` §6.3 claimed that with migration `0004` in place "a
+ * writer can no longer put it back, so at most one row can satisfy either
+ * predicate". Both verify agents found that false, independently, and the e2e
+ * agent produced the strongest reproduction this gate has seen: **six
+ * simultaneous `ready` cover rows on one article**, through nothing but
+ * concurrent uploads. `uploadImage.ts`'s `demoteCurrentCover()` →
+ * `storage.put()` → `insertImage()` sequence is not one transaction, so two
+ * uploads each demote (matching nothing, the first having already vacated the
+ * slot) and each insert a fresh `role='cover'` row. That is the same
+ * non-atomicity as §4.2's permanent-block route.
+ *
+ * The recommended fix is a partial unique index:
+ *
+ *     create unique index on article_images (article_id) where role = 'cover'
+ *
+ * The point of asserting it *here*, at the database, and not only through the
+ * upload race in tests/e2e/imageRecoveryRoutes.test.ts, is that
+ * application-level ordering is exactly what has already failed: `publishArticle.ts`'s
+ * `usableCover()` and `render.ts`'s cover query are two independent, unordered
+ * picks over a state that can genuinely have several candidates, and they
+ * happened to agree in every trial run rather than by guarantee. A constraint a
+ * future code change cannot accidentally bypass is a different kind of promise
+ * from a code path that currently behaves — which is the same reason
+ * `NFR-MIGRATE-01`, `NFR-TAMPER-01` and `NFR-LOCK-GRANT-01a`/`01b` are asserted
+ * at this layer rather than through a handler.
+ *
+ * Executed on the **owning** connection, with no `set role`: a refusal here
+ * cannot be a privilege refusal (`42501`) wearing a constraint's clothes, and
+ * `service_role` — which is what the upload route runs as, and therefore the
+ * role that actually creates cover rows — bypasses RLS and holds every grant.
+ * Only a constraint can refuse this.
+ *
+ * No SQLSTATE and no index name is asserted: a partial unique index (`23505`),
+ * an exclusion constraint, a `check` plus trigger, or anything else that makes
+ * the database itself refuse the second cover row is equally admissible.
+ */
+describe('cover slot uniqueness (verify v7, L-V7-01)', () => {
+  it('NFR-COVER-UNIQUE-01: the database itself refuses a second role=cover row for an article that already has one, whether it arrives as a fresh insert or as the promotion of an existing body row — AC-06 is a data-layer invariant, and a non-transactional demote-then-insert in one handler has already been shown to leave six simultaneous cover rows on one article', async () => {
+    const { client } = db();
+    const writer = await seedWriter(client, 'Lionel (cover uniqueness)');
+
+    /**
+     * Two shapes, because one of them alone would not prove the invariant: an
+     * `insert` is what the upload race produces, and an `update` is what any
+     * future cover-selection route (the other fix `05-verification.v7.md` §4.3
+     * offers) would perform. A constraint that catches only one leaves AC-06
+     * exactly as unenforced as it is today.
+     */
+    const attempts: Array<{
+      attempt: string;
+      run: (article_id: string) => Promise<unknown>;
+    }> = [
+      {
+        attempt: 'inserting a second cover row directly',
+        run: (article_id) =>
+          client.query(
+            `insert into article_images (article_id, role, status, original_filename, original_url)
+             values ($1, 'cover', 'ready', 'deuxieme-couverture.jpg', $2)`,
+            [
+              article_id,
+              `https://projectref.supabase.co/storage/v1/object/articles/${article_id}/deuxieme.jpg`,
+            ],
+          ),
+      },
+      {
+        attempt: 'promoting an existing body row into the cover slot',
+        run: async (article_id) => {
+          const body = await seedImage(client, { article_id, role: 'body', status: 'ready' });
+          return client.query(`update article_images set role = 'cover' where id = $1`, [body]);
+        },
+      },
+    ];
+
+    const results = [];
+    for (const [index, attempt] of attempts.entries()) {
+      // Each attempt gets its own article, so a refusal is never explained by
+      // some other attempt's leftovers.
+      const article_id = await seedArticle(client, {
+        writer_id: writer,
+        title: `Unicité de la couverture ${index}`,
+        league_name: 'Ligue 1',
+        type_name: 'Pronos',
+      });
+      await seedImage(client, { article_id, role: 'cover', status: 'ready' });
+
+      const sqlstate = await captureSqlError(() => attempt.run(article_id));
+      const covers = await client.query(
+        `select id from article_images where article_id = $1 and role = 'cover'`,
+        [article_id],
+      );
+
+      results.push({
+        attempt: attempt.attempt,
+        refused_by_the_database: sqlstate !== null,
+        cover_rows_after: covers.rowCount ?? 0,
+      });
+    }
+
+    expect(results).toEqual([
+      {
+        attempt: 'inserting a second cover row directly',
+        refused_by_the_database: true,
+        cover_rows_after: 1,
+      },
+      {
+        attempt: 'promoting an existing body row into the cover slot',
+        refused_by_the_database: true,
+        cover_rows_after: 1,
+      },
+    ]);
+  });
+});
+
 describe('migration discipline', () => {
   it('NFR-MIGRATE-01: no shipped migration drops or retypes an existing column or table — rollback safety depends on expand-only', () => {
     const forbidden = /\b(drop\s+(table|column)|alter\s+column\s+\w+\s+type|rename\s+(to|column))\b/i;
