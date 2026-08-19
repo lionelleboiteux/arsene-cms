@@ -166,7 +166,7 @@ async function refusePublish(
     });
   }
 
-  if (!images.some((image) => image.role === 'cover')) {
+  if (usableCover(images) === undefined) {
     return errorResponse(400, 'COVER_IMAGE_REQUIRED', 'This article has no cover image.', {
       article_id: article.id,
     });
@@ -225,6 +225,24 @@ function articleDependsOn(image: ImageRecord, images: ImageRecord[]): boolean {
   );
 }
 
+/**
+ * The cover row the article can actually be published with — the *one* notion
+ * of "has a cover" this file has, used both to refuse `COVER_IMAGE_REQUIRED`
+ * and to fill `cover_image_url` in.
+ *
+ * H-V6-01/M-V6-01: `role === 'cover'` alone was not that notion. A
+ * synchronously rejected upload leaves a `cover` row nothing was ever stored
+ * for, which satisfied `COVER_IMAGE_REQUIRED` while `articleDependsOn()`
+ * correctly refused to let that same row block the publish — so an article
+ * whose only cover was a refused file published live with `cover_image_url:
+ * ''`. Both checks now ask `articleDependsOn()`, so a publish that reaches
+ * `publishNow()` has a cover row that was adopted and still holds the slot,
+ * and the readiness gate below has already established it is `ready`.
+ */
+function usableCover(images: ImageRecord[]): ImageRecord | undefined {
+  return images.find((image) => image.role === 'cover' && articleDependsOn(image, images));
+}
+
 function invalidPronosFields(
   entries: PronosEntryInput[],
 ): Array<{ field: string; message: string }> {
@@ -279,12 +297,11 @@ async function publishNow(
     writer_display_name: await deps.repo.getWriterDisplayName(article.writer_id),
     // §6.4: the URL the cover was actually stored under, never one built from
     // the article id — this value is persisted into `structured_data`.
-    // M-V4-01: `role === 'cover'` alone is no longer enough to identify the
+    // M-V4-01/H-V6-01: `role === 'cover'` alone is not enough to identify the
     // cover — a rejected upload can leave a second, `failed` cover row beside
-    // it — so this reads the one the public render pass reads (`src/site/render.ts`).
-    cover_image_url:
-      images.find((image) => image.role === 'cover' && image.status === 'ready')?.optimized_url ??
-      '',
+    // it, or be the only one — so this reads the same row `refusePublish()`
+    // required before it let the request get here.
+    cover_image_url: usableCover(images)?.optimized_url ?? '',
     published_at: now.toISOString(),
     first_published_at: (article.first_published_at ?? now).toISOString(),
   };

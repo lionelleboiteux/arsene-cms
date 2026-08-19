@@ -8,18 +8,28 @@ info:
     exist as real Supabase Edge Function endpoints, instead of a direct
     PostgREST read/write against a table. Everything else in the writer
     editor (draft field edits/autosave, taxonomy/categories, the asset
-    library, alt-text edits, cover/body re-tagging after upload) is a direct
-    PostgREST call against Postgres under RLS and is deliberately NOT part of
-    this contract — see "What is out of scope" below.
+    library, alt-text edits) is a direct PostgREST call against Postgres
+    under RLS and is deliberately NOT part of this contract — see "What is
+    out of scope" below.
   description: |
     ## What is in scope, and why only four endpoints
 
     Arsène's writer editor is a single-page app that talks to Postgres
     directly via PostgREST/RLS for nearly everything: autosaving a draft's
     title/body/meta fields once it exists, creating a league or category,
-    browsing the shared asset library, and editing an image's `alt_text` or
-    `role` after it has been uploaded. None of that needs a bespoke endpoint;
-    RLS is the enforcement point and Postgres row shape is the contract.
+    browsing the shared asset library, and editing an image's `alt_text`
+    after it has been uploaded. None of that needs a bespoke endpoint; RLS is
+    the enforcement point and Postgres row shape is the contract.
+
+    An image's `role` used to be on that list and no longer is:
+    `db/migrations/0004_image_role_service_role_only.sql` revoked
+    `update (role) on article_images` from `authenticated`, because which row
+    sits in the cover slot decides which row the next upload supersedes, and
+    therefore which broken image stops blocking publish
+    (`05-verification.v6.md` §3). The cover slot is now set only by uploading
+    with `role: cover` through `POST .../images`, which is where cover
+    uniqueness (AC-06) was always decided. Re-tagging an *existing* image as
+    the cover has no route yet — see `04-green-evidence.v7.md` §6.1.
 
     Four operations are different, because they have side effects that must
     happen exactly once, atomically, from the server, and cannot be expressed
@@ -58,7 +68,7 @@ info:
 
     Draft **field** edits (title/body/meta autosave after creation),
     category/league CRUD, lock **heartbeat refresh** by the writer who
-    already holds it, alt-text/role edits after upload, and the asset library
+    already holds it, alt-text edits after upload, and the asset library
     listing are all direct PostgREST operations against Postgres tables (e.g.
     `articles`, `article_images`, `categories`, `leagues`) governed by
     Supabase's auto-generated PostgREST OpenAPI surface and RLS policies.
@@ -75,8 +85,10 @@ info:
     **Alt-text editing** by the writer afterward is a trivial single-column
     write with no atomicity requirement, so it is a direct PostgREST
     `PATCH .../article_images?id=eq.{imageId}` under RLS, not a third
-    endpoint in this contract. The same is true of moving the `role`
-    (cover/body) flag between existing images after upload.
+    endpoint in this contract. Moving the `role` (cover/body) flag between
+    existing images is **not** in that category any more: `role` is
+    server-owned since migration `0004`, for the reason given under "What is
+    in scope" above.
 
     ## Server-side image processing constraint (implementation note, not a
     contract decision)
@@ -408,8 +420,14 @@ paths:
         updates the live content immediately.
 
         **Cover image is mandatory (01-decisions.md #1).** If the article
-        has no image with `role: cover`, this returns `400
-        COVER_IMAGE_REQUIRED` — a distinct `code` from the generic `400
+        has no *usable* cover — no `role: cover` row that this API stored
+        something for and that a later cover upload has not superseded, i.e.
+        the same two exclusions the `409 IMAGE_NOT_READY` paragraph below
+        lists — this returns `400 COVER_IMAGE_REQUIRED`. A file this API
+        refused (`status: failed`, nothing stored) is a `cover` row but not
+        a cover image, so an article whose only cover upload was rejected is
+        refused here rather than published with a blank one. It is a
+        distinct `code` from the generic `400
         VALIDATION_FAILED` used for every other validation failure (e.g. a
         missing title, or a "Pronos" article missing its required
         structured match fields per AC-04), so the editor can point the

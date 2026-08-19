@@ -1,0 +1,30 @@
+-- Arsène — the cover slot belongs to the upload route, not to PostgREST.
+--
+-- 05-verification.v6.md §3 (M-V6-02, NFR-IMAGE-ROLE-02): 0001's column grant
+-- let `authenticated` write `article_images.role` directly, so a writer could
+-- `PATCH /rest/v1/article_images?id=eq.<id>` to vacate their article's cover
+-- slot and move a broken, genuinely-used image into it. The next ordinary
+-- cover upload's `demoteCurrentCover()` (`update … where role = 'cover'
+-- returning id`) then had exactly one row to match — the chosen one — and
+-- recorded it as superseded, which is what stops a row blocking the publish
+-- (`publishArticle.ts`'s `articleDependsOn`). Choosing which row the next
+-- upload supersedes is choosing which row stops blocking, so AC-08's promise
+-- was decided by a column any writer could write. Two verify agents proved it
+-- deterministic, by two independent constructions.
+--
+-- After this migration `role` sits on the same side of the grant line as the
+-- lock columns 0003 moved: written only by the seams running as
+-- `service_role`, i.e. only by `POST /v1/articles/{id}/images`, which is
+-- where cover uniqueness (AC-06) is decided. `alt_text` is untouched — AC-15's
+-- "a writer can overwrite generated alt text with a direct row update" is a
+-- separate column and a separate promise.
+--
+-- Known consequence, recorded in 04-green-evidence.v7.md §6: this removes the
+-- only mechanism a writer has to designate an existing image as the cover.
+-- Uploading a new file with `role=cover` still works and is still the only
+-- server-side path; a dedicated cover-selection route is follow-on work.
+--
+-- Expand-only (02-architecture.v1.md §6): no column or table is dropped or
+-- retyped; only a privilege is narrowed.
+
+revoke update (role) on article_images from authenticated;
