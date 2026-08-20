@@ -2,7 +2,7 @@
   "schema": "pdlc/v2",
   "idea": {
     "id": "arsene-cms",
-    "title": "Ars\u00e8ne",
+    "title": "Arsène",
     "spec_author": "Lionel Le Boiteux",
     "spec_date": "2026-08-11",
     "branch": "feat/arsene-cms",
@@ -94,42 +94,53 @@
       "status": "passed",
       "artifacts": [
         {
-          "path": "pdlc/arsene-cms/03-red-evidence.v1.md",
-          "sha256": "8abb0fd8a27c4665861bf404e6be5477d2add9e6fc849a2be3a17af321be432a",
-          "recorded": "2026-08-11T15:15:06Z"
+          "path": "pdlc/arsene-cms/03-red-evidence.v8.md",
+          "sha256": "79a867b2c8a570c45bc88fc31c6288932ce3f9b1c2f7b7142af027a8265f0115",
+          "recorded": "2026-08-19T22:11:41Z"
         },
         {
           "path": "pdlc/arsene-cms/traceability.md",
-          "sha256": "5da710c5a0c62413b33a5cd52e5a427b99ba7561ff8342b5cc02e249fce5e3e5",
-          "recorded": "2026-08-11T15:15:06Z"
+          "sha256": "d8768c0e85fc13238f89f87ff466f7d78dda398ba1e2633ffeafed0a5e2bec6d",
+          "recorded": "2026-08-19T22:11:41Z"
         }
       ],
       "actor": "lionel.leboiteux@gmail.com",
       "model": "opus",
-      "at": "2026-08-11T15:15:06Z",
-      "notes": null
+      "at": "2026-08-19T22:11:41Z",
+      "notes": "Eighth remediation pass, latest of eight red/green/verify cycles run against this branch since the original red v1 pass (2026-08-11). This field reflects the most recent pass only; the full chain (03-red-evidence.v1.md through v8.md, one per remediation cycle) is preserved in pdlc/arsene-cms/ and indexed in the log below. v8 covers M-V7-02 (render.ts cover-blanking), L-V7-01 (cover-slot uniqueness) and the consolidated recovery-path finding from 05-verification.v7.md §4: 227 tests total, 6 new, 5 failing honestly plus 1 passing control, 221 prior baseline unchanged."
     },
     "green": {
       "status": "passed",
       "artifacts": [
         {
-          "path": "pdlc/arsene-cms/04-green-evidence.v1.md",
-          "sha256": "7208d05b31e001a3d8e49f4a3dad82eceaee15578cc73b098d627712637bfe77",
-          "recorded": "2026-08-12T05:40:55Z"
+          "path": "pdlc/arsene-cms/04-green-evidence.v8.md",
+          "sha256": "d2569a6b23646326d2f0550c65573b0f27714b0419e970f244e478714d1b49f8",
+          "recorded": "2026-08-19T22:34:59Z"
         }
       ],
       "actor": "lionel.leboiteux@gmail.com",
       "model": "opus",
-      "at": "2026-08-12T05:40:55Z",
-      "notes": "127/127 tests pass (126 original + PNG support added via a scoped red/green amendment per product-owner decision), tsc clean, 90.47% branch / 94.16% stmt coverage excluding out-of-process modules, above the 80% floor. No test file edited by the implementer. Deviations documented in evidence \u00a76 (server runs in child process per Schemathesis constraint; draft_started backfilled at publish rather than via insert trigger, proven necessary by AC-18; rate-limit ordering; idempotency store has no expiry). D7 (image format gap) half-closed: PNG now decodes, WebP/AVIF/HEIC remain 422 and are explicitly deferred, not silently dropped. Schemathesis found and fixed a real bug: malformed JSON returned 500 instead of 400."
+      "at": "2026-08-19T22:34:59Z",
+      "notes": "Eighth remediation pass. 227/227 tests, tsc clean. New DELETE /v1/articles/{id}/images/{id} route (discardImage.ts) giving writers a way to discard a not-ready image row, running as service_role with no new PostgREST grant; migration 0005 adds a partial unique index enforcing one ready cover per article; render.ts falls back to the persisted structured_data.image when no live ready cover exists. Full chain of eight green-evidence documents (v1-v8) preserved in pdlc/arsene-cms/; this field reflects only the latest. Deviations recorded in 04-green-evidence.v8.md §8, escalated to blocking findings by verify v8 (see overrides below): the new route is documented in openapi.yaml as prose only, not a declared path item, and has no src/api/client.ts method; migration 0005's index has no pre-flight step reconciling data that already violates the uniqueness it creates."
     },
     "verify": {
-      "status": "pending",
-      "artifacts": [],
-      "actor": null,
-      "model": null,
-      "at": null,
-      "notes": null
+      "status": "passed",
+      "artifacts": [
+        {
+          "path": "pdlc/arsene-cms/05-verification.v8.md",
+          "sha256": "3b429c911f6d217b81ebc0cb2939b697180280b6500ef551e13bc8c7ad145f51",
+          "recorded": "2026-08-20T05:55:18Z"
+        },
+        {
+          "path": "pdlc/arsene-cms/verify/integration-e2e-v8.md",
+          "sha256": "a766d9a97dfe1cec00fb9d782f26606f2615ab08f36010e2d84fbffb97147a7f",
+          "recorded": "2026-08-20T05:55:18Z"
+        }
+      ],
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "at": "2026-08-20T06:03:18Z",
+      "notes": "IMPORTANT: this gate's own verdict, on its own criteria, was NOT PASSED — 05-verification.v8.md §11 states this explicitly. Status is recorded here as \"passed\" only because of the product-owner override logged below (overrides[0]), not because the gate's acceptance criteria were met. Read 05-verification.v8.md in full before treating this branch as verified; do not infer from status=passed alone that every finding was closed. Eight verify passes were run against this branch (v1-v8, one per remediation cycle); the full chain is preserved in pdlc/arsene-cms/ and pdlc/arsene-cms/verify/ and indexed in the log below. Findings genuinely and fully closed by v8, confirmed by independent adversarial testing: the discard route's core mechanism (CAS race, grant boundary, draft-lock check), M-V7-02 (render cover-blanking), and the practical effect of L-V7-01 (cover uniqueness) on a freshly-migrated database. Findings NOT closed, and the subject of the override: (1) migration 0005 cannot apply to a database already holding duplicate ready-cover rows, a state proven reachable through ordinary concurrent use with no attacker — 05-verification.v8.md §4; (2) the discard route has no src/api/client.ts method and no contract declaration, so the product's own editor SPA cannot currently call the route this whole cycle exists to provide — 05-verification.v8.md §5. Also open, not blocking: L-V8-01 (discard route has no rate limit or audit trail), L-V8-02 (discard permanently orphans the file in Supabase Storage), plus the standing backlog carried since v3-v7 (L-V7-02 updated_at forgeable, I-V7-01 missing CHECK constraint, L-V6-01 CDN_ORIGIN validation, L-V6-03 transient slug race, N5/N5b, N2, idempotency store TTL/writer_id scoping). Counter-metric (writer adoption) remains honestly uncomputable from any event this build emits, unchanged since the architecture gate; required events draft_started/article_published both confirmed emitted correctly via the real primary path across every one of the eight verify passes' instrumentation proofs, most recently §10 of 05-verification.v8.md."
     },
     "polish": {
       "status": "pending",
@@ -184,7 +195,33 @@
     "writer-editor",
     "public-site"
   ],
-  "overrides": [],
+  "overrides": [
+    {
+      "at": "2026-08-20T06:03:18Z",
+      "gate": "verify",
+      "actor": "lionel.leboiteux@gmail.com",
+      "decision": "ship_with_known_limitations",
+      "reason": "After eight red/green/verify remediation cycles (2026-08-11 through 2026-08-20), verify v8 (05-verification.v8.md) found the underlying server-side security and correctness work fully sound under independent adversarial testing — the new discard route's safety argument, CAS race handling, and grant boundary all survived from-scratch adversarial re-derivation by two independent verify agents, and no High-severity finding exists anywhere in the current state. What remained open were two Medium findings about reach rather than correctness: (1) migration 0005's cover-uniqueness index cannot apply to a database already holding the duplicate-cover state a prior finding (L-V7-01) proved reachable through ordinary use; (2) the new recovery route has no client method or contract declaration, so the product's own editor SPA cannot call it yet. Product owner reviewed this specific finding set and decided to ship as-is, accepting both as known, tracked limitations rather than continuing remediation before shipping.",
+      "accepted_findings": [
+        {
+          "id": "verify-v8-section-4",
+          "summary": "Migration 0005 (partial unique index on article_images enforcing one ready cover per article) aborts with a Postgres uniqueness-violation error if applied to a database that already holds duplicate ready-cover rows on one article — a state 05-verification.v7.md §6 (L-V7-01) proved reachable through ordinary concurrent cover uploads, no attacker required. No test in the suite can catch this because every test database starts empty (tests/support/pg.ts). Recommended fix (not yet applied): a pre-flight step in the migration demoting all but the most-recently-created ready cover on each article before creating the index, plus a red-gate test that migrates a database seeded with the duplicate state rather than only an empty one.",
+          "risk_if_unaddressed": "If this branch is ever deployed to a database that has already exhibited the L-V7-01 duplicate-cover state, the migration will fail loudly (blocking the deploy, requiring manual data surgery) under a stop-on-error runner, or may silently never create the index under a more tolerant one — in which case cover uniqueness is not actually enforced in that environment despite the code and tests suggesting it is.",
+          "source": "pdlc/arsene-cms/05-verification.v8.md §4"
+        },
+        {
+          "id": "verify-v8-section-5",
+          "summary": "The DELETE /v1/articles/{id}/images/{id} discard route (src/api/discardImage.ts), the writer-facing recovery mechanism this entire eighth remediation cycle exists to build, has no method on src/api/client.ts and is documented in contracts/openapi.yaml as prose only, not a declared path item. The server-side capability is complete, correct, and thoroughly verified (see verify §2); nothing in the current codebase lets the actual editor SPA construct a request to it.",
+          "risk_if_unaddressed": "A writer whose article becomes permanently stuck (per the two routes documented in 05-verification.v7.md §4) has no way to recover through the actual product UI until a client method and contract declaration are added — only a direct HTTP request (e.g. via curl or a future SPA release) can currently invoke the fix.",
+          "source": "pdlc/arsene-cms/05-verification.v8.md §5"
+        }
+      ],
+      "not_accepted_as_blocking_but_tracked": [
+        "L-V8-01: the discard route has no rate limit and writes no telemetry/audit record (pdlc/arsene-cms/05-verification.v8.md §6)",
+        "L-V8-02: every discard permanently orphans its file in Supabase Storage, with no cleanup path anywhere in the codebase (pdlc/arsene-cms/05-verification.v8.md §6)"
+      ]
+    }
+  ],
   "reviews": [],
   "log": [
     {
@@ -222,6 +259,7 @@
       "at": "2026-08-11T15:15:06Z",
       "event": "pass",
       "gate": "red",
+      "cycle": 1,
       "actor": "lionel.leboiteux@gmail.com",
       "model": "opus",
       "artifacts": [
@@ -233,11 +271,246 @@
       "at": "2026-08-12T05:40:55Z",
       "event": "pass",
       "gate": "green",
+      "cycle": 1,
       "actor": "lionel.leboiteux@gmail.com",
       "model": "opus",
       "artifacts": [
         "pdlc/arsene-cms/04-green-evidence.v1.md"
       ]
+    },
+    {
+      "at": "2026-08-12T06:22:00Z",
+      "event": "not_passed",
+      "gate": "verify",
+      "cycle": 1,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/05-verification.v1.md"],
+      "summary": "3 High security findings (stored XSS, DoS via pre-auth body buffering, weak/shared auth) plus a draft-creation reachability gap."
+    },
+    {
+      "at": "2026-08-12T08:23:21Z",
+      "event": "decision",
+      "actor": "lionel.leboiteux@gmail.com",
+      "artifacts": ["pdlc/arsene-cms/01-decisions.md"],
+      "summary": "Remediation direction recorded for verify v1's findings: S3+Lambda image pipeline (ADR-0004), real Supabase Auth."
+    },
+    {
+      "at": "2026-08-12T11:18:45Z",
+      "event": "pass",
+      "gate": "red",
+      "cycle": 2,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/03-red-evidence.v2.md"],
+      "summary": "41 new tests for verify v1's findings."
+    },
+    {
+      "at": "2026-08-12T11:57:37Z",
+      "event": "pass",
+      "gate": "green",
+      "cycle": 2,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/04-green-evidence.v2.md"],
+      "summary": "174/174 tests, closes all verify v1 findings."
+    },
+    {
+      "at": "2026-08-12T15:53:13Z",
+      "event": "not_passed",
+      "gate": "verify",
+      "cycle": 2,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/05-verification.v2.md"],
+      "summary": "All High findings confirmed genuinely closed; 4 new Medium + 2 Low findings from this pass's own adversarial testing."
+    },
+    {
+      "at": "2026-08-12T16:26:45Z",
+      "event": "pass",
+      "gate": "red",
+      "cycle": 3,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/03-red-evidence.v3.md"],
+      "summary": "9 tests for verify v2's 4 Medium + 2 Low findings."
+    },
+    {
+      "at": "2026-08-12T19:50:53Z",
+      "event": "pass",
+      "gate": "green",
+      "cycle": 3,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/04-green-evidence.v3.md"],
+      "summary": "185/185 tests, closes all verify v2 findings."
+    },
+    {
+      "at": "2026-08-13T07:04:33Z",
+      "event": "not_passed",
+      "gate": "verify",
+      "cycle": 3,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/05-verification.v3.md"],
+      "summary": "New High finding (H-V3-01: no writer-authorization check) and HEIC decode broken in the real deployed runtime."
+    },
+    {
+      "at": "2026-08-13T10:26:51Z",
+      "event": "pass",
+      "gate": "red",
+      "cycle": 4,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/03-red-evidence.v4.md"],
+      "summary": "15 tests for H-V3-01, HEIC, and L-V3-02 (JWT claim hardening)."
+    },
+    {
+      "at": "2026-08-13T10:40:15Z",
+      "event": "pass",
+      "gate": "green",
+      "cycle": 4,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/04-green-evidence.v4.md"],
+      "summary": "200/200 tests, closes H-V3-01/L-V3-02/HEIC."
+    },
+    {
+      "at": "2026-08-13T11:17:10Z",
+      "event": "not_passed",
+      "gate": "verify",
+      "cycle": 4,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/05-verification.v4.md"],
+      "summary": "H-V3-01/L-V3-02/HEIC all genuinely closed; one new Medium correctness blocker (truncated image upload could permanently block republication)."
+    },
+    {
+      "at": "2026-08-13T16:12:05Z",
+      "event": "pass",
+      "gate": "red",
+      "cycle": 5,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/03-red-evidence.v5.md"],
+      "summary": "6 tests for M-V4-01 (image recovery) + M-V4-02 (upload lock check)."
+    },
+    {
+      "at": "2026-08-14T06:07:17Z",
+      "event": "pass",
+      "gate": "green",
+      "cycle": 5,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/04-green-evidence.v5.md"],
+      "summary": "206/206 tests, closes M-V4-01/M-V4-02."
+    },
+    {
+      "at": "2026-08-16T18:07:41Z",
+      "event": "not_passed",
+      "gate": "verify",
+      "cycle": 5,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/05-verification.v5.md"],
+      "summary": "M-V4-01's fix only closed the specific reported case, not the underlying class; two agents independently found the bug still reachable via other slots/timings, plus a regression this pass introduced."
+    },
+    {
+      "at": "2026-08-16T18:33:43Z",
+      "event": "pass",
+      "gate": "red",
+      "cycle": 6,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/03-red-evidence.v6.md"],
+      "summary": "10 tests for M-V5-01..05 (image-recovery family) + M-V3-04 (hardcoded CDN_ORIGIN)."
+    },
+    {
+      "at": "2026-08-16T19:02:55Z",
+      "event": "pass",
+      "gate": "green",
+      "cycle": 6,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/04-green-evidence.v6.md"],
+      "summary": "216/216 tests, closes M-V5-01..05 and M-V3-04."
+    },
+    {
+      "at": "2026-08-18T20:19:43Z",
+      "event": "not_passed",
+      "gate": "verify",
+      "cycle": 6,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/05-verification.v6.md"],
+      "summary": "M-V5-04/05 and M-V3-04 closed; the readiness-gate rewrite dropped another case (an article whose only cover was rejected could publish with an empty cover), plus a deterministic bypass of a previously-disclosed 'non-deterministic' residual."
+    },
+    {
+      "at": "2026-08-18T20:39:06Z",
+      "event": "pass",
+      "gate": "red",
+      "cycle": 7,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/03-red-evidence.v7.md"],
+      "summary": "5 tests for H-V6-01/M-V6-01 (cover-check invariant) + M-V6-02 (deterministic role-grant bypass)."
+    },
+    {
+      "at": "2026-08-19T06:34:26Z",
+      "event": "pass",
+      "gate": "green",
+      "cycle": 7,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/04-green-evidence.v7.md"],
+      "summary": "221/221 tests, closes H-V6-01/M-V6-01 and M-V6-02 (revokes the article_images.role write grant)."
+    },
+    {
+      "at": "2026-08-19T06:59:33Z",
+      "event": "not_passed",
+      "gate": "verify",
+      "cycle": 7,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/05-verification.v7.md"],
+      "summary": "H-V6-01/M-V6-01 and M-V6-02 closed with the strongest evidence this gate process had produced (a combined ~250,000-state adversarial sweep). But revoking the role grant to close M-V6-02 also removed the only recovery path from a permanently unpublishable article; two agents found two independent routes to that same terminal state."
+    },
+    {
+      "at": "2026-08-19T22:11:41Z",
+      "event": "pass",
+      "gate": "red",
+      "cycle": 8,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/03-red-evidence.v8.md"],
+      "summary": "6 tests for the consolidated recovery-path finding, M-V7-02 (render cover-blanking), and L-V7-01 (cover-slot uniqueness)."
+    },
+    {
+      "at": "2026-08-19T22:34:59Z",
+      "event": "pass",
+      "gate": "green",
+      "cycle": 8,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/04-green-evidence.v8.md"],
+      "summary": "227/227 tests. New DELETE /v1/articles/{id}/images/{id} discard route (service_role, no new grant); migration 0005 partial unique index on the cover slot; render.ts falls back to the persisted cover."
+    },
+    {
+      "at": "2026-08-20T05:55:18Z",
+      "event": "not_passed",
+      "gate": "verify",
+      "cycle": 8,
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/05-verification.v8.md", "pdlc/arsene-cms/verify/integration-e2e-v8.md"],
+      "summary": "The discard route's core mechanism verified sound under thorough independent adversarial testing (no High finding anywhere). Blocked on two reach gaps rather than correctness: migration 0005 cannot apply to a database already holding the duplicate-cover state a prior finding proved reachable; the discard route has no client method or contract declaration, so the product's own editor SPA cannot call it."
+    },
+    {
+      "at": "2026-08-20T06:03:18Z",
+      "event": "override",
+      "gate": "verify",
+      "actor": "lionel.leboiteux@gmail.com",
+      "summary": "Product owner reviewed verify v8's two remaining findings (migration data-compat risk; discard route unreachable from the client) and decided to ship as-is, accepting both as known, tracked limitations rather than continuing remediation. Full record in overrides[0] above."
     }
   ]
 }
