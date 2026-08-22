@@ -1,0 +1,75 @@
+name: Deploy
+
+# Immutable-artifact discipline: deploy is triggered by a tag, never a moving
+# branch reference, so "which version is live" always has one stable answer.
+# See pdlc/arsene-cms/10-pipeline.v1.md for the full mechanism, what's been
+# rehearsed for real, and — importantly — the one thing this workflow does
+# NOT do yet (deploy the API server) and why.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to deploy (e.g. v0.1.0). Defaults to the tag that triggered this run."
+        required: false
+
+jobs:
+  test:
+    name: Full test suite (deploy gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - run: npm run setup:contract
+      - run: npx tsc --noEmit
+      - run: npm test
+
+  deploy-migrations:
+    name: Deploy Postgres migrations (Supabase)
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      # scripts/deploy-migrations.sh is idempotent — rehearsed against a real
+      # local Postgres for fresh deploy, no-op re-deploy, and incremental
+      # deploy (10-pipeline.v1.md §3). It tracks applied migrations in
+      # _migrations_applied so re-running this job is always safe.
+      - name: Apply pending migrations
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: ./scripts/deploy-migrations.sh
+
+  # BLOCKED — see pdlc/arsene-cms/10-pipeline.v1.md §2. The architecture
+  # (ADR-0001) chose Supabase Edge Functions (Deno, Fetch-API handler model)
+  # for the API server. The code as built runs on Node's http.createServer
+  # and relies on node:child_process — neither translates to that runtime.
+  # This job fails loudly and on purpose rather than silently omitting the
+  # step or pretending a deploy happened: there is currently no real target
+  # this half of the release can be deployed to. Remove this job (and this
+  # comment) once a hosting decision is made and the corresponding deploy
+  # step is built and rehearsed for real, per this same gate's standard.
+  deploy-api-server:
+    name: Deploy API server (BLOCKED — see 10-pipeline.v1.md §2)
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stop — no real deploy target exists yet
+        run: |
+          echo "::error::The API server's deploy target is undecided. See pdlc/arsene-cms/10-pipeline.v1.md §2 — the architecture chose Supabase Edge Functions (Deno), but this code is a Node http.createServer app using node:child_process, which does not run on that runtime. This is a finding for the architecture gate, not something to route around here."
+          exit 1
