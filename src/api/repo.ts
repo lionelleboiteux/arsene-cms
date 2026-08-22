@@ -350,6 +350,54 @@ export function createRepo(pool: pg.Pool) {
         );
       }
     },
+
+    /**
+     * The read side of Pam's one success metric (`state.json`'s
+     * `success.metrics[0]`, "time from draft start to published"). Returns
+     * raw samples, never a writer_id or article_id — the dashboard aggregates
+     * client-side, and nothing here identifies who published what or how
+     * fast, only that a publish happened and how long it took.
+     *
+     * The join excludes a `draft_started` row that arrives *after* its
+     * `article_published` (impossible in practice — publish requires an
+     * existing draft — but excluding it here rather than trusting the write
+     * side means a negative duration can never reach the dashboard, whatever
+     * produced it).
+     */
+    async getTimeToPublishSamples(): Promise<{ published_at: string; minutes: number }[]> {
+      const res = await pool.query<{ published_at: string; minutes: number }>(
+        `select p.occurred_at as published_at,
+                extract(epoch from (p.occurred_at - d.occurred_at)) / 60.0 as minutes
+           from telemetry_events d
+           join telemetry_events p
+             on p.article_id = d.article_id
+            and p.event_type = 'article_published'
+          where d.event_type = 'draft_started'
+            and p.occurred_at >= d.occurred_at
+          order by p.occurred_at`,
+      );
+      return res.rows.map((row: { published_at: string; minutes: number }) => ({
+        published_at: row.published_at,
+        minutes: Number(row.minutes),
+      }));
+    },
+
+    /**
+     * The counter-metric (`state.json`'s `success.counter_metric`): "writer
+     * adoption must not decline". A count, never a list — how many writers
+     * are still drafting, not which ones, so this stays safe to show on the
+     * same dashboard as the timing aggregate above.
+     */
+    async getActiveWriterCount(sinceDaysAgo: number): Promise<number> {
+      const res = await pool.query<{ count: string }>(
+        `select count(distinct writer_id) as count
+           from telemetry_events
+          where event_type = 'draft_started'
+            and occurred_at >= now() - ($1 || ' days')::interval`,
+        [sinceDaysAgo],
+      );
+      return Number(res.rows[0]?.count ?? 0);
+    },
   };
 }
 

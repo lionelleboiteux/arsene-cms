@@ -64,6 +64,7 @@ const opts: ServerOptions = {
   jwtIssuer: Deno.env.get('SUPABASE_JWT_ISSUER'),
   imageCallbackSecret: Deno.env.get('IMAGE_CALLBACK_SECRET'),
   cdnOrigin: Deno.env.get('CDN_ORIGIN'),
+  dashboardReadSecret: Deno.env.get('DASHBOARD_READ_SECRET'),
   readTimeoutMs: (() => {
     const raw = Deno.env.get('READ_TIMEOUT_MS');
     return raw === undefined ? undefined : Number(raw);

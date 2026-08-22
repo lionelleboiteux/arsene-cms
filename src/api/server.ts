@@ -55,6 +55,9 @@ export async function startServer(opts: SpawnedServerOptions): Promise<RunningSe
           : {}),
         ...(opts.jwtIssuer !== undefined ? { SUPABASE_JWT_ISSUER: opts.jwtIssuer } : {}),
         ...(opts.cdnOrigin !== undefined ? { CDN_ORIGIN: opts.cdnOrigin } : {}),
+        ...(opts.dashboardReadSecret !== undefined
+          ? { DASHBOARD_READ_SECRET: opts.dashboardReadSecret }
+          : {}),
         ...(opts.allowLegacyAuth === true ? { ALLOW_LEGACY_STATIC_AUTH: 'true' } : {}),
       },
     },

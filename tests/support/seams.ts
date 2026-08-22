@@ -900,6 +900,8 @@ export type RouterOptions = {
    * waiting out a realistic one.
    */
   readTimeoutMs?: number;
+  /** `GET /internal/metrics/time-to-publish`'s shared secret (John's dashboard gate). */
+  dashboardReadSecret?: string;
 };
 
 export interface ApiRouterModule {

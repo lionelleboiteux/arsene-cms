@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Arsène — benefit dashboard</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f7f7f8;
+    --card: #ffffff;
+    --text: #1a1a1a;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --accent: #2563eb;
+    --good: #15803d;
+    --bad: #b91c1c;
+    --warn: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111214;
+      --card: #1b1c1f;
+      --text: #e8e8ea;
+      --muted: #9aa0a6;
+      --border: #2c2d31;
+      --accent: #60a5fa;
+      --good: #4ade80;
+      --bad: #f87171;
+      --warn: #fbbf24;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2rem 1.25rem 4rem;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
+  .subtitle { color: var(--muted); margin: 0 0 1.75rem; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.25rem;
+  }
+  .card h2 { font-size: 1.05rem; margin: 0 0 0.9rem; }
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  @media (max-width: 640px) { .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .stat-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 0.25rem; }
+  .stat-value { font-size: 1.35rem; font-weight: 600; }
+  .stat-value.good { color: var(--good); }
+  .stat-value.bad { color: var(--bad); }
+  .stat-value.warn { color: var(--warn); }
+  .stat-note { font-size: 0.78rem; color: var(--muted); margin-top: 0.15rem; }
+  svg.sparkline { width: 100%; height: 64px; display: block; }
+  .config {
+    display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin-bottom: 1.25rem;
+  }
+  .config input {
+    flex: 1 1 220px; padding: 0.5rem 0.65rem; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--card); color: var(--text); font: inherit;
+  }
+  .config button, .refresh button {
+    padding: 0.5rem 0.9rem; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--accent); color: white; font: inherit; cursor: pointer;
+  }
+  .config button.secondary { background: transparent; color: var(--text); }
+  .status-line { font-size: 0.8rem; color: var(--muted); margin-top: 0.5rem; }
+  .status-line.error { color: var(--bad); }
+  .banner {
+    border: 1px dashed var(--border); border-radius: 10px; padding: 0.9rem 1.1rem;
+    color: var(--muted); font-size: 0.88rem;
+  }
+  .counter-card { border-color: var(--warn); }
+  code { background: var(--border); padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.85em; }
+  footer { color: var(--muted); font-size: 0.78rem; text-align: center; margin-top: 2rem; }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Arsène — benefit dashboard</h1>
+  <p class="subtitle">Pam's one success metric, and the counter-metric that has to hold while it moves.</p>
+
+  <div class="card">
+    <h2>Data source</h2>
+    <div class="config">
+      <input id="baseUrl" type="text" placeholder="Edge Function base URL, e.g. https://&lt;project-ref&gt;.functions.supabase.co/arsene-api" />
+      <input id="secret" type="password" placeholder="Dashboard secret (x-arsene-dashboard-secret)" />
+      <button id="save">Save &amp; load</button>
+      <button id="clear" class="secondary" type="button">Clear</button>
+    </div>
+    <p class="status-line" id="status">Not configured yet — enter the deployed Edge Function's base URL and the dashboard secret above.</p>
+  </div>
+
+  <div class="card" id="metricCard">
+    <h2>Time from draft start to published</h2>
+    <div id="metricBody">
+      <p class="banner">No data yet.</p>
+    </div>
+  </div>
+
+  <div class="card counter-card" id="counterCard">
+    <h2>⚠ Counter-metric: writer adoption</h2>
+    <div id="counterBody">
+      <p class="banner">No data yet.</p>
+    </div>
+  </div>
+
+  <div class="refresh">
+    <button id="refresh" type="button">Refresh now</button>
+    <span class="status-line" id="lastUpdated"></span>
+  </div>
+
+  <footer>
+    Static file, no build step, no framework — see <code>pdlc/arsene-cms/11-dashboard.v1.md</code> for the adapter this reads
+    (<code>GET /internal/metrics/time-to-publish</code>) and where the baseline came from.
+  </footer>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var TARGET_MINUTES = 10;
+  var BASELINE_MINUTES = 50; // Pam's self-reported estimate — see 11-dashboard.v1.md §1
+  var DEADLINE_LABEL = "4 weeks after launch (not yet released — see 11-dashboard.v1.md §2)";
+
+  var els = {
+    baseUrl: document.getElementById("baseUrl"),
+    secret: document.getElementById("secret"),
+    save: document.getElementById("save"),
+    clear: document.getElementById("clear"),
+    status: document.getElementById("status"),
+    metricBody: document.getElementById("metricBody"),
+    counterBody: document.getElementById("counterBody"),
+    refresh: document.getElementById("refresh"),
+    lastUpdated: document.getElementById("lastUpdated"),
+  };
+
+  function loadConfig() {
+    try {
+      return {
+        baseUrl: localStorage.getItem("arsene.dashboard.baseUrl") || "",
+        secret: localStorage.getItem("arsene.dashboard.secret") || "",
+      };
+    } catch (e) {
+      return { baseUrl: "", secret: "" };
+    }
+  }
+
+  function saveConfig(cfg) {
+    try {
+      localStorage.setItem("arsene.dashboard.baseUrl", cfg.baseUrl);
+      localStorage.setItem("arsene.dashboard.secret", cfg.secret);
+    } catch (e) {
+      // localStorage unavailable (private browsing, etc.) — the fields still
+      // work for this page load, they just won't persist across a reload.
+    }
+  }
+
+  function median(nums) {
+    if (nums.length === 0) return null;
+    var sorted = nums.slice().sort(function (a, b) { return a - b; });
+    var mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  }
+
+  /** Buckets samples by UTC day and returns one median-minutes point per day, oldest first. */
+  function dailyMedianSeries(samples) {
+    var byDay = {};
+    samples.forEach(function (s) {
+      var day = s.published_at.slice(0, 10);
+      (byDay[day] = byDay[day] || []).push(s.minutes);
+    });
+    return Object.keys(byDay).sort().map(function (day) {
+      return { day: day, minutes: median(byDay[day]) };
+    });
+  }
+
+  function sparklineSvg(points) {
+    if (points.length < 2) {
+      return '<p class="stat-note">Not enough days of data yet for a trend line.</p>';
+    }
+    var w = 600, h = 60, pad = 4;
+    var values = points.map(function (p) { return p.minutes; });
+    var min = Math.min.apply(null, values), max = Math.max.apply(null, values);
+    var span = max - min || 1;
+    var coords = points.map(function (p, i) {
+      var x = pad + (i / (points.length - 1)) * (w - pad * 2);
+      var y = h - pad - ((p.minutes - min) / span) * (h - pad * 2);
+      return x.toFixed(1) + "," + y.toFixed(1);
+    });
+    return (
+      '<svg class="sparkline" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" role="img" aria-label="Daily median time-to-publish trend">' +
+      '<polyline fill="none" stroke="currentColor" stroke-width="2" points="' + coords.join(" ") + '" />' +
+      "</svg>"
+    );
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function renderMetric(payload) {
+    var samples = (payload && payload.time_to_publish) || [];
+    if (samples.length === 0) {
+      els.metricBody.innerHTML =
+        '<p class="banner">Too early: no articles have been published in production yet, so "current" cannot be measured. ' +
+        "The baseline below is Pam's self-reported estimate, not yet confirmed by real usage. See 11-dashboard.v1.md §2.</p>";
+      return;
+    }
+
+    var minutes = samples.map(function (s) { return s.minutes; });
+    var currentMedian = median(minutes);
+    var verdictClass = currentMedian <= TARGET_MINUTES ? "good" : currentMedian <= BASELINE_MINUTES ? "warn" : "bad";
+    var series = dailyMedianSeries(samples);
+
+    els.metricBody.innerHTML =
+      '<div class="stat-grid">' +
+      '<div><div class="stat-label">Baseline</div><div class="stat-value">' + BASELINE_MINUTES + " min</div>" +
+      '<div class="stat-note">self-reported estimate, unmeasured</div></div>' +
+      '<div><div class="stat-label">Current (median)</div><div class="stat-value ' + verdictClass + '">' +
+      currentMedian.toFixed(1) + " min</div>" +
+      '<div class="stat-note">n=' + samples.length + " published article" + (samples.length === 1 ? "" : "s") + "</div></div>" +
+      '<div><div class="stat-label">Target</div><div class="stat-value">&lt; ' + TARGET_MINUTES + " min</div></div>" +
+      '<div><div class="stat-label">Deadline</div><div class="stat-value" style="font-size:0.95rem">' + escapeHtml(DEADLINE_LABEL) + "</div></div>" +
+      "</div>" +
+      sparklineSvg(series);
+  }
+
+  function renderCounter(payload) {
+    var cm = payload && payload.counter_metric;
+    if (!cm) {
+      els.counterBody.innerHTML = '<p class="banner">No data yet.</p>';
+      return;
+    }
+    els.counterBody.innerHTML =
+      '<div class="stat-grid" style="grid-template-columns:1fr">' +
+      '<div><div class="stat-label">Active writers, last 30 days</div>' +
+      '<div class="stat-value">' + cm.active_writers_last_30_days + "</div>" +
+      '<div class="stat-note">Must not decline as time-to-publish improves — a drop here means writers are ' +
+      "reverting to Word/Docs even if the timing metric looks good. See state.json's success.counter_metric.</div></div>" +
+      "</div>";
+  }
+
+  function setStatus(msg, isError) {
+    els.status.textContent = msg;
+    els.status.className = "status-line" + (isError ? " error" : "");
+  }
+
+  function load() {
+    var cfg = loadConfig();
+    els.baseUrl.value = cfg.baseUrl;
+    els.secret.value = cfg.secret;
+    if (cfg.baseUrl && cfg.secret) fetchAndRender(cfg);
+  }
+
+  function fetchAndRender(cfg) {
+    if (!cfg.baseUrl || !cfg.secret) {
+      setStatus("Enter both the base URL and the dashboard secret, then Save & load.", true);
+      return;
+    }
+    setStatus("Loading…");
+    var url = cfg.baseUrl.replace(/\/$/, "") + "/internal/metrics/time-to-publish";
+    fetch(url, { headers: { "x-arsene-dashboard-secret": cfg.secret } })
+      .then(function (res) {
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+      })
+      .then(function (payload) {
+        renderMetric(payload);
+        renderCounter(payload);
+        setStatus("Loaded. Generated at " + payload.generated_at + ".");
+        els.lastUpdated.textContent = "Last refreshed " + new Date().toLocaleString();
+      })
+      .catch(function (err) {
+        setStatus("Could not load metrics: " + err.message + ". Check the base URL and secret.", true);
+      });
+  }
+
+  els.save.addEventListener("click", function () {
+    var cfg = { baseUrl: els.baseUrl.value.trim(), secret: els.secret.value };
+    saveConfig(cfg);
+    fetchAndRender(cfg);
+  });
+  els.clear.addEventListener("click", function () {
+    els.baseUrl.value = "";
+    els.secret.value = "";
+    saveConfig({ baseUrl: "", secret: "" });
+    setStatus("Cleared. Enter a base URL and secret to load metrics.");
+  });
+  els.refresh.addEventListener("click", function () {
+    fetchAndRender(loadConfig());
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>

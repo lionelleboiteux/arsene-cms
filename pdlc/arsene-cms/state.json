@@ -13,11 +13,15 @@
       {
         "name": "time from draft start to published",
         "baseline": "approximately 50 minutes (self-reported estimate, not yet precisely measured)",
+        "baseline_captured_at": "2026-08-22T20:26:08Z",
+        "baseline_source": "Pam's product spec (self-reported estimate) - confirmed still current at the dashboard gate; no real production usage exists yet to measure a true baseline from",
+        "current": "not yet measurable - 0 real published articles in production (pdlc/arsene-cms/11-dashboard.v1.md §4)",
         "target": "under 10 minutes",
         "by_when": "4 weeks after launch"
       }
     ],
     "counter_metric": "writer adoption must not decline - writers reverting to drafting in Word or Google Docs and manually pasting is a failure signal even if the time metric improves",
+    "counter_metric_current": "not yet measurable - 0 real writers active in production yet",
     "required_events": [
       "draft_started",
       "article_published"
@@ -240,12 +244,53 @@
       "notes": "Status upgraded from \"partial\" to \"passed\": the finding v1 raised (API server built for Node's http.createServer/node:child_process, but ADR-0001 named Supabase Edge Functions/Deno) is closed. Per explicit product-owner instruction, src/api/router.ts was refactored so route()/dispatch()/every handler-dependency builder operates on the standard Fetch API (Request in, Response out) rather than Node's http types, with two thin adapters on top: the existing Node one (startHttpServer, unchanged behaviour, same exported name/ServerOptions shape the test suite's seam expects - all 227 pre-existing tests pass unchanged, zero test edits) and a new real Deno one (supabase/functions/arsene-api/index.ts, a genuine Deno.serve handler). A real regression was found and fixed during the port: the WHATWG Fetch spec forbids constructing a Request with method TRACE/TRACK/CONNECT, which the existing Schemathesis contract suite's TRACE case caught immediately once the Node adapter was rebuilt on a real Request object - fixed by threading the real wire method through route() explicitly rather than trusting request.method, confirmed fixed under both adapters. The dev/test-only Lambda simulation (convert(), which needs real sharp, a native addon Deno cannot load) is wired only by the Node adapter; its import of lambdaHandler.ts was changed from static to a lazy, non-literal dynamic import specifically so importing route()/buildCtx() from router.ts - which the Deno entry point does - never pulls sharp into the Edge Function's module graph, confirmed empirically with disposable spike files before relying on it (10-pipeline.v2.md §3). Rehearsed for real: deno check and deno run against real local Postgres, real curl/raw-socket HTTP driving every route (auth success/failure, 404/405/413, the TRACE fix, the full ADR-0004 upload+callback loop confirming sharp is genuinely never invoked, and a real measured 408 timeout at 1.502s against a configured 1500ms). Six new permanent automated tests (tests/e2e/deployedDenoRuntime.test.ts, via new tests/support/denoServer.ts) spawn a genuine deno run child process against real Testcontainers Postgres over real HTTP, mirroring deployedAuthBoundary.test.ts's pattern for the Node boundary - full suite is now 233/233, zero regressions. deploy.yml/rollback.yml's deploy-api-server/redeploy-api-server jobs now run real `supabase functions deploy` (current docs' recommended supabase/setup-cli@v1 pattern) instead of a loudly-failing stub; both test jobs gained a denoland/setup-deno@v2 step so the new suite can run in CI. NOT rehearsed: the actual `supabase functions deploy` round-trip against the real linked project (dmytkubjxwwwkroutvdu) - consistent with v1's own local-only rehearsal and this branch's standing practice of not touching a real/paid/shared account without explicit confirmation first; CLI syntax is sourced from current docs but not itself executed live. A new, disclosed, out-of-scope finding surfaced while reading current docs: Supabase's docs now describe the shared HS256 JWT-secret model auth.ts verifies against (SUPABASE_JWT_SECRET) as the legacy system, 'no longer recommended, available for backward compatibility', superseded by a newer Signing keys system. Not a regression, not fixed here, not blocking - recorded in 10-pipeline.v2.md §4 for a future gate to decide. Unchanged from v1: no Cloudflare Pages/public-site deployable artifact exists anywhere in this repo; the migration-0005 one-way-door reconciliation is still manual, not automated; state.json's overrides[0] accepted-risk record is untouched."
     },
     "dashboard": {
-      "status": "pending",
-      "artifacts": [],
-      "actor": null,
-      "model": null,
-      "at": null,
-      "notes": null
+      "status": "passed",
+      "artifacts": [
+        {
+          "path": "pdlc/arsene-cms/11-dashboard.v1.md",
+          "sha256": "c626c98510dca8ef7452b665a97189b713fcefc6d552b9b077374f72d5ed358c",
+          "recorded": "2026-08-22T20:51:42Z"
+        },
+        {
+          "path": "dashboard/index.html",
+          "sha256": "6a0d79fce743692b6ca2761c38eec104cbd1efc2e2bc1568df9b7c8225c3d074",
+          "recorded": "2026-08-22T20:51:42Z"
+        },
+        {
+          "path": "src/api/metricsSummary.ts",
+          "sha256": "f475c5406c985a4b3f511bb9d9157aaccdd1950eb0f95fa481aec812442f4891",
+          "recorded": "2026-08-22T20:51:42Z"
+        },
+        {
+          "path": "src/api/repo.ts",
+          "sha256": "5b4ffc4858fde549bb0f1293d30b1efa6660446d909c298e34dc9ba8b20d99fb",
+          "recorded": "2026-08-22T20:51:42Z"
+        },
+        {
+          "path": "src/api/router.ts",
+          "sha256": "49f74b2e5aaacc682e1b8c96de50f692dd2acc27b63cf3f0a96a39d7866b2bfb",
+          "recorded": "2026-08-22T20:51:42Z"
+        },
+        {
+          "path": "tests/unit/metricsSummary.test.ts",
+          "sha256": "c5f3d8efe34de756cd468d3fba3f770549deb7b82f108cba1db2deae03da9101",
+          "recorded": "2026-08-22T20:51:42Z"
+        },
+        {
+          "path": "tests/db/timeToPublishMetric.test.ts",
+          "sha256": "b8698d87836af09e0c9ec6db117ffb12b0657d4421cedd971e9d8a66c39fc18b",
+          "recorded": "2026-08-22T20:51:42Z"
+        },
+        {
+          "path": "tests/e2e/metricsSummaryRoute.test.ts",
+          "sha256": "5b78dd711f33a642094a1b65eceacb1f8195489ad1720ebb8eaa46cc515730ce",
+          "recorded": "2026-08-22T20:51:42Z"
+        }
+      ],
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "sonnet",
+      "at": "2026-08-22T20:51:42Z",
+      "notes": "Built the data adapter and the dashboard. Adapter: GET /internal/metrics/time-to-publish, a new route on the existing Edge Function (not PostgREST - telemetry_events has RLS enabled with zero policies, and this app uses no Data API access anywhere else either), guarded by a new DASHBOARD_READ_SECRET shared secret checked from headers alone, never a writer JWT. Returns raw {published_at, minutes} samples (never writer_id/article_id) plus a counter-metric count of distinct active writers in the last 30 days (never a list). 10 new tests (unit + real-DB + real-spawned-route), 244/244 total, zero regressions. dashboard/index.html: single self-contained static file, no framework/build step, base URL and secret entered by the viewer and stored in localStorage (never baked into the file). Rehearsed for real: a real serverMain.ts process against real seeded Postgres answered the real endpoint correctly (median 9 min from 3 real samples, 2 active writers); the dashboard's client-side median/bucketing logic was verified against that exact real payload in Node. NOT verified: the page actually rendering in a browser - no Chrome extension connected and no headless-browser tooling (playwright/puppeteer/jsdom) installed in this environment; disclosed plainly in 11-dashboard.v1.md §3 rather than claimed as tested. Baseline captured: Pam's self-reported ~50min estimate is unchanged and still the only baseline available - zero real articles have been published in production, so 'current' cannot be measured yet (state.json's success.metrics[0].current now says so explicitly rather than showing a fabricated number). Counter-metric similarly not yet measurable (0 real writers)."
     },
     "release": {
       "status": "pending",
@@ -620,6 +665,15 @@
       "model": "opus",
       "artifacts": ["pdlc/arsene-cms/10-pipeline.v2.md", "src/api/router.ts", "supabase/functions/arsene-api/index.ts", "supabase/functions/arsene-api/deno.json", ".github/workflows/deploy.yml", ".github/workflows/rollback.yml", "tests/e2e/deployedDenoRuntime.test.ts", "tests/support/denoServer.ts"],
       "summary": "Closed the v1 finding: ported src/api/router.ts to a transport-agnostic Fetch API core (Request/Response) plus a Node adapter (startHttpServer, unchanged behaviour, 227 pre-existing tests pass unedited) and a new real Deno adapter (supabase/functions/arsene-api/index.ts, genuine Deno.serve). Found and fixed a real regression along the way: the Fetch spec forbids constructing a Request with method TRACE/TRACK/CONNECT, caught by the existing Schemathesis TRACE case; fixed by passing the real wire method to route() explicitly. Kept sharp (Lambda-only, native addon) out of the Deno deploy graph via a lazy non-literal dynamic import, confirmed empirically with disposable spikes first. Rehearsed for real: deno check/deno run against real Postgres, real HTTP driving every route including a measured 408 timeout (1.502s). Added 6 new automated tests spawning a genuine deno run process over real HTTP (tests/e2e/deployedDenoRuntime.test.ts) - suite is 233/233, zero regressions. deploy.yml/rollback.yml now run real `supabase functions deploy` instead of a stub. Not rehearsed: the real deploy against the actual linked Supabase project - deliberately not touched without explicit confirmation, same standard as v1's local-only migration rehearsal. New disclosed, non-blocking finding: current Supabase docs describe the HS256 shared-secret JWT model auth.ts uses as legacy/no-longer-recommended; not fixed here, recorded for a future gate."
+    },
+    {
+      "at": "2026-08-22T20:51:42Z",
+      "event": "pass",
+      "gate": "dashboard",
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "sonnet",
+      "artifacts": ["pdlc/arsene-cms/11-dashboard.v1.md", "dashboard/index.html", "src/api/metricsSummary.ts", "src/api/repo.ts", "src/api/router.ts", "tests/unit/metricsSummary.test.ts", "tests/db/timeToPublishMetric.test.ts", "tests/e2e/metricsSummaryRoute.test.ts"],
+      "summary": "Built the data adapter (GET /internal/metrics/time-to-publish, a new Edge Function route rather than PostgREST since telemetry_events has RLS with zero policies and this app uses no Data API elsewhere) and a single self-contained static dashboard (dashboard/index.html, no framework/build step). Adapter returns raw {published_at, minutes} samples plus a distinct-active-writer count for the counter-metric - never a writer_id, article_id, or list of writers. Guarded by a new DASHBOARD_READ_SECRET shared secret, never a writer JWT. 10 new tests, 244/244 total, zero regressions. Rehearsed for real: a real serverMain.ts process against real seeded Postgres answered correctly; the dashboard's median/bucketing JS was verified against that real payload in Node. Not verified: actual browser rendering - no Chrome extension connected, no headless-browser tooling installed, disclosed in 11-dashboard.v1.md rather than claimed done. Baseline: Pam's self-reported ~50min estimate is unchanged (zero real articles published in production yet, so 'current' cannot be measured - state.json's success.metrics[0].current says so explicitly rather than showing a fabricated number)."
     }
   ]
 }

@@ -26,6 +26,7 @@ export type DenoServerOptions = {
   imageCallbackSecret?: string;
   cdnOrigin?: string;
   readTimeoutMs?: number;
+  dashboardReadSecret?: string;
   /** Mirrors `server.ts`'s `SpawnedServerOptions.allowLegacyAuth`. */
   allowLegacyAuth?: boolean;
 };
@@ -56,6 +57,9 @@ export async function startDenoServer(opts: DenoServerOptions): Promise<RunningD
           : {}),
         ...(opts.cdnOrigin !== undefined ? { CDN_ORIGIN: opts.cdnOrigin } : {}),
         ...(opts.readTimeoutMs !== undefined ? { READ_TIMEOUT_MS: String(opts.readTimeoutMs) } : {}),
+        ...(opts.dashboardReadSecret !== undefined
+          ? { DASHBOARD_READ_SECRET: opts.dashboardReadSecret }
+          : {}),
         ...(opts.allowLegacyAuth === true ? { ALLOW_LEGACY_STATIC_AUTH: 'true' } : {}),
       },
     },

@@ -30,6 +30,7 @@ import { handleCreateDraft, handleOpenDraft, type CreateDraftDeps } from './crea
 import { handleDiscardImage, type DiscardImageDeps } from './discardImage.ts';
 import { bearerToken, errorResponse, type HandlerResponse } from './http.ts';
 import { handleImageStatusCallback } from './imageStatus.ts';
+import { handleMetricsSummary } from './metricsSummary.ts';
 import { handlePublishArticle, type PublishDeps } from './publishArticle.ts';
 import { createRateLimiter, PUBLISH_RATE_LIMIT_PER_MINUTE } from './rateLimit.ts';
 import { createRepo, type Repo } from './repo.ts';
@@ -39,6 +40,7 @@ const ARTICLE_ROUTE = /^\/v1\/articles\/([^/]+)\/(publish|images|open)$/;
 const ARTICLE_IMAGE_ROUTE = /^\/v1\/articles\/([^/]+)\/images\/([^/]+)$/;
 const CREATE_DRAFT_ROUTE = '/v1/articles';
 const IMAGE_STATUS_ROUTE = /^\/internal\/images\/([^/]+)\/status$/;
+const METRICS_SUMMARY_ROUTE = '/internal/metrics/time-to-publish';
 
 /**
  * Assets are served through the CDN, never from Supabase Storage (§4). The
@@ -523,6 +525,12 @@ async function imageStatus(
   );
 }
 
+const metricsSummary = (request: Request, ctx: Ctx): Promise<HandlerResponse> =>
+  handleMetricsSummary(
+    { dashboard_secret: request.headers.get('x-arsene-dashboard-secret') },
+    { dashboardSecret: ctx.opts.dashboardReadSecret ?? '', repo: ctx.repo },
+  );
+
 export type ServerOptions = {
   port: number;
   databaseUrl: string;
@@ -539,6 +547,13 @@ export type ServerOptions = {
   jwtIssuer?: string;
   /** ADR-0004's Lambda status-callback shared secret. */
   imageCallbackSecret?: string;
+  /**
+   * `GET /internal/metrics/time-to-publish`'s shared secret — John's
+   * dashboard gate (`pdlc/arsene-cms/11-dashboard.v1.md`), never a writer
+   * bearer token: a writer's JWT proves who is drafting, not that they may
+   * read team-wide timing aggregates.
+   */
+  dashboardReadSecret?: string;
   /**
    * The origin converted assets are served from — the one an inbound status
    * callback's `optimized_url` must be on, and the one this process's object
@@ -597,10 +612,12 @@ type Operation =
   | { kind: 'publish' | 'images' | 'open'; article_id: string }
   | { kind: 'discard-image'; article_id: string; image_id: string }
   | { kind: 'create-draft' }
-  | { kind: 'image-status'; image_id: string };
+  | { kind: 'image-status'; image_id: string }
+  | { kind: 'metrics-summary' };
 
 function matchRoute(path: string): Operation | null {
   if (path === CREATE_DRAFT_ROUTE) return { kind: 'create-draft' };
+  if (path === METRICS_SUMMARY_ROUTE) return { kind: 'metrics-summary' };
 
   const article = ARTICLE_ROUTE.exec(path);
   if (article?.[1] !== undefined) {
@@ -616,8 +633,13 @@ function matchRoute(path: string): Operation | null {
   return image?.[1] === undefined ? null : { kind: 'image-status', image_id: image[1] };
 }
 
-/** Every operation is a `POST` bar the one that removes a resource. */
-const methodOf = (op: Operation): string => (op.kind === 'discard-image' ? 'DELETE' : 'POST');
+/** Every operation is a `POST`, bar the one that removes a resource (`DELETE`)
+ * and the read-only dashboard adapter (`GET`). */
+const methodOf = (op: Operation): string => {
+  if (op.kind === 'discard-image') return 'DELETE';
+  if (op.kind === 'metrics-summary') return 'GET';
+  return 'POST';
+};
 
 function dispatch(
   request: Request,
@@ -646,6 +668,8 @@ function dispatch(
       );
     case 'image-status':
       return imageStatus(request, op.image_id, raw, ctx);
+    case 'metrics-summary':
+      return metricsSummary(request, ctx);
   }
 }
 
@@ -704,6 +728,12 @@ export async function route(
       )
     ) {
       return send(errorResponse(401, 'UNAUTHORIZED', 'A valid image-callback secret is required.'));
+    }
+  } else if (op.kind === 'metrics-summary') {
+    if (
+      !verifySharedSecret(request.headers.get('x-arsene-dashboard-secret'), ctx.opts.dashboardReadSecret ?? '')
+    ) {
+      return send(errorResponse(401, 'UNAUTHORIZED', 'A valid dashboard secret is required.'));
     }
   } else if (!(await verify(bearerToken(request.headers.get('authorization')), ctx)).valid) {
     return send(errorResponse(401, 'UNAUTHORIZED', 'A valid Supabase Auth bearer token is required.'));
