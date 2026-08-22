@@ -143,12 +143,18 @@
       "notes": "IMPORTANT: this gate's own verdict, on its own criteria, was NOT PASSED — 05-verification.v8.md §11 states this explicitly. Status is recorded here as \"passed\" only because of the product-owner override logged below (overrides[0]), not because the gate's acceptance criteria were met. Read 05-verification.v8.md in full before treating this branch as verified; do not infer from status=passed alone that every finding was closed. Eight verify passes were run against this branch (v1-v8, one per remediation cycle); the full chain is preserved in pdlc/arsene-cms/ and pdlc/arsene-cms/verify/ and indexed in the log below. Findings genuinely and fully closed by v8, confirmed by independent adversarial testing: the discard route's core mechanism (CAS race, grant boundary, draft-lock check), M-V7-02 (render cover-blanking), and the practical effect of L-V7-01 (cover uniqueness) on a freshly-migrated database. Findings NOT closed, and the subject of the override: (1) migration 0005 cannot apply to a database already holding duplicate ready-cover rows, a state proven reachable through ordinary concurrent use with no attacker — 05-verification.v8.md §4; (2) the discard route has no src/api/client.ts method and no contract declaration, so the product's own editor SPA cannot currently call the route this whole cycle exists to provide — 05-verification.v8.md §5. Also open, not blocking: L-V8-01 (discard route has no rate limit or audit trail), L-V8-02 (discard permanently orphans the file in Supabase Storage), plus the standing backlog carried since v3-v7 (L-V7-02 updated_at forgeable, I-V7-01 missing CHECK constraint, L-V6-01 CDN_ORIGIN validation, L-V6-03 transient slug race, N5/N5b, N2, idempotency store TTL/writer_id scoping). Counter-metric (writer adoption) remains honestly uncomputable from any event this build emits, unchanged since the architecture gate; required events draft_started/article_published both confirmed emitted correctly via the real primary path across every one of the eight verify passes' instrumentation proofs, most recently §10 of 05-verification.v8.md."
     },
     "polish": {
-      "status": "pending",
-      "artifacts": [],
-      "actor": null,
-      "model": null,
-      "at": null,
-      "notes": null
+      "status": "passed",
+      "artifacts": [
+        {
+          "path": "tests/unit/uploadImage.test.ts",
+          "sha256": "689db05635c104f8e70ecb1cd0fa99c3cde4550bc4a996d40831d011aacab797",
+          "recorded": "2026-08-22T07:53:29Z"
+        }
+      ],
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "haiku",
+      "at": "2026-08-22T07:53:29Z",
+      "notes": "bob-janitor (Haiku) mechanical cleanup pass. One change: removed an unused import (validateAgainstSchema) from tests/unit/uploadImage.test.ts, confirmed zero remaining references before removal. No other mechanical issues found (no import-ordering problems, no dead code, no stray debug statements, formatting already consistent) and no judgement-call recommendations raised. 227/227 passing and tsc clean both before the change (baseline) and after (re-run in full, per the instruction that a cleanup changing behaviour is a bug in a tidy diff)."
     },
     "ship": {
       "status": "pending",
@@ -511,6 +517,15 @@
       "gate": "verify",
       "actor": "lionel.leboiteux@gmail.com",
       "summary": "Product owner reviewed verify v8's two remaining findings (migration data-compat risk; discard route unreachable from the client) and decided to ship as-is, accepting both as known, tracked limitations rather than continuing remediation. Full record in overrides[0] above."
+    },
+    {
+      "at": "2026-08-22T07:53:29Z",
+      "event": "pass",
+      "gate": "polish",
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "haiku",
+      "artifacts": ["tests/unit/uploadImage.test.ts"],
+      "summary": "bob-janitor mechanical cleanup: removed one unused test import. No other issues found, no judgement-call recommendations raised. 227/227 passing and tsc clean before and after."
     }
   ]
 }
