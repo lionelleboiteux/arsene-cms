@@ -293,12 +293,33 @@
       "notes": "Built the data adapter and the dashboard. Adapter: GET /internal/metrics/time-to-publish, a new route on the existing Edge Function (not PostgREST - telemetry_events has RLS enabled with zero policies, and this app uses no Data API access anywhere else either), guarded by a new DASHBOARD_READ_SECRET shared secret checked from headers alone, never a writer JWT. Returns raw {published_at, minutes} samples (never writer_id/article_id) plus a counter-metric count of distinct active writers in the last 30 days (never a list). 10 new tests (unit + real-DB + real-spawned-route), 244/244 total, zero regressions. dashboard/index.html: single self-contained static file, no framework/build step, base URL and secret entered by the viewer and stored in localStorage (never baked into the file). Rehearsed for real: a real serverMain.ts process against real seeded Postgres answered the real endpoint correctly (median 9 min from 3 real samples, 2 active writers); the dashboard's client-side median/bucketing logic was verified against that exact real payload in Node. NOT verified: the page actually rendering in a browser - no Chrome extension connected and no headless-browser tooling (playwright/puppeteer/jsdom) installed in this environment; disclosed plainly in 11-dashboard.v1.md §3 rather than claimed as tested. Baseline captured: Pam's self-reported ~50min estimate is unchanged and still the only baseline available - zero real articles have been published in production, so 'current' cannot be measured yet (state.json's success.metrics[0].current now says so explicitly rather than showing a fabricated number). Counter-metric similarly not yet measurable (0 real writers)."
     },
     "release": {
-      "status": "pending",
-      "artifacts": [],
-      "actor": null,
-      "model": null,
-      "at": null,
-      "notes": null
+      "status": "passed",
+      "decision": "approve",
+      "approved_by": "lionel.leboiteux@gmail.com",
+      "approved_at": "2026-08-22T21:05:00Z",
+      "tag": "v0.2.0",
+      "commit": "186adf92d0a223bf6268bfaba8e34fb52978f0a4",
+      "artifacts": [
+        {
+          "path": "APPROVAL.md",
+          "sha256": "abf11641c6940c9100f1de131e1b7c511613067c640ebf51039c7c1a0dc745c6",
+          "recorded": "2026-08-22T21:07:12Z"
+        },
+        {
+          "path": "RELEASE-EVIDENCE.md",
+          "sha256": "05bc2705968ce5553c76a037232ca74ef096ee14fbea5eea26119eb03f4c1c1b",
+          "recorded": "2026-08-22T21:07:12Z"
+        },
+        {
+          "path": "CHANGELOG.md",
+          "sha256": "87a5d74acb838d63999809ac54142c629e4f9fbba47e87bdae58ddd018695871",
+          "recorded": "2026-08-22T21:07:12Z"
+        }
+      ],
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "sonnet",
+      "at": "2026-08-22T21:07:12Z",
+      "notes": "Product owner approved v0.2.0 in chat ('Approve v0.2.0', no scoping) after reviewing the compact release summary: what ships, verification results (244/244, real computed metric from verify v1/v8), baseline captured (Pam's ~50min estimate, current not yet measurable), rollback mechanism + measured times, one-way doors, and residual risks. Re-checking the rollback at this gate (per this gate's own 'things change between gates' instruction) surfaced a real finding: v0.1.0 is not a safe rollback target for the API server since it predates the Deno port and cannot run on the real Edge Function target at all - this is the first real deploy this product has ever attempted, so there is no previously-deployed good version to fall back to. The stale v0.1.0 tag (pointing at a commit two features behind HEAD) was not reused; v0.2.0 was cut fresh. No new migrations this release, so no new one-way doors. NOT DEPLOYED: this repository has no git remote configured (confirmed via git remote -v), so .github/workflows/deploy.yml cannot run - there is nothing to push the tag to. The approval covers the release content; a real deploy still needs a remote, GitHub repo secrets (SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF, SUPABASE_DB_URL), and the Edge Function's own runtime secrets set via `supabase secrets set` - none of which this or any prior session has had access to configure. See APPROVAL.md and RELEASE-EVIDENCE.md for the full record."
     },
     "review": {
       "status": "pending",
@@ -674,6 +695,15 @@
       "model": "sonnet",
       "artifacts": ["pdlc/arsene-cms/11-dashboard.v1.md", "dashboard/index.html", "src/api/metricsSummary.ts", "src/api/repo.ts", "src/api/router.ts", "tests/unit/metricsSummary.test.ts", "tests/db/timeToPublishMetric.test.ts", "tests/e2e/metricsSummaryRoute.test.ts"],
       "summary": "Built the data adapter (GET /internal/metrics/time-to-publish, a new Edge Function route rather than PostgREST since telemetry_events has RLS with zero policies and this app uses no Data API elsewhere) and a single self-contained static dashboard (dashboard/index.html, no framework/build step). Adapter returns raw {published_at, minutes} samples plus a distinct-active-writer count for the counter-metric - never a writer_id, article_id, or list of writers. Guarded by a new DASHBOARD_READ_SECRET shared secret, never a writer JWT. 10 new tests, 244/244 total, zero regressions. Rehearsed for real: a real serverMain.ts process against real seeded Postgres answered correctly; the dashboard's median/bucketing JS was verified against that real payload in Node. Not verified: actual browser rendering - no Chrome extension connected, no headless-browser tooling installed, disclosed in 11-dashboard.v1.md rather than claimed done. Baseline: Pam's self-reported ~50min estimate is unchanged (zero real articles published in production yet, so 'current' cannot be measured - state.json's success.metrics[0].current says so explicitly rather than showing a fabricated number)."
+    },
+    {
+      "at": "2026-08-22T21:07:12Z",
+      "event": "pass",
+      "gate": "release",
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "sonnet",
+      "artifacts": ["APPROVAL.md", "RELEASE-EVIDENCE.md", "CHANGELOG.md"],
+      "summary": "Product owner approved v0.2.0 in chat after a compact release summary (what ships, verification results, baseline, rollback + measured times, one-way doors, residual risks). Re-checking rollback at this gate surfaced a real finding: v0.1.0 predates the Deno port and cannot run on the real Edge Function target, so it is not a safe rollback destination - this is the first real deploy ever attempted, so there is no previously-deployed good version to fall back to. Re-cut the tag as v0.2.0 against current HEAD rather than reuse the stale v0.1.0 (which pointed two features behind). No new migrations, no new one-way doors. NOT DEPLOYED: no git remote is configured, so deploy.yml cannot run yet - recorded plainly in RELEASE-EVIDENCE.md rather than claimed done. Approval and full record in APPROVAL.md."
     }
   ]
 }
