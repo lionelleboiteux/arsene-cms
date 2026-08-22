@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { loadUploadImage } from '../support/seams.js';
 import type { UploadImageRequest } from '../support/seams.js';
 import { buildUploadDeps } from '../support/fakes.js';
-import { validateAgainstSchema } from '../support/openapi.js';
 import { ARTICLE_ID, COVER_IMAGE_ID, articleRecord, imageRecord } from '../support/fixtures.js';
 import { corruptedJpeg, oversizedJpeg, unsupportedFile, validJpeg } from '../support/imageFixtures.js';
 
