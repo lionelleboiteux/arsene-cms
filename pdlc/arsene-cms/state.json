@@ -157,20 +157,57 @@
       "notes": "bob-janitor (Haiku) mechanical cleanup pass. One change: removed an unused import (validateAgainstSchema) from tests/unit/uploadImage.test.ts, confirmed zero remaining references before removal. No other mechanical issues found (no import-ordering problems, no dead code, no stray debug statements, formatting already consistent) and no judgement-call recommendations raised. 227/227 passing and tsc clean both before the change (baseline) and after (re-run in full, per the instruction that a cleanup changing behaviour is a bug in a tidy diff)."
     },
     "ship": {
-      "status": "pending",
-      "artifacts": [],
-      "actor": null,
-      "model": null,
-      "at": null,
-      "notes": null
+      "status": "passed",
+      "artifacts": [
+        {
+          "path": "README.md",
+          "sha256": "6aa47117d5a893b76540e864682725c58a4ba6f5ce1e6a0dd9cf27d82a81fdc6",
+          "recorded": "2026-08-22T19:21:20Z"
+        },
+        {
+          "path": "CHANGELOG.md",
+          "sha256": "4737b534dcf9e7cdb5cc636c1e6ca8af9a85066994a90dcc7bc095d4838fa3c6",
+          "recorded": "2026-08-22T19:21:20Z"
+        },
+        {
+          "path": "docs/architecture.md",
+          "sha256": "f358eaa247e7df3d1e6f9068753f9fea4f8ed1f15bb39e56d75517325d1754dc",
+          "recorded": "2026-08-22T19:21:20Z"
+        }
+      ],
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "haiku",
+      "at": "2026-08-22T19:21:20Z",
+      "notes": "bob-doc-writer created README.md, CHANGELOG.md and docs/architecture.md from scratch (none existed before). Two factual corrections applied by hand after review: the README wrongly claimed the public-site render code lives in a separate repository (src/site/render.ts is in this repo), and the CHANGELOG's lock-timeout description was vague (60-90s) where the code has an exact constant (90s staleness, 20s heartbeat) - both fixed before commit. Committed as a2b3a3f: 'feat(arsene-cms): ship draft-to-publish CMS backend', referencing gates adopt/architecture/red/green/verify/polish and stating plainly what's included and excluded (no editor SPA UI, no deploy pipeline yet, no counter-metric instrumentation, plus the two verify-v8 overrides). pdlc/arsene-cms/07-pr-body.md written for the eventual PR. Not pushed; no PR opened; both require separate confirmation."
     },
     "pipeline": {
-      "status": "pending",
-      "artifacts": [],
-      "actor": null,
-      "model": null,
-      "at": null,
-      "notes": null
+      "status": "partial",
+      "artifacts": [
+        {
+          "path": "pdlc/arsene-cms/10-pipeline.v1.md",
+          "sha256": "6315140fd404e133a35c4eca0ccdcc5f58917e017da8b8f6ae4abf77df5c7eb3",
+          "recorded": "2026-08-22T19:44:58Z"
+        },
+        {
+          "path": ".github/workflows/deploy.yml",
+          "sha256": "f60d2c6d85dd1ce3743faffb95c4c374d80cd88407a74f6c7dc363225f8f5a27",
+          "recorded": "2026-08-22T19:44:58Z"
+        },
+        {
+          "path": ".github/workflows/rollback.yml",
+          "sha256": "a17fe23e648154e6aa5b3e4ebf5f43434d42692ed36b4064df39fce79d517343",
+          "recorded": "2026-08-22T19:44:58Z"
+        },
+        {
+          "path": "scripts/deploy-migrations.sh",
+          "sha256": "41a3919286f57e1fadd27c1fbad0fbec64f5da4a3d8f3326b9d21bb61340952c",
+          "recorded": "2026-08-22T19:44:58Z"
+        }
+      ],
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "at": "2026-08-22T19:44:58Z",
+      "notes": "IMPORTANT: status is \"partial\", not \"passed\" - this is a deliberate, distinct status, not an override. The architecture document (02-architecture.v1.md §6) named Supabase Edge Functions (Deno, Fetch-API handler model) as the API server's deploy target, but the code as built runs on Node's http.createServer and relies on node:child_process.spawn() - a different execution model that does not translate. This was invisible through eight remediation cycles because every test exercised the code via a real spawned Node child process, never asking whether that process could run on the platform the architecture named. Per this gate's own instructions, this is 'a finding to take back rather than a gap to improvise around' - raised with the product owner mid-gate; direction given was to build and rehearse the part that is real and document the rest as blocking. WHAT IS DONE AND REHEARSED FOR REAL: the Postgres migration deploy/rollback mechanism (scripts/deploy-migrations.sh, idempotent, tracked in a _migrations_applied table) was rehearsed three ways against a real local Postgres 16 container - fresh deploy (1.08s), no-op re-deploy (0.24s), incremental deploy (0.29s) - and the known migration-0005 one-way-door from verify v8 was reproduced for real (exact error, 0.09s to fail, no corruption) and its fix verified (0.09s to succeed after a tested pre-flight reconciliation step, not yet automated into the migration itself). All five migrations (0001-0005) confirmed expand-only by inspection. WHAT IS BLOCKED: the API server has no deploy or rollback mechanism - .github/workflows/deploy.yml's deploy-api-server job and rollback.yml's redeploy-api-server job are explicit, loudly-failing stubs naming this gap rather than silently omitting it. Two paths recorded in 10-pipeline.v1.md §2 for whoever makes this call: port the transport layer to Deno's Fetch-API model, or deploy the Node server as-is to a Node-compatible host (which reopens ADR-0001's $0/mo cost rationale). Separately, no Cloudflare Pages deployable artifact exists anywhere in this codebase (no Next.js app, no build script) - that half of the architecture's rollback plan belongs to a codebase that doesn't exist yet, in this repo or elsewhere. Tag v0.1.0 created locally (matches CHANGELOG.md) but not pushed."
     },
     "dashboard": {
       "status": "pending",
@@ -526,6 +563,24 @@
       "model": "haiku",
       "artifacts": ["tests/unit/uploadImage.test.ts"],
       "summary": "bob-janitor mechanical cleanup: removed one unused test import. No other issues found, no judgement-call recommendations raised. 227/227 passing and tsc clean before and after."
+    },
+    {
+      "at": "2026-08-22T19:21:20Z",
+      "event": "pass",
+      "gate": "ship",
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "haiku",
+      "artifacts": ["README.md", "CHANGELOG.md", "docs/architecture.md"],
+      "summary": "bob-doc-writer created README/CHANGELOG/architecture docs from scratch. Two factual errors caught and fixed on review. Committed a2b3a3f. Not pushed, no PR opened."
+    },
+    {
+      "at": "2026-08-22T19:44:58Z",
+      "event": "partial",
+      "gate": "pipeline",
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/10-pipeline.v1.md", ".github/workflows/deploy.yml", ".github/workflows/rollback.yml", "scripts/deploy-migrations.sh"],
+      "summary": "Migration deploy/rollback mechanism built and rehearsed for real (fresh/no-op/incremental deploy timed against real Postgres; the known 0005 one-way-door reproduced and its fix verified). API server deploy blocked: architecture named Supabase Edge Functions (Deno) but the code is a Node http.createServer app using node:child_process - a finding taken back per this gate's own instructions, not improvised around. Tag v0.1.0 created locally, not pushed."
     }
   ]
 }
