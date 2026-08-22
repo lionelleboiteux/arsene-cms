@@ -4,6 +4,25 @@ All notable changes to Arsène CMS will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-08-22
+
+### Added
+
+- **Deno port:** `src/api/router.ts`'s core (`route()`, `dispatch()`, every handler-dependency builder) now runs on the standard Fetch API (`Request` in, `Response` out) instead of Node's `http` types. A real Deno entry point (`supabase/functions/arsene-api/index.ts`, a genuine `Deno.serve` handler) deploys to Supabase Edge Functions — the runtime ADR-0001 named and that 0.1.0 could not actually run on. The Node adapter (`startHttpServer`) is unchanged; the whole 0.1.0 test suite passes against it unedited.
+- **Benefit dashboard:** `dashboard/index.html`, a single self-contained static file (no framework, no build step) showing the project's one success metric ("time from draft start to published") and its counter-metric ("writer adoption must not decline"), backed by a new read-only adapter, `GET /internal/metrics/time-to-publish` on the same Edge Function.
+- **Deploy/rollback mechanism, both halves:** `.github/workflows/deploy.yml`/`rollback.yml` now run real commands for both the Postgres migration half and the API-server half (`supabase functions deploy`), replacing 0.1.0's migration-only mechanism and its loudly-failing API-server stub.
+
+### Fixed
+
+- **Forbidden-method crash:** the WHATWG Fetch spec forbids constructing a `Request` with method `TRACE`/`TRACK`/`CONNECT`. Found by the existing Schemathesis contract suite the moment the Node adapter was rebuilt on a real `Request` object; fixed by passing the real wire method to `route()` explicitly rather than trusting `request.method`.
+
+### Known Limitations
+
+0.1.0's two accepted findings (migration data compatibility, discard route not client-accessible — see below) remain open and tracked, unchanged. Two more are disclosed here, non-blocking, from this release's own gates:
+
+3. **Real deploy not yet rehearsed:** the actual `supabase functions deploy` round-trip against the real linked Supabase project has not been executed — only local rehearsal (real Deno process, real Postgres, real HTTP). See [10-pipeline.v2.md](pdlc/arsene-cms/10-pipeline.v2.md) §2.
+4. **JWT signing model is Supabase's legacy one:** current Supabase docs describe the shared HS256 secret `src/api/auth.ts` verifies against as "no longer recommended," superseded by a newer Signing Keys system. Not a regression, not fixed here. See [10-pipeline.v2.md](pdlc/arsene-cms/10-pipeline.v2.md) §4.
+
 ## [0.1.0] — 2026-08-22
 
 ### Added
