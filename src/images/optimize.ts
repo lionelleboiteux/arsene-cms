@@ -48,9 +48,9 @@ async function ensureCodec(): Promise<void> {
       readFile(wasmPath('@jsquash/png/codec/pkg/squoosh_png_bg.wasm')),
       readFile(wasmPath('@jsquash/webp/codec/enc/webp_enc_simd.wasm')),
     ]);
-    await initJpegDecoder(await WebAssembly.compile(jpegWasm));
-    await initPngDecoder(await WebAssembly.compile(pngWasm));
-    await initWebpEncoder(await WebAssembly.compile(webpWasm));
+    await initJpegDecoder(await WebAssembly.compile(new Uint8Array(jpegWasm)));
+    await initPngDecoder(await WebAssembly.compile(new Uint8Array(pngWasm)));
+    await initWebpEncoder(await WebAssembly.compile(new Uint8Array(webpWasm)));
   })();
   await codecReady;
 }

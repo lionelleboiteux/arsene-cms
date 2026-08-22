@@ -192,7 +192,7 @@ export function createRepo(pool: pg.Pool) {
         `select slug from articles where slug = $1 or slug like $1 || '-%'`,
         [base_slug],
       );
-      return res.rows.map((row) => row.slug);
+      return res.rows.map((row: { slug: string }) => row.slug);
     },
 
     /**

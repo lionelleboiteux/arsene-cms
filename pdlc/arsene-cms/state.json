@@ -181,7 +181,7 @@
       "notes": "bob-doc-writer created README.md, CHANGELOG.md and docs/architecture.md from scratch (none existed before). Two factual corrections applied by hand after review: the README wrongly claimed the public-site render code lives in a separate repository (src/site/render.ts is in this repo), and the CHANGELOG's lock-timeout description was vague (60-90s) where the code has an exact constant (90s staleness, 20s heartbeat) - both fixed before commit. Committed as a2b3a3f: 'feat(arsene-cms): ship draft-to-publish CMS backend', referencing gates adopt/architecture/red/green/verify/polish and stating plainly what's included and excluded (no editor SPA UI, no deploy pipeline yet, no counter-metric instrumentation, plus the two verify-v8 overrides). pdlc/arsene-cms/07-pr-body.md written for the eventual PR. Not pushed; no PR opened; both require separate confirmation."
     },
     "pipeline": {
-      "status": "partial",
+      "status": "passed",
       "artifacts": [
         {
           "path": "pdlc/arsene-cms/10-pipeline.v1.md",
@@ -189,14 +189,44 @@
           "recorded": "2026-08-22T19:44:58Z"
         },
         {
+          "path": "pdlc/arsene-cms/10-pipeline.v2.md",
+          "sha256": "1cf43d25afb3ddfddda22b7a0d66f964b27435c962d03206e5322deb524bbd3b",
+          "recorded": "2026-08-22T20:26:08Z"
+        },
+        {
+          "path": "src/api/router.ts",
+          "sha256": "59fc1d6dad1022ae2686c00438c5093700e920db8c70b512567d4c2248e8c494",
+          "recorded": "2026-08-22T20:26:08Z"
+        },
+        {
+          "path": "supabase/functions/arsene-api/index.ts",
+          "sha256": "88ab899cdb8b9dea117bd5f6f120402e72ce2c2ce440f8a30f8da37aa57257cd",
+          "recorded": "2026-08-22T20:26:08Z"
+        },
+        {
+          "path": "supabase/functions/arsene-api/deno.json",
+          "sha256": "923a559891b56f326f9dd13e992103eef221f8948dac176e74837a403d742f9b",
+          "recorded": "2026-08-22T20:26:08Z"
+        },
+        {
           "path": ".github/workflows/deploy.yml",
-          "sha256": "f60d2c6d85dd1ce3743faffb95c4c374d80cd88407a74f6c7dc363225f8f5a27",
-          "recorded": "2026-08-22T19:44:58Z"
+          "sha256": "5de852b6a48f3025b9a7ed0812653092c2b798b4b86f6b1ad16150b7a43b963b",
+          "recorded": "2026-08-22T20:26:08Z"
         },
         {
           "path": ".github/workflows/rollback.yml",
-          "sha256": "a17fe23e648154e6aa5b3e4ebf5f43434d42692ed36b4064df39fce79d517343",
-          "recorded": "2026-08-22T19:44:58Z"
+          "sha256": "7f192620fe63ca6900f5ecd2a1a3540da71cede4a98963bcaf8f93f6aa5f15a8",
+          "recorded": "2026-08-22T20:26:08Z"
+        },
+        {
+          "path": "tests/e2e/deployedDenoRuntime.test.ts",
+          "sha256": "bd1c7d5498c0b914f3ef3997dba060f6efcd74f4b96da0d1155d3876d055be45",
+          "recorded": "2026-08-22T20:26:08Z"
+        },
+        {
+          "path": "tests/support/denoServer.ts",
+          "sha256": "fbe5b7625bc30bc83e7e252c23499c805b18b2d2b85fc0a4d9ab7d56f53491b9",
+          "recorded": "2026-08-22T20:26:08Z"
         },
         {
           "path": "scripts/deploy-migrations.sh",
@@ -206,8 +236,8 @@
       ],
       "actor": "lionel.leboiteux@gmail.com",
       "model": "opus",
-      "at": "2026-08-22T19:44:58Z",
-      "notes": "IMPORTANT: status is \"partial\", not \"passed\" - this is a deliberate, distinct status, not an override. The architecture document (02-architecture.v1.md §6) named Supabase Edge Functions (Deno, Fetch-API handler model) as the API server's deploy target, but the code as built runs on Node's http.createServer and relies on node:child_process.spawn() - a different execution model that does not translate. This was invisible through eight remediation cycles because every test exercised the code via a real spawned Node child process, never asking whether that process could run on the platform the architecture named. Per this gate's own instructions, this is 'a finding to take back rather than a gap to improvise around' - raised with the product owner mid-gate; direction given was to build and rehearse the part that is real and document the rest as blocking. WHAT IS DONE AND REHEARSED FOR REAL: the Postgres migration deploy/rollback mechanism (scripts/deploy-migrations.sh, idempotent, tracked in a _migrations_applied table) was rehearsed three ways against a real local Postgres 16 container - fresh deploy (1.08s), no-op re-deploy (0.24s), incremental deploy (0.29s) - and the known migration-0005 one-way-door from verify v8 was reproduced for real (exact error, 0.09s to fail, no corruption) and its fix verified (0.09s to succeed after a tested pre-flight reconciliation step, not yet automated into the migration itself). All five migrations (0001-0005) confirmed expand-only by inspection. WHAT IS BLOCKED: the API server has no deploy or rollback mechanism - .github/workflows/deploy.yml's deploy-api-server job and rollback.yml's redeploy-api-server job are explicit, loudly-failing stubs naming this gap rather than silently omitting it. Two paths recorded in 10-pipeline.v1.md §2 for whoever makes this call: port the transport layer to Deno's Fetch-API model, or deploy the Node server as-is to a Node-compatible host (which reopens ADR-0001's $0/mo cost rationale). Separately, no Cloudflare Pages deployable artifact exists anywhere in this codebase (no Next.js app, no build script) - that half of the architecture's rollback plan belongs to a codebase that doesn't exist yet, in this repo or elsewhere. Tag v0.1.0 created locally (matches CHANGELOG.md) but not pushed."
+      "at": "2026-08-22T20:26:08Z",
+      "notes": "Status upgraded from \"partial\" to \"passed\": the finding v1 raised (API server built for Node's http.createServer/node:child_process, but ADR-0001 named Supabase Edge Functions/Deno) is closed. Per explicit product-owner instruction, src/api/router.ts was refactored so route()/dispatch()/every handler-dependency builder operates on the standard Fetch API (Request in, Response out) rather than Node's http types, with two thin adapters on top: the existing Node one (startHttpServer, unchanged behaviour, same exported name/ServerOptions shape the test suite's seam expects - all 227 pre-existing tests pass unchanged, zero test edits) and a new real Deno one (supabase/functions/arsene-api/index.ts, a genuine Deno.serve handler). A real regression was found and fixed during the port: the WHATWG Fetch spec forbids constructing a Request with method TRACE/TRACK/CONNECT, which the existing Schemathesis contract suite's TRACE case caught immediately once the Node adapter was rebuilt on a real Request object - fixed by threading the real wire method through route() explicitly rather than trusting request.method, confirmed fixed under both adapters. The dev/test-only Lambda simulation (convert(), which needs real sharp, a native addon Deno cannot load) is wired only by the Node adapter; its import of lambdaHandler.ts was changed from static to a lazy, non-literal dynamic import specifically so importing route()/buildCtx() from router.ts - which the Deno entry point does - never pulls sharp into the Edge Function's module graph, confirmed empirically with disposable spike files before relying on it (10-pipeline.v2.md §3). Rehearsed for real: deno check and deno run against real local Postgres, real curl/raw-socket HTTP driving every route (auth success/failure, 404/405/413, the TRACE fix, the full ADR-0004 upload+callback loop confirming sharp is genuinely never invoked, and a real measured 408 timeout at 1.502s against a configured 1500ms). Six new permanent automated tests (tests/e2e/deployedDenoRuntime.test.ts, via new tests/support/denoServer.ts) spawn a genuine deno run child process against real Testcontainers Postgres over real HTTP, mirroring deployedAuthBoundary.test.ts's pattern for the Node boundary - full suite is now 233/233, zero regressions. deploy.yml/rollback.yml's deploy-api-server/redeploy-api-server jobs now run real `supabase functions deploy` (current docs' recommended supabase/setup-cli@v1 pattern) instead of a loudly-failing stub; both test jobs gained a denoland/setup-deno@v2 step so the new suite can run in CI. NOT rehearsed: the actual `supabase functions deploy` round-trip against the real linked project (dmytkubjxwwwkroutvdu) - consistent with v1's own local-only rehearsal and this branch's standing practice of not touching a real/paid/shared account without explicit confirmation first; CLI syntax is sourced from current docs but not itself executed live. A new, disclosed, out-of-scope finding surfaced while reading current docs: Supabase's docs now describe the shared HS256 JWT-secret model auth.ts verifies against (SUPABASE_JWT_SECRET) as the legacy system, 'no longer recommended, available for backward compatibility', superseded by a newer Signing keys system. Not a regression, not fixed here, not blocking - recorded in 10-pipeline.v2.md §4 for a future gate to decide. Unchanged from v1: no Cloudflare Pages/public-site deployable artifact exists anywhere in this repo; the migration-0005 one-way-door reconciliation is still manual, not automated; state.json's overrides[0] accepted-risk record is untouched."
     },
     "dashboard": {
       "status": "pending",
@@ -581,6 +611,15 @@
       "model": "opus",
       "artifacts": ["pdlc/arsene-cms/10-pipeline.v1.md", ".github/workflows/deploy.yml", ".github/workflows/rollback.yml", "scripts/deploy-migrations.sh"],
       "summary": "Migration deploy/rollback mechanism built and rehearsed for real (fresh/no-op/incremental deploy timed against real Postgres; the known 0005 one-way-door reproduced and its fix verified). API server deploy blocked: architecture named Supabase Edge Functions (Deno) but the code is a Node http.createServer app using node:child_process - a finding taken back per this gate's own instructions, not improvised around. Tag v0.1.0 created locally, not pushed."
+    },
+    {
+      "at": "2026-08-22T20:26:08Z",
+      "event": "pass",
+      "gate": "pipeline",
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "opus",
+      "artifacts": ["pdlc/arsene-cms/10-pipeline.v2.md", "src/api/router.ts", "supabase/functions/arsene-api/index.ts", "supabase/functions/arsene-api/deno.json", ".github/workflows/deploy.yml", ".github/workflows/rollback.yml", "tests/e2e/deployedDenoRuntime.test.ts", "tests/support/denoServer.ts"],
+      "summary": "Closed the v1 finding: ported src/api/router.ts to a transport-agnostic Fetch API core (Request/Response) plus a Node adapter (startHttpServer, unchanged behaviour, 227 pre-existing tests pass unedited) and a new real Deno adapter (supabase/functions/arsene-api/index.ts, genuine Deno.serve). Found and fixed a real regression along the way: the Fetch spec forbids constructing a Request with method TRACE/TRACK/CONNECT, caught by the existing Schemathesis TRACE case; fixed by passing the real wire method to route() explicitly. Kept sharp (Lambda-only, native addon) out of the Deno deploy graph via a lazy non-literal dynamic import, confirmed empirically with disposable spikes first. Rehearsed for real: deno check/deno run against real Postgres, real HTTP driving every route including a measured 408 timeout (1.502s). Added 6 new automated tests spawning a genuine deno run process over real HTTP (tests/e2e/deployedDenoRuntime.test.ts) - suite is 233/233, zero regressions. deploy.yml/rollback.yml now run real `supabase functions deploy` instead of a stub. Not rehearsed: the real deploy against the actual linked Supabase project - deliberately not touched without explicit confirmation, same standard as v1's local-only migration rehearsal. New disclosed, non-blocking finding: current Supabase docs describe the HS256 shared-secret JWT model auth.ts uses as legacy/no-longer-recommended; not fixed here, recorded for a future gate."
     }
   ]
 }

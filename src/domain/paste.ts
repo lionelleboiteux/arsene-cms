@@ -26,7 +26,10 @@ export function sanitizePastedHtml(rawHtml: string): string {
     allowedTags: [...ALLOWED_TAGS],
     allowedAttributes: { a: ['href'] },
     transformTags: {
-      p: (_tagName, attribs) => ({ tagName: wordHeadingTag(attribs) ?? 'p', attribs: {} }),
+      p: (_tagName: string, attribs: Record<string, string>) => ({
+        tagName: wordHeadingTag(attribs) ?? 'p',
+        attribs: {},
+      }),
     },
   });
 }

@@ -1,5 +1,16 @@
 /**
- * The Edge Function router, over a real HTTP port.
+ * The Edge Function router, over the Fetch API (`Request` in, `Response`
+ * out) — the model Supabase Edge Functions actually run
+ * (`Deno.serve((req: Request) => Response)`), and the one this module now
+ * targets directly rather than Node's `http.createServer` callback shape.
+ *
+ * `route()` and everything it calls is transport-agnostic: it never touches
+ * `node:http` or Deno's `Deno.serve`. Two adapters sit on top of it in this
+ * same file and in `supabase/functions/arsene-api/index.ts` — `startHttpServer`
+ * (below) is the Node one, kept here because the test suite's seam
+ * (`tests/support/seams.ts`'s `loadApiRouter`) resolves this exact file path
+ * and has always booted the router this way for the provider/e2e suite. The
+ * Deno one is `supabase/functions/arsene-api/index.ts`, the real deploy target.
  *
  * This is the entry point the provider (Schemathesis) and end-to-end tests
  * drive. It owns transport concerns only — routing, body parsing, auth token
@@ -9,9 +20,9 @@
  */
 
 import http from 'node:http';
+import { Readable } from 'node:stream';
 import pg from 'pg';
 import { z } from 'zod';
-import { optimizeImageBuffer } from '../images/lambdaHandler.ts';
 import { MAX_UPLOAD_BYTES } from '../images/optimize.ts';
 import { createTelemetrySink } from '../telemetry/events.ts';
 import { verifySupabaseJwt, verifySharedSecret } from './auth.ts';
@@ -45,11 +56,17 @@ const FOREIGN_KEY_VIOLATION = '23503';
 
 /**
  * How long a request gets to finish delivering its body before the server
- * answers `408` and lets the socket go (05-verification.v2.md §5: a body that
- * is declared and then never arrives used to hang on Node's 300-second
+ * answers `408` and lets the connection go (05-verification.v2.md §5: a body
+ * that is declared and then never arrives used to hang on Node's 300-second
  * default). Deliberately short: an anonymous caller must not be able to park
  * connections cheaply. The cost is that a 20 MB upload has to arrive inside
  * this window, so a very slow uplink is refused rather than waited for.
+ *
+ * Enforced differently per adapter, because the two runtimes offer no common
+ * primitive: Node's `startHttpServer` (below) uses `http.createServer`'s own
+ * `requestTimeout`/`connectionsCheckingInterval`; the Deno adapter
+ * (`supabase/functions/arsene-api/index.ts`) races `route()` against this
+ * value itself, since `Deno.serve` has no equivalent server-level option.
  */
 export const DEFAULT_READ_TIMEOUT_MS = 8_000;
 
@@ -100,24 +117,41 @@ const imageStatusBody = (cdnOrigin: string) =>
 
 type RunningServer = { url: string; stop(): Promise<void> };
 
-function send(res: http.ServerResponse, response: HandlerResponse): void {
-  res.writeHead(response.status, { 'content-type': 'application/json' });
-  res.end(JSON.stringify(response.body));
+function send(response: HandlerResponse, extraHeaders?: Record<string, string>): Response {
+  return new Response(JSON.stringify(response.body), {
+    status: response.status,
+    headers: { 'content-type': 'application/json', ...extraHeaders },
+  });
 }
 
 /**
  * `null` once the stream goes past the cap — a chunked body carries no
  * Content-Length to inspect, so the only defence is to stop reading (H2).
+ * Reads from the Fetch API `Request.body` stream directly, so no adapter
+ * (Node or Deno) ever has to buffer past the cap on our behalf.
  */
-async function readBody(req: http.IncomingMessage): Promise<Buffer | null> {
-  const chunks: Buffer[] = [];
+async function readBody(request: Request): Promise<Uint8Array | null> {
+  if (request.body === null) return new Uint8Array(0);
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
   let size = 0;
-  for await (const chunk of req) {
-    size += (chunk as Buffer).byteLength;
-    if (size > MAX_UPLOAD_BYTES) return null;
-    chunks.push(chunk as Buffer);
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_UPLOAD_BYTES) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
   }
-  return Buffer.concat(chunks);
+  const raw = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    raw.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return raw;
 }
 
 const tooLarge = (): HandlerResponse =>
@@ -126,10 +160,10 @@ const tooLarge = (): HandlerResponse =>
   });
 
 /** `undefined` for a body that is not JSON — a 400, never a 500. */
-function parseJson(raw: Buffer): unknown {
+function parseJson(raw: Uint8Array): unknown {
   if (raw.byteLength === 0) return {};
   try {
-    return JSON.parse(raw.toString('utf8')) as unknown;
+    return JSON.parse(new TextDecoder().decode(raw)) as unknown;
   } catch {
     return undefined;
   }
@@ -260,9 +294,10 @@ async function verify(
 }
 
 async function publish(
-  req: http.IncomingMessage,
+  request: Request,
+  clientIp: string,
   article_id: string,
-  raw: Buffer,
+  raw: Uint8Array,
   ctx: Ctx,
 ): Promise<HandlerResponse> {
   const json = parseJson(raw);
@@ -283,9 +318,9 @@ async function publish(
   const response = await handlePublishArticle(
     {
       article_id,
-      authorization: req.headers.authorization ?? null,
-      idempotency_key: header(req, 'idempotency-key'),
-      client_ip: req.socket.remoteAddress ?? 'unknown',
+      authorization: request.headers.get('authorization'),
+      idempotency_key: request.headers.get('idempotency-key'),
+      client_ip: clientIp,
       body: parsed.data,
     },
     deps,
@@ -295,14 +330,15 @@ async function publish(
 }
 
 async function upload(
-  req: http.IncomingMessage,
+  request: Request,
+  clientIp: string,
   article_id: string,
-  raw: Buffer,
+  raw: Uint8Array,
   ctx: Ctx,
 ): Promise<HandlerResponse> {
-  // Undici's own multipart parser, rather than a hand-rolled one.
-  const form = await new Response(new Uint8Array(raw), {
-    headers: { 'content-type': req.headers['content-type'] ?? '' },
+  // The Fetch API's own multipart parser, rather than a hand-rolled one.
+  const form = await new Response(raw as BodyInit, {
+    headers: { 'content-type': request.headers.get('content-type') ?? '' },
   })
     .formData()
     .catch(() => null);
@@ -319,9 +355,9 @@ async function upload(
   const response = await handleUploadImage(
     {
       article_id,
-      authorization: req.headers.authorization ?? null,
-      idempotency_key: header(req, 'idempotency-key'),
-      client_ip: req.socket.remoteAddress ?? 'unknown',
+      authorization: request.headers.get('authorization'),
+      idempotency_key: request.headers.get('idempotency-key'),
+      client_ip: clientIp,
       role,
       file: { filename: file.name, content_type: file.type, bytes },
     },
@@ -329,19 +365,36 @@ async function upload(
   );
 
   if (response.body.status === 'processing') {
-    convert(String(response.body.id), { filename: file.name, content_type: file.type, bytes }, ctx);
+    ctx.shared.processUpload?.(String(response.body.id), {
+      filename: file.name,
+      content_type: file.type,
+      bytes,
+    });
   }
   return response;
 }
 
 /**
- * ADR-0004's S3-event → Lambda → status-callback loop, in one process.
+ * ADR-0004's S3-event → Lambda → status-callback loop, in one process — dev/test
+ * convenience only, never wired into a real deployment.
  *
- * The deployed system triggers `optimizeImageBuffer` from an S3 notification
- * and reports the outcome back over `POST /internal/images/{id}/status`; this
- * entry point runs the same conversion and the same compare-and-swap directly,
- * after answering the writer, because it owns both ends. What matters either
- * way is that no conversion happens inside the request.
+ * The deployed system triggers `optimizeImageBuffer` (real `sharp`, in AWS
+ * Lambda's Node — `../images/lambdaHandler.ts`) from an S3 notification and
+ * reports the outcome back over `POST /internal/images/{id}/status`; the Node
+ * test/dev harness (`startHttpServer`, below) runs the same conversion and the
+ * same compare-and-swap directly, after answering the writer, because it owns
+ * both ends. The Deno production adapter never sets `shared.processUpload`, so
+ * this function is never called there — it relies solely on the real, external
+ * Lambda and the real callback, exactly as production must.
+ *
+ * `lambdaHandler.ts` is loaded through a lazy, non-literal dynamic import
+ * (not a static one) specifically so that merely importing this module — as
+ * the Deno production entry point does, for `route()` — never pulls `sharp`
+ * (a native addon; Lambda/Node-only, unusable under Deno) into the Edge
+ * Function's module graph. A static import here would make the whole
+ * deployment fail at cold start even though this code path is never reached.
+ * Confirmed empirically: with this import kept dynamic and non-literal,
+ * neither `deno check` nor `deno run` attempt to resolve `sharp` at all.
  */
 function convert(
   image_id: string,
@@ -349,6 +402,16 @@ function convert(
   ctx: Ctx,
 ): void {
   void (async () => {
+    const lambdaHandlerPath = '../images/lambdaHandler.ts';
+    const { optimizeImageBuffer } = (await import(lambdaHandlerPath)) as {
+      optimizeImageBuffer: (
+        bytes: Uint8Array,
+        meta: { filename: string; declared_content_type: string },
+      ) => Promise<
+        | { ok: true; format: string; bytes: Uint8Array }
+        | { ok: false; code: string; message: string }
+      >;
+    };
     const result = await optimizeImageBuffer(file.bytes, {
       filename: file.filename,
       declared_content_type: file.content_type,
@@ -377,7 +440,12 @@ function convert(
   );
 }
 
-async function createDraft(req: http.IncomingMessage, raw: Buffer, ctx: Ctx): Promise<HandlerResponse> {
+async function createDraft(
+  request: Request,
+  clientIp: string,
+  raw: Uint8Array,
+  ctx: Ctx,
+): Promise<HandlerResponse> {
   const parsed = CreateDraftBody.safeParse(parseJson(raw));
   if (!parsed.success) {
     return errorResponse(400, 'VALIDATION_FAILED', 'Request failed validation.', {
@@ -391,8 +459,8 @@ async function createDraft(req: http.IncomingMessage, raw: Buffer, ctx: Ctx): Pr
   const deps = draftDeps(ctx);
   const response = await handleCreateDraft(
     {
-      authorization: req.headers.authorization ?? null,
-      client_ip: req.socket.remoteAddress ?? 'unknown',
+      authorization: request.headers.get('authorization'),
+      client_ip: clientIp,
       body: parsed.data,
     },
     deps,
@@ -415,20 +483,20 @@ function unknownWriter(err: unknown): HandlerResponse {
   return errorResponse(401, 'UNAUTHORIZED', 'This account is not a registered writer.');
 }
 
-const openDraft = (req: http.IncomingMessage, article_id: string, ctx: Ctx) =>
+const openDraft = (request: Request, clientIp: string, article_id: string, ctx: Ctx) =>
   handleOpenDraft(
     {
       article_id,
-      authorization: req.headers.authorization ?? null,
-      client_ip: req.socket.remoteAddress ?? 'unknown',
+      authorization: request.headers.get('authorization'),
+      client_ip: clientIp,
     },
     draftDeps(ctx),
   );
 
 async function imageStatus(
-  req: http.IncomingMessage,
+  request: Request,
   image_id: string,
-  raw: Buffer,
+  raw: Uint8Array,
   ctx: Ctx,
 ): Promise<HandlerResponse> {
   const parsed = ctx.shared.imageStatusBody.safeParse(parseJson(raw));
@@ -444,7 +512,7 @@ async function imageStatus(
   return handleImageStatusCallback(
     {
       image_id,
-      callback_secret: header(req, 'x-arsene-image-callback-secret'),
+      callback_secret: request.headers.get('x-arsene-image-callback-secret'),
       body: parsed.data,
     },
     {
@@ -453,11 +521,6 @@ async function imageStatus(
       observability,
     },
   );
-}
-
-function header(req: http.IncomingMessage, name: string): string | null {
-  const value = req.headers[name];
-  return typeof value === 'string' ? value : null;
 }
 
 export type ServerOptions = {
@@ -493,18 +556,29 @@ type Shared = {
   storage: ReturnType<typeof createObjectStore>;
   /** Built once, because the origin it validates against is per-deployment. */
   imageStatusBody: ReturnType<typeof imageStatusBody>;
+  /** See `convert()`'s comment. Set only by `startHttpServer` (Node dev/test);
+   * left unset by the Deno production adapter. */
+  processUpload?: (
+    image_id: string,
+    file: { filename: string; content_type: string; bytes: Uint8Array },
+  ) => void;
 };
 
-type Ctx = { opts: ServerOptions; repo: Repo; shared: Shared };
+export type Ctx = { opts: ServerOptions; repo: Repo; shared: Shared };
 
-/** Boots the router in this process. `server.ts` boots it in its own. */
-export async function startHttpServer(opts: ServerOptions): Promise<RunningServer> {
-  const pool = new pg.Pool({ connectionString: opts.databaseUrl, max: 4 });
+/**
+ * Builds the platform-neutral request context: the Postgres pool, the repo,
+ * and every in-memory collaborator (rate limiter, idempotency store, object
+ * store). Shared by both adapters — `startHttpServer` below, and the Deno
+ * entry point (`supabase/functions/arsene-api/index.ts`) — so the two never
+ * drift on how a deployment's options become the dependencies `route()` uses.
+ */
+export function buildCtx(opts: ServerOptions, pool: pg.Pool): Ctx {
   // db/migrations/0002: the server-side seams write rows `authenticated` is
   // deliberately not granted (draft creation, publish-controlled columns).
-  pool.on('connect', (client) => void client.query('set role service_role'));
+  pool.on('connect', (client: pg.PoolClient) => void client.query('set role service_role'));
   const cdnOrigin = opts.cdnOrigin ?? DEFAULT_CDN_ORIGIN;
-  const ctx: Ctx = {
+  return {
     opts,
     repo: createRepo(pool),
     shared: {
@@ -515,33 +589,6 @@ export async function startHttpServer(opts: ServerOptions): Promise<RunningServe
       idempotency: createIdempotencyStore(),
       storage: createObjectStore(cdnOrigin),
       imageStatusBody: imageStatusBody(cdnOrigin),
-    },
-  };
-
-  const readTimeoutMs = opts.readTimeoutMs ?? DEFAULT_READ_TIMEOUT_MS;
-  const server = http.createServer(
-    {
-      requestTimeout: readTimeoutMs,
-      // Node only notices an over-running request when it sweeps its
-      // connections, every 30 s by default — which would make the timeout
-      // above nearly meaningless. Sweeping four times per window keeps the
-      // real bound within 1.25x the configured value.
-      connectionsCheckingInterval: Math.ceil(readTimeoutMs / 4),
-    },
-    (req, res) => {
-      void route(req, res, ctx).catch(() =>
-        send(res, errorResponse(500, 'INTERNAL_ERROR', 'An unexpected error occurred.')),
-      );
-    },
-  );
-
-  await new Promise<void>((resolve) => server.listen(opts.port, '127.0.0.1', resolve));
-
-  return {
-    url: `http://127.0.0.1:${opts.port}`,
-    async stop() {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-      await pool.end();
     },
   };
 }
@@ -573,31 +620,32 @@ function matchRoute(path: string): Operation | null {
 const methodOf = (op: Operation): string => (op.kind === 'discard-image' ? 'DELETE' : 'POST');
 
 function dispatch(
-  req: http.IncomingMessage,
+  request: Request,
+  clientIp: string,
   op: Operation,
-  raw: Buffer,
+  raw: Uint8Array,
   ctx: Ctx,
 ): Promise<HandlerResponse> {
   switch (op.kind) {
     case 'create-draft':
-      return createDraft(req, raw, ctx);
+      return createDraft(request, clientIp, raw, ctx);
     case 'open':
-      return openDraft(req, op.article_id, ctx);
+      return openDraft(request, clientIp, op.article_id, ctx);
     case 'publish':
-      return publish(req, op.article_id, raw, ctx);
+      return publish(request, clientIp, op.article_id, raw, ctx);
     case 'images':
-      return upload(req, op.article_id, raw, ctx);
+      return upload(request, clientIp, op.article_id, raw, ctx);
     case 'discard-image':
       return handleDiscardImage(
         {
           article_id: op.article_id,
           image_id: op.image_id,
-          authorization: req.headers.authorization ?? null,
+          authorization: request.headers.get('authorization'),
         },
         discardDeps(ctx),
       );
     case 'image-status':
-      return imageStatus(req, op.image_id, raw, ctx);
+      return imageStatus(request, op.image_id, raw, ctx);
   }
 }
 
@@ -606,23 +654,41 @@ function dispatch(
  * can trigger is answered from the request headers alone — a declared size over
  * the cap, then credentials — so no request can make this process buffer
  * megabytes before it is known to be allowed at all.
+ *
+ * Transport-agnostic: takes a Fetch API `Request`, the real wire method, and
+ * the caller's IP (each adapter extracts the IP its own way —
+ * `req.socket.remoteAddress` under Node, `info.remoteAddr` under Deno) and
+ * returns a `Response`. Neither adapter's transport type appears anywhere
+ * below this line.
+ *
+ * `method` is taken separately from `request.method` rather than read off the
+ * `Request` object: the WHATWG Fetch spec forbids constructing a `Request`
+ * with method `TRACE`/`TRACK`/`CONNECT` at all, but a real caller can still
+ * send one over the wire, and the 405 branch below must still answer it
+ * cleanly rather than the adapter throwing before `route()` is ever reached
+ * (contract fuzzing exercises exactly this). Every adapter's `Request` is
+ * therefore built with a spec-safe placeholder method when the real one is
+ * forbidden, and passes the genuine wire method here instead.
  */
-async function route(req: http.IncomingMessage, res: http.ServerResponse, ctx: Ctx): Promise<void> {
-  const path = (req.url ?? '/').split('?')[0] ?? '/';
+export async function route(
+  request: Request,
+  method: string,
+  clientIp: string,
+  ctx: Ctx,
+): Promise<Response> {
+  const path = new URL(request.url).pathname;
   const op = matchRoute(path);
   if (op === null) {
-    send(res, errorResponse(404, 'NOT_FOUND', 'No operation matches this path.'));
-    return;
+    return send(errorResponse(404, 'NOT_FOUND', 'No operation matches this path.'));
   }
-  const method = methodOf(op);
-  if (req.method !== method) {
-    res.setHeader('allow', method);
-    send(res, errorResponse(405, 'CONFLICT', `Only ${method} is supported on this path.`));
-    return;
+  const expectedMethod = methodOf(op);
+  if (method !== expectedMethod) {
+    return send(errorResponse(405, 'CONFLICT', `Only ${expectedMethod} is supported on this path.`), {
+      allow: expectedMethod,
+    });
   }
-  if (Number(req.headers['content-length'] ?? 0) > MAX_UPLOAD_BYTES) {
-    send(res, tooLarge());
-    return;
+  if (Number(request.headers.get('content-length') ?? 0) > MAX_UPLOAD_BYTES) {
+    return send(tooLarge());
   }
   // The callback carries a shared secret rather than a writer token (ADR-0004),
   // but it is checked here, from the headers alone, for the same reason the
@@ -631,15 +697,119 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse, ctx: C
   // megabytes. `handleImageStatusCallback` still checks it too — that is its
   // own contract, and its unit tests are the ones that pin it.
   if (op.kind === 'image-status') {
-    if (!verifySharedSecret(header(req, 'x-arsene-image-callback-secret'), ctx.opts.imageCallbackSecret ?? '')) {
-      send(res, errorResponse(401, 'UNAUTHORIZED', 'A valid image-callback secret is required.'));
-      return;
+    if (
+      !verifySharedSecret(
+        request.headers.get('x-arsene-image-callback-secret'),
+        ctx.opts.imageCallbackSecret ?? '',
+      )
+    ) {
+      return send(errorResponse(401, 'UNAUTHORIZED', 'A valid image-callback secret is required.'));
     }
-  } else if (!(await verify(bearerToken(req.headers.authorization ?? null), ctx)).valid) {
-    send(res, errorResponse(401, 'UNAUTHORIZED', 'A valid Supabase Auth bearer token is required.'));
-    return;
+  } else if (!(await verify(bearerToken(request.headers.get('authorization')), ctx)).valid) {
+    return send(errorResponse(401, 'UNAUTHORIZED', 'A valid Supabase Auth bearer token is required.'));
   }
 
-  const raw = await readBody(req);
-  send(res, raw === null ? tooLarge() : await dispatch(req, op, raw, ctx));
+  const raw = await readBody(request);
+  return send(raw === null ? tooLarge() : await dispatch(request, clientIp, op, raw, ctx));
+}
+
+/**
+ * Converts a live Node request into the `Request` object `route()` consumes,
+ * plus the real wire method (see `route()`'s comment on why the two travel
+ * separately). `Readable.toWeb` streams the body straight through —
+ * `readBody()` still enforces the size cap while reading, so nothing here
+ * buffers ahead of that check.
+ */
+function nodeRequestToWebRequest(req: http.IncomingMessage): { request: Request; method: string } {
+  const host = req.headers.host ?? 'localhost';
+  const url = `http://${host}${req.url ?? '/'}`;
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) {
+      for (const v of value) headers.append(key, v);
+    } else {
+      headers.set(key, value);
+    }
+  }
+  const method = req.method ?? 'GET';
+  // A `Request` may not carry a body for GET/HEAD — every route this server
+  // exposes is POST or DELETE, so this only ever excludes methods that would
+  // fail routing anyway (`route()`'s own 405).
+  const hasBody = method !== 'GET' && method !== 'HEAD';
+  const init = {
+    method,
+    headers,
+    ...(hasBody
+      ? { body: Readable.toWeb(req) as unknown as ReadableStream<Uint8Array>, duplex: 'half' }
+      : {}),
+  } as RequestInit;
+  try {
+    return { request: new Request(url, init), method };
+  } catch {
+    // TRACE/TRACK/CONNECT: forbidden by the Fetch spec's `Request`
+    // constructor. Fall back to a spec-safe placeholder so construction never
+    // throws; `route()` gets the real method above regardless.
+    return { request: new Request(url, { method: 'GET', headers }), method };
+  }
+}
+
+async function sendWebResponse(res: http.ServerResponse, response: Response): Promise<void> {
+  const headers: Record<string, string> = {};
+  response.headers.forEach((value, key) => {
+    headers[key] = value;
+  });
+  res.writeHead(response.status, headers);
+  res.end(Buffer.from(await response.arrayBuffer()));
+}
+
+/**
+ * Boots the router in this process, over a real Node HTTP server —
+ * `server.ts`/`serverMain.ts` boot it in its own, for the reason documented
+ * there. This is the Node dev/test adapter; `supabase/functions/arsene-api/index.ts`
+ * is the real Deno deploy target. Both call the same `route()`/`buildCtx()`.
+ */
+export async function startHttpServer(opts: ServerOptions): Promise<RunningServer> {
+  const pool = new pg.Pool({ connectionString: opts.databaseUrl, max: 4 });
+  const ctx = buildCtx(opts, pool);
+  // Dev/test-only: simulates ADR-0004's S3->Lambda->callback loop in-process.
+  // See `convert()`'s comment for why this is never wired in the Deno adapter.
+  ctx.shared.processUpload = (image_id, file) => convert(image_id, file, ctx);
+
+  const readTimeoutMs = opts.readTimeoutMs ?? DEFAULT_READ_TIMEOUT_MS;
+  const server = http.createServer(
+    {
+      requestTimeout: readTimeoutMs,
+      // Node only notices an over-running request when it sweeps its
+      // connections, every 30 s by default — which would make the timeout
+      // above nearly meaningless. Sweeping four times per window keeps the
+      // real bound within 1.25x the configured value.
+      connectionsCheckingInterval: Math.ceil(readTimeoutMs / 4),
+    },
+    (req, res) => {
+      void (async () => {
+        try {
+          const { request, method } = nodeRequestToWebRequest(req);
+          const clientIp = req.socket.remoteAddress ?? 'unknown';
+          const response = await route(request, method, clientIp, ctx);
+          await sendWebResponse(res, response);
+        } catch {
+          await sendWebResponse(
+            res,
+            send(errorResponse(500, 'INTERNAL_ERROR', 'An unexpected error occurred.')),
+          );
+        }
+      })();
+    },
+  );
+
+  await new Promise<void>((resolve) => server.listen(opts.port, '127.0.0.1', resolve));
+
+  return {
+    url: `http://127.0.0.1:${opts.port}`,
+    async stop() {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await pool.end();
+    },
+  };
 }

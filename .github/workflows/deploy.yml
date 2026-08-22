@@ -2,9 +2,8 @@ name: Deploy
 
 # Immutable-artifact discipline: deploy is triggered by a tag, never a moving
 # branch reference, so "which version is live" always has one stable answer.
-# See pdlc/arsene-cms/10-pipeline.v1.md for the full mechanism, what's been
-# rehearsed for real, and — importantly — the one thing this workflow does
-# NOT do yet (deploy the API server) and why.
+# See pdlc/arsene-cms/10-pipeline.v2.md for the full mechanism and what's been
+# rehearsed for real.
 on:
   push:
     tags:
@@ -30,6 +29,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # tests/e2e/deployedDenoRuntime.test.ts spawns a real `deno run` process
+      # (pdlc/arsene-cms/10-pipeline.v2.md §1) — this suite is genuinely a
+      # two-runtime gate now, not just a Node one.
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
       - run: npm ci
       - run: npm run setup:contract
       - run: npx tsc --noEmit
@@ -55,21 +60,26 @@ jobs:
           DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: ./scripts/deploy-migrations.sh
 
-  # BLOCKED — see pdlc/arsene-cms/10-pipeline.v1.md §2. The architecture
-  # (ADR-0001) chose Supabase Edge Functions (Deno, Fetch-API handler model)
-  # for the API server. The code as built runs on Node's http.createServer
-  # and relies on node:child_process — neither translates to that runtime.
-  # This job fails loudly and on purpose rather than silently omitting the
-  # step or pretending a deploy happened: there is currently no real target
-  # this half of the release can be deployed to. Remove this job (and this
-  # comment) once a hosting decision is made and the corresponding deploy
-  # step is built and rehearsed for real, per this same gate's standard.
+  # `src/api/router.ts` was ported to a transport-agnostic core plus two
+  # adapters (pdlc/arsene-cms/10-pipeline.v2.md §1) — this deploys the real
+  # Deno one, `supabase/functions/arsene-api/index.ts`, exactly as ADR-0001
+  # named. `supabase functions deploy` uploads the function's current code as
+  # a new, immutable version; nothing about "which commit is live" is ever
+  # ambiguous because this job only ever runs against a tagged commit (the
+  # same immutable-artifact discipline as the migration job above).
   deploy-api-server:
-    name: Deploy API server (BLOCKED — see 10-pipeline.v1.md §2)
+    name: Deploy API server (Supabase Edge Function)
     needs: test
     runs-on: ubuntu-latest
+    environment: production
     steps:
-      - name: Stop — no real deploy target exists yet
-        run: |
-          echo "::error::The API server's deploy target is undecided. See pdlc/arsene-cms/10-pipeline.v1.md §2 — the architecture chose Supabase Edge Functions (Deno), but this code is a Node http.createServer app using node:child_process, which does not run on that runtime. This is a finding for the architecture gate, not something to route around here."
-          exit 1
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Deploy arsene-api
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy arsene-api --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}

@@ -4,7 +4,7 @@ name: Rollback
 # without anyone having to work out a command: fill in the tag, click run.
 #   gh workflow run rollback.yml -f tag=v0.1.0
 #
-# What "rollback" means here, precisely (pdlc/arsene-cms/10-pipeline.v1.md §2):
+# What "rollback" means here, precisely (pdlc/arsene-cms/10-pipeline.v2.md §1):
 # every migration in db/migrations/ is expand-only (confirmed for all five —
 # 0001-0005 — by inspection and by rehearsal), so rolling back is a CODE
 # operation only. The database is never rolled back to an earlier schema —
@@ -36,25 +36,37 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
       - run: npm ci
       - run: npm run setup:contract
       - run: npx tsc --noEmit
       - name: Full suite against the rollback target
         run: npm test
 
-  # BLOCKED — see pdlc/arsene-cms/10-pipeline.v1.md §2, same reason as
-  # deploy.yml's deploy-api-server job. Redeploying a previous tag needs a
-  # real hosting target to redeploy to; none exists yet for this Node-shaped
-  # server on the Deno-shaped runtime the architecture chose.
+  # The versioned-redeploy rollback ADR-0001/02-architecture.v1.md §6 named
+  # for Supabase Edge Functions: `supabase functions deploy` re-uploads the
+  # rollback target tag's own checked-out code as the new active version.
+  # There is no separate "promote a previous deployment" API to call instead
+  # — redeploying the old tag's code *is* the mechanism, the same way the
+  # migration job's "rollback" above is "no job, because forward is safe".
   redeploy-api-server:
-    name: Redeploy API server at target tag (BLOCKED — see 10-pipeline.v1.md §2)
+    name: Redeploy API server at target tag (Supabase Edge Function)
     needs: verify-target
     runs-on: ubuntu-latest
+    environment: production
     steps:
-      - name: Stop — no real deploy target exists yet
-        run: |
-          echo "::error::Cannot redeploy: no hosting target is configured for the API server (see pdlc/arsene-cms/10-pipeline.v1.md §2). Once one exists, this job redeploys the given tag's build to it — that redeploy step should be measured for real and the number recorded in a future pipeline-gate pass, the same way scripts/deploy-migrations.sh's timing was."
-          exit 1
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Redeploy arsene-api at ${{ inputs.tag }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy arsene-api --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
 
   # No job for "roll back migrations" — see the header comment. Expand-only
   # discipline means there is nothing to run here; this is stated explicitly,
