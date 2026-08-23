@@ -253,7 +253,7 @@ describe('telemetry payload encoding (verify finding #7)', () => {
     ]);
     const res = await db.client.query(
       `select payload->>'started_at' as started_at
-         from telemetry_events
+         from arsene_telemetry_events
         where article_id = $1 and event_type = 'draft_started'`,
       [article],
     );

@@ -45,7 +45,7 @@
 export type WriterId = string;
 
 /**
- * One `telemetry_events` row. Spec §4 fixes the two event types and their
+ * One `arsene_telemetry_events` row. Spec §4 fixes the two event types and their
  * fields; `writer_id`/`article_id` are promoted to columns because the
  * time-to-publish metric joins on `article_id`.
  */
@@ -578,7 +578,7 @@ export async function loadRateLimit(): Promise<RateLimitModule> {
 export interface TelemetryModule {
   REQUIRED_EVENT_TYPES: readonly string[];
   /**
-   * Builds one telemetry_events row. Must reject an unknown event_type and
+   * Builds one arsene_telemetry_events row. Must reject an unknown event_type and
    * must reject a payload missing any field spec §4 requires.
    */
   buildTelemetryEvent(event_type: string, fields: Record<string, unknown>): TelemetryEvent;

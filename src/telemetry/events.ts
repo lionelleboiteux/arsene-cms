@@ -3,7 +3,7 @@
  * "Without them, the benefit of this build cannot be proven afterwards at any
  * price", so a row missing a required field is rejected at construction rather
  * than stored half-useless, and an unregistered event type never gets stored
- * at all (the same guard the `telemetry_events` check constraint applies).
+ * at all (the same guard the `arsene_telemetry_events` check constraint applies).
  */
 
 import { z } from 'zod';
@@ -50,7 +50,7 @@ export class UnknownTelemetryEventError extends Error {
   }
 }
 
-/** Builds one `telemetry_events` row, or throws. */
+/** Builds one `arsene_telemetry_events` row, or throws. */
 export function buildTelemetryEvent(
   event_type: string,
   fields: Record<string, unknown>,

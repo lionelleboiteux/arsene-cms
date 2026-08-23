@@ -109,7 +109,7 @@ describe('draft creation over its real route (verify finding #4)', () => {
       [body.article_id],
     );
     const events = await db.client.query(
-      `select event_type, writer_id from telemetry_events
+      `select event_type, writer_id from arsene_telemetry_events
         where article_id = $1 and event_type = 'draft_started'`,
       [body.article_id],
     );
@@ -160,7 +160,7 @@ describe('draft creation over its real route (verify finding #4)', () => {
     const rows = await db.client.query(
       `select a.title, a.writer_id as article_writer, e.writer_id as event_writer
          from articles a
-         join telemetry_events e
+         join arsene_telemetry_events e
            on e.article_id = a.id and e.event_type = 'draft_started'
         where a.id::text = any($1::text[])
         order by a.title`,

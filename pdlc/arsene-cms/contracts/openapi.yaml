@@ -70,7 +70,7 @@ info:
     category/league CRUD, lock **heartbeat refresh** by the writer who
     already holds it, alt-text edits after upload, and the asset library
     listing are all direct PostgREST operations against Postgres tables (e.g.
-    `articles`, `article_images`, `categories`, `leagues`) governed by
+    `articles`, `article_images`, `categories`, `arsene_leagues`) governed by
     Supabase's auto-generated PostgREST OpenAPI surface and RLS policies.
     That surface is not hand-authored and is not duplicated here; this file
     only covers the four operations above. Draft **creation** and
@@ -1009,7 +1009,7 @@ components:
           type: string
           description: >-
             The draft's initial league/competition taxonomy value (matched
-            or created against `leagues.name` — see `01-decisions.md` #2 on
+            or created against `arsene_leagues.name` — see `01-decisions.md` #2 on
             near-duplicate names not being merged automatically).
           example: Ligue 1
         type_name:

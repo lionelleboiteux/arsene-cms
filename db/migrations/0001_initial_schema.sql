@@ -27,7 +27,12 @@ create table writers (
   created_at   timestamptz not null default now()
 );
 
-create table leagues (
+-- `arsene_` prefix (unlike every other table here): this project shares its
+-- Supabase instance with the sibling pronos app (ADR-0002), which already
+-- owns an unrelated `leagues` table (fixture/match data, different columns
+-- entirely) in the same `public` schema — a bare `leagues` here would collide
+-- with it. `telemetry_events` below has the same problem for the same reason.
+create table arsene_leagues (
   id         uuid primary key default gen_random_uuid(),
   name       text not null unique,
   created_at timestamptz not null default now()
@@ -38,7 +43,7 @@ create table leagues (
 -- uniqueness key is the exact name, never a normalised one.
 create table categories (
   id         uuid primary key default gen_random_uuid(),
-  league_id  uuid not null references leagues (id),
+  league_id  uuid not null references arsene_leagues (id),
   name       text not null,
   created_at timestamptz not null default now(),
   unique (league_id, name)
@@ -49,7 +54,7 @@ create table articles (
   writer_id          uuid not null references writers (id),
   title              text not null,
   body_html          text not null default '',
-  league_id          uuid references leagues (id),
+  league_id          uuid references arsene_leagues (id),
   category_id        uuid references categories (id),
   status             text not null default 'draft' check (status in ('draft', 'published')),
   slug               text unique,
@@ -120,7 +125,7 @@ create table site_assets (
 -- Telemetry (spec §4)
 -- ---------------------------------------------------------------------------
 
-create table telemetry_events (
+create table arsene_telemetry_events (
   id          uuid primary key default gen_random_uuid(),
   event_type  text not null check (event_type in ('draft_started', 'article_published')),
   writer_id   uuid not null references writers (id),
@@ -130,30 +135,30 @@ create table telemetry_events (
   created_at  timestamptz not null default now()
 );
 
-create index telemetry_events_article_idx on telemetry_events (article_id, event_type);
+create index arsene_telemetry_events_article_idx on arsene_telemetry_events (article_id, event_type);
 
 -- A draft starts once. Without this, a crash-and-resume could reset the
 -- numerator of time-to-publish and hide the problem this build exists to fix.
-create unique index telemetry_events_one_draft_started
-  on telemetry_events (article_id)
+create unique index arsene_telemetry_events_one_draft_started
+  on arsene_telemetry_events (article_id)
   where event_type = 'draft_started';
 
 -- ---------------------------------------------------------------------------
 -- Row level security (02-architecture.v1.md §7)
 -- ---------------------------------------------------------------------------
 
-alter table writers          enable row level security;
-alter table leagues          enable row level security;
-alter table categories       enable row level security;
-alter table articles         enable row level security;
-alter table article_images   enable row level security;
-alter table pronos_entries   enable row level security;
-alter table site_assets      enable row level security;
-alter table telemetry_events enable row level security;
+alter table writers                 enable row level security;
+alter table arsene_leagues          enable row level security;
+alter table categories              enable row level security;
+alter table articles                enable row level security;
+alter table article_images          enable row level security;
+alter table pronos_entries          enable row level security;
+alter table site_assets             enable row level security;
+alter table arsene_telemetry_events enable row level security;
 
 -- Visitors: published content only. Drafts are invisible to `anon`.
 create policy anon_reads_writers on writers for select to anon using (true);
-create policy anon_reads_leagues on leagues for select to anon using (true);
+create policy anon_reads_leagues on arsene_leagues for select to anon using (true);
 create policy anon_reads_categories on categories for select to anon using (true);
 
 create policy anon_reads_published_articles on articles
@@ -172,7 +177,7 @@ create policy anon_reads_published_pronos on pronos_entries
 -- Writers: every writer may read and edit everything (no role hierarchy,
 -- no approval step — spec §2 and §8).
 create policy writers_read_writers on writers for select to authenticated using (true);
-create policy writers_manage_leagues on leagues for all to authenticated using (true) with check (true);
+create policy writers_manage_leagues on arsene_leagues for all to authenticated using (true) with check (true);
 create policy writers_manage_categories on categories for all to authenticated using (true) with check (true);
 create policy writers_manage_articles on articles for all to authenticated using (true) with check (true);
 create policy writers_manage_images on article_images for all to authenticated using (true) with check (true);
@@ -183,13 +188,13 @@ create policy writers_manage_assets on site_assets for all to authenticated usin
 -- Grants (NFR-TAMPER-01)
 -- ---------------------------------------------------------------------------
 
-grant select on writers, leagues, categories, articles, article_images, pronos_entries to anon;
+grant select on writers, arsene_leagues, categories, articles, article_images, pronos_entries to anon;
 
 grant select on
-  writers, leagues, categories, articles, article_images, pronos_entries, site_assets
+  writers, arsene_leagues, categories, articles, article_images, pronos_entries, site_assets
   to authenticated;
 
-grant insert on leagues, categories, site_assets to authenticated;
+grant insert on arsene_leagues, categories, site_assets to authenticated;
 grant insert, update, delete on pronos_entries to authenticated;
 
 -- Publish-controlled columns (status, slug, published_at, first_published_at,

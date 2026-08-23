@@ -67,7 +67,7 @@ const PUBLISHED_ARTICLES_SQL = `
          a.published_at,
          coalesce(a.first_published_at, a.published_at) as first_published_at
     from articles a
-    join leagues l on l.id = a.league_id
+    join arsene_leagues l on l.id = a.league_id
     join categories c on c.id = a.category_id
     join writers w on w.id = a.writer_id
    where a.status = 'published' and a.slug is not null

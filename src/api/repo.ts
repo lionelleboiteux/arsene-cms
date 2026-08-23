@@ -28,7 +28,7 @@ const ARTICLE_SQL = `
                      'match_kickoff_at', p.match_kickoff_at))
                     from pronos_entries p where p.article_id = a.id), '[]'::json) as pronos_entries
     from articles a
-    left join leagues l on l.id = a.league_id
+    left join arsene_leagues l on l.id = a.league_id
     left join categories c on c.id = a.category_id
    where a.id = $1
 `;
@@ -39,7 +39,7 @@ const ARTICLE_SQL = `
  * a second set of quotes (verify finding #7).
  */
 const ENSURE_DRAFT_STARTED_SQL = `
-  insert into telemetry_events (event_type, writer_id, article_id, occurred_at, payload)
+  insert into arsene_telemetry_events (event_type, writer_id, article_id, occurred_at, payload)
   select 'draft_started', a.writer_id, a.id, a.created_at,
          jsonb_build_object('started_at', to_jsonb(a.created_at))
     from articles a
@@ -336,7 +336,7 @@ export function createRepo(pool: pg.Pool) {
       for (const event of events) {
         const id = event.payload.telemetry_event_id;
         await pool.query(
-          `insert into telemetry_events (id, event_type, writer_id, article_id, occurred_at, payload)
+          `insert into arsene_telemetry_events (id, event_type, writer_id, article_id, occurred_at, payload)
            values (coalesce($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6::jsonb)
            on conflict do nothing`,
           [
@@ -368,8 +368,8 @@ export function createRepo(pool: pg.Pool) {
       const res = await pool.query<{ published_at: string; minutes: number }>(
         `select p.occurred_at as published_at,
                 extract(epoch from (p.occurred_at - d.occurred_at)) / 60.0 as minutes
-           from telemetry_events d
-           join telemetry_events p
+           from arsene_telemetry_events d
+           join arsene_telemetry_events p
              on p.article_id = d.article_id
             and p.event_type = 'article_published'
           where d.event_type = 'draft_started'
@@ -391,7 +391,7 @@ export function createRepo(pool: pg.Pool) {
     async getActiveWriterCount(sinceDaysAgo: number): Promise<number> {
       const res = await pool.query<{ count: string }>(
         `select count(distinct writer_id) as count
-           from telemetry_events
+           from arsene_telemetry_events
           where event_type = 'draft_started'
             and occurred_at >= now() - ($1 || ' days')::interval`,
         [sinceDaysAgo],

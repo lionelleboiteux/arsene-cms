@@ -33,8 +33,8 @@ export function readMigrationFiles(): string[] {
   if (!existsSync(MIGRATIONS_DIR)) {
     throw new Error(
       `No production migrations found: ${MIGRATIONS_DIR} does not exist. ` +
-        `Arsène's Postgres schema (articles, article_images, categories, leagues, ` +
-        `pronos_entries, site_assets, telemetry_events + their RLS policies) must be ` +
+        `Arsène's Postgres schema (articles, article_images, categories, arsene_leagues, ` +
+        `pronos_entries, site_assets, arsene_telemetry_events + their RLS policies) must be ` +
         `delivered as expand-only migrations in db/migrations/*.sql ` +
         `(02-architecture.v1.md §6 "Migration safety: expand-only").`,
     );
@@ -101,7 +101,7 @@ export async function seedCategory(
   type_name: string,
 ): Promise<CategoryIds> {
   const league = await client.query(
-    `insert into leagues (name) values ($1)
+    `insert into arsene_leagues (name) values ($1)
        on conflict (name) do update set name = excluded.name
      returning id`,
     [league_name],
@@ -196,7 +196,7 @@ export async function insertTelemetry(
   },
 ): Promise<void> {
   await client.query(
-    `insert into telemetry_events (event_type, writer_id, article_id, occurred_at, payload)
+    `insert into arsene_telemetry_events (event_type, writer_id, article_id, occurred_at, payload)
      values ($1, $2, $3, $4, $5::jsonb)`,
     [o.event_type, o.writer_id, o.article_id, o.occurred_at, JSON.stringify(o.payload ?? {})],
   );

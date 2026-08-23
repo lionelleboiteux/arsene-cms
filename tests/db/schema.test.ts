@@ -135,7 +135,7 @@ describe('taxonomy storage', () => {
     await seedCategory(client, 'ligue1', 'Pronos');
 
     const res = await client.query(
-      `select name from leagues where lower(replace(name, ' ', '')) = 'ligue1' order by name`,
+      `select name from arsene_leagues where lower(replace(name, ' ', '')) = 'ligue1' order by name`,
     );
 
     expect(res.rows.map((r) => r.name)).toEqual(['Ligue 1', 'ligue1']);
@@ -212,12 +212,12 @@ describe('pronos fixture reference (ADR-0002)', () => {
   });
 });
 
-describe('telemetry_events store', () => {
+describe('arsene_telemetry_events store', () => {
   const REQUIRED_EVENT_TYPES = ['draft_started', 'article_published'];
 
   it.each(
     REQUIRED_EVENT_TYPES.map(
-      (t) => [`TELEMETRY-${t}: the telemetry_events store accepts this required event type`, t] as const,
+      (t) => [`TELEMETRY-${t}: the arsene_telemetry_events store accepts this required event type`, t] as const,
     ),
   )('%s', async (_title, event_type) => {
     const { client } = db();
@@ -230,7 +230,7 @@ describe('telemetry_events store', () => {
     });
 
     const res = await client.query(
-      `insert into telemetry_events (event_type, writer_id, article_id, occurred_at, payload)
+      `insert into arsene_telemetry_events (event_type, writer_id, article_id, occurred_at, payload)
        values ($1, $2, $3, now(), '{}'::jsonb) returning event_type`,
       [event_type, writer, article],
     );
@@ -250,7 +250,7 @@ describe('telemetry_events store', () => {
 
     const sqlstate = await captureSqlError(() =>
       client.query(
-        `insert into telemetry_events (event_type, writer_id, article_id, occurred_at, payload)
+        `insert into arsene_telemetry_events (event_type, writer_id, article_id, occurred_at, payload)
          values ('article_previewed', $1, $2, now(), '{}'::jsonb)`,
         [writer, article],
       ),
@@ -286,8 +286,8 @@ describe('telemetry_events store', () => {
     const res = await client.query(
       `select p.writer_id,
               extract(epoch from (p.occurred_at - d.occurred_at)) / 60 as minutes
-         from telemetry_events d
-         join telemetry_events p on p.article_id = d.article_id
+         from arsene_telemetry_events d
+         join arsene_telemetry_events p on p.article_id = d.article_id
         where d.article_id = $1
           and d.event_type = 'draft_started'
           and p.event_type = 'article_published'`,
@@ -304,8 +304,8 @@ describe('write protection and disclosure', () => {
       `select c.relname, c.relrowsecurity
          from pg_class c join pg_namespace n on n.oid = c.relnamespace
         where n.nspname = 'public'
-          and c.relname in ('articles', 'article_images', 'categories', 'leagues',
-                            'pronos_entries', 'site_assets', 'telemetry_events', 'writers')
+          and c.relname in ('articles', 'article_images', 'categories', 'arsene_leagues',
+                            'pronos_entries', 'site_assets', 'arsene_telemetry_events', 'writers')
         order by c.relname`,
     );
 
@@ -458,14 +458,14 @@ describe('write protection and disclosure', () => {
          from information_schema.columns
         where table_schema = 'public'
           and (table_name, column_name) in
-              (('articles', 'writer_id'), ('articles', 'updated_at'), ('telemetry_events', 'writer_id'))
+              (('articles', 'writer_id'), ('articles', 'updated_at'), ('arsene_telemetry_events', 'writer_id'))
         order by table_name, column_name`,
     );
 
     expect(res.rows.map((r) => [r.table_name, r.column_name, r.is_nullable])).toEqual([
+      ['arsene_telemetry_events', 'writer_id', 'NO'],
       ['articles', 'updated_at', 'NO'],
       ['articles', 'writer_id', 'NO'],
-      ['telemetry_events', 'writer_id', 'NO'],
     ]);
   });
 });

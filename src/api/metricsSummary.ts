@@ -14,7 +14,7 @@
  * a draft in the last 30 days, never a list — the dashboard needs to know
  * adoption isn't dropping, not who is or isn't drafting.
  *
- * `telemetry_events` has row level security enabled with no policies
+ * `arsene_telemetry_events` has row level security enabled with no policies
  * (db/migrations/0001_initial_schema.sql), so `anon`/`authenticated` cannot
  * read it at all through Supabase's own Data API — this app doesn't use that
  * API anywhere else either (the public site renders from a direct Postgres

@@ -125,8 +125,8 @@ describe('end-to-end publishing journey', () => {
     );
     const metric = await db.client.query(
       `select extract(epoch from (p.occurred_at - d.occurred_at)) >= 0 as computable
-         from telemetry_events d
-         join telemetry_events p on p.article_id = d.article_id
+         from arsene_telemetry_events d
+         join arsene_telemetry_events p on p.article_id = d.article_id
         where d.article_id = $1 and d.event_type = 'draft_started'
           and p.event_type = 'article_published'`,
       [articleId],
@@ -163,7 +163,7 @@ describe('end-to-end publishing journey', () => {
 
     const article = await db.client.query(`select status from articles where id = $1`, [articleId]);
     const events = await db.client.query(
-      `select event_type from telemetry_events where article_id = $1 and event_type = 'article_published'`,
+      `select event_type from arsene_telemetry_events where article_id = $1 and event_type = 'article_published'`,
       [articleId],
     );
 
@@ -207,7 +207,7 @@ describe('end-to-end publishing journey', () => {
       [articleId],
     );
     const events = await db.client.query(
-      `select payload->>'is_republish' as is_republish from telemetry_events
+      `select payload->>'is_republish' as is_republish from arsene_telemetry_events
         where article_id = $1 and event_type = 'article_published'`,
       [articleId],
     );
