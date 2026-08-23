@@ -10,7 +10,8 @@
     "test:unit": "vitest run tests/unit tests/telemetry",
     "test:db": "vitest run tests/db",
     "test:contract": "vitest run tests/contract",
-    "test:e2e": "vitest run tests/e2e"
+    "test:e2e": "vitest run tests/e2e",
+    "create-writer": "node --experimental-strip-types scripts/create-writer.ts"
   },
   "devDependencies": {
     "@stoplight/prism-cli": "^5.14.2",

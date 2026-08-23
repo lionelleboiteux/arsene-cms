@@ -22,6 +22,12 @@ npm test               # Runs full test suite (227 tests across unit/db/contract
 npx tsc --noEmit       # Type-check
 ```
 
+Provision a writer account (Supabase Auth user + matching `writers` row — see `scripts/create-writer.ts`):
+```bash
+SUPABASE_URL=https://<ref>.supabase.co SUPABASE_SERVICE_ROLE_KEY=... DATABASE_URL=postgresql://... \
+  npm run create-writer -- writer@example.com "Jane Doe"
+```
+
 ## API Surface
 
 Four main operations are exposed as Supabase Edge Function endpoints (server-side atomic, require JWT writer auth):

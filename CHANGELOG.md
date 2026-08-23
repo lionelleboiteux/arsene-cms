@@ -4,6 +4,10 @@ All notable changes to Arsène CMS will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Writer provisioning script:** there was no way to actually create a writer — `writers` is a real table (`db/migrations/0001_initial_schema.sql`) and `auth.ts` already treats a JWT's `sub` claim as `writers.id`, but nothing ever created either half. `scripts/create-writer.ts` creates the Supabase Auth user via the Admin REST API (or finds the existing one if the email is already registered, so it's safe to re-run), upserts the matching `writers` row with that same id, and prints a one-time sign-in link so the writer doesn't need project SMTP configured to get in. `npm run create-writer -- <email> "<display name>"`.
+
 ## [0.2.2] — 2026-08-23
 
 ### Fixed
