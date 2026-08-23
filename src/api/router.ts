@@ -72,17 +72,29 @@ const FOREIGN_KEY_VIOLATION = '23503';
  */
 export const DEFAULT_READ_TIMEOUT_MS = 8_000;
 
+/**
+ * Postgres text columns cannot store a NUL byte at all — `error: invalid
+ * byte sequence for encoding "UTF8": 0x00` (code `22021`) — so any
+ * free-text field that reaches a `text`/`varchar` column needs this guard
+ * before it gets anywhere near a query. Found by Schemathesis fuzzing
+ * `POST /v1/articles` with a title containing a NUL byte: nothing rejected it
+ * before `repo.ts`'s insert, so Postgres's own rejection surfaced as an
+ * uncaught `500` instead of a clean `400`.
+ */
+const noNulByte = (value: string): boolean => !value.includes('\u0000');
+const NO_NUL_MESSAGE = 'must not contain a NUL byte';
+
 const PublishBody = z.object({
-  meta_title: z.string().min(1).max(70).optional(),
-  meta_description: z.string().min(1).max(160).optional(),
+  meta_title: z.string().min(1).max(70).refine(noNulByte, NO_NUL_MESSAGE).optional(),
+  meta_description: z.string().min(1).max(160).refine(noNulByte, NO_NUL_MESSAGE).optional(),
 });
 
 /** Every field optional, and no minimum length: the contract defaults an empty
  * title rather than refusing it. */
 const CreateDraftBody = z.object({
-  title: z.string().optional(),
-  league_name: z.string().optional(),
-  type_name: z.string().optional(),
+  title: z.string().refine(noNulByte, NO_NUL_MESSAGE).optional(),
+  league_name: z.string().refine(noNulByte, NO_NUL_MESSAGE).optional(),
+  type_name: z.string().refine(noNulByte, NO_NUL_MESSAGE).optional(),
 });
 
 /**

@@ -704,6 +704,15 @@
       "model": "sonnet",
       "artifacts": ["APPROVAL.md", "RELEASE-EVIDENCE.md", "CHANGELOG.md"],
       "summary": "Product owner approved v0.2.0 in chat after a compact release summary (what ships, verification results, baseline, rollback + measured times, one-way doors, residual risks). Re-checking rollback at this gate surfaced a real finding: v0.1.0 predates the Deno port and cannot run on the real Edge Function target, so it is not a safe rollback destination - this is the first real deploy ever attempted, so there is no previously-deployed good version to fall back to. Re-cut the tag as v0.2.0 against current HEAD rather than reuse the stale v0.1.0 (which pointed two features behind). No new migrations, no new one-way doors. NOT DEPLOYED: no git remote is configured, so deploy.yml cannot run yet - recorded plainly in RELEASE-EVIDENCE.md rather than claimed done. Approval and full record in APPROVAL.md."
+    },
+    {
+      "at": "2026-08-23T08:30:46Z",
+      "event": "finding",
+      "gate": "release",
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "sonnet",
+      "artifacts": ["src/api/router.ts", "tests/e2e/nulByteValidation.test.ts", "CHANGELOG.md", "RELEASE-EVIDENCE.md"],
+      "summary": "Real deploy attempted after the release-gate approval: git remote created (github.com/lionelleboiteux/arsene-cms), v0.1.0/v0.2.0 tags pushed, SUPABASE_ACCESS_TOKEN/PROJECT_REF/DB_URL secrets added. First real workflow_dispatch run (32627039526): Edge Function deploy SUCCEEDED for the first time ever; Postgres migration deploy failed on a malformed connection string (unencoded special character in the password shifted psql's URI parsing) - fixed by re-setting the secret. Second run (32627585524): the test gate itself failed for a real reason, not flakiness - Schemathesis fuzzing POST /v1/articles against the exact code being deployed found a title containing a NUL byte crashed the request with a raw 500. Root cause: Postgres text columns reject any value containing a NUL byte (error 22021), and nothing validated against it before repo.ts's insert. Fixed in src/api/router.ts by rejecting a NUL byte in every free-text field CreateDraftBody/PublishBody accept, at the same Zod-validation layer that already rejects other malformed input. Confirmed against a real server (500 to 400); regression-tested (tests/e2e/nulByteValidation.test.ts, 4 new tests); full suite re-run three extra times with fresh random fuzz seeds, all green; 248/248 total. Recorded as v0.2.1 in CHANGELOG.md. Current live state: the Edge Function is deployed running v0.2.0's code (with the bug); migrations were never applied to the real project; v0.2.1 is fixed locally but not yet tagged, pushed or deployed. Full detail in RELEASE-EVIDENCE.md."
     }
   ]
 }

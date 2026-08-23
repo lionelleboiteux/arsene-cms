@@ -4,6 +4,12 @@ All notable changes to Arsène CMS will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-08-23
+
+### Fixed
+
+- **NUL byte crashes create-draft/publish (High):** Schemathesis fuzzing `POST /v1/articles` against the real deployed `v0.2.0` (GitHub Actions run 32627585524, the first real production deploy) found a title containing a NUL byte crashed the request with a raw `500 Internal Server Error`. Root cause: Postgres text columns cannot store a NUL byte at all (`error: invalid byte sequence for encoding "UTF8": 0x00`, code `22021`), and nothing validated against it before `repo.ts`'s insert. Fixed by rejecting a NUL byte in every free-text field `CreateDraftBody`/`PublishBody` accept (`title`, `league_name`, `type_name`, `meta_title`, `meta_description`), at the same Zod-validation layer that already rejects other malformed input, before any query. Confirmed fixed against a real server; regression-tested in `tests/e2e/nulByteValidation.test.ts` (4 new tests). Full suite: 248/248.
+
 ## [0.2.0] — 2026-08-22
 
 ### Added
