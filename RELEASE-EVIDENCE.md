@@ -1,9 +1,9 @@
-# Release evidence — v0.2.1
+# Release evidence — v0.2.2
 
-**Status: DEPLOYED. Both halves — Postgres migrations and the Edge
-Function — succeeded for real, against a dedicated Supabase project,
-running the NUL-byte fix. This is the first fully successful production
-deploy this project has made.**
+**Status: DEPLOYED and — pending the Edge Function's own runtime secrets
+being set — reachable. Both halves succeeded for real against the
+dedicated Supabase project, running the NUL-byte fix (v0.2.1) and the
+`verify_jwt` platform-gateway fix (v0.2.2).**
 
 | Field | Value |
 |---|---|
@@ -11,10 +11,25 @@ deploy this project has made.**
 | Approved at | 2026-08-22T21:05:00Z |
 | Decision | approve — "Approve v0.2.0", no scoping |
 | Repo | `https://github.com/lionelleboiteux/arsene-cms` |
-| Deployed tag | `v0.2.1` |
-| Commit SHA | `9e86619ff2b86772a73ad7a836901caa299a7927` |
-| Successful run | `https://github.com/lionelleboiteux/arsene-cms/actions/runs/32639503102` |
+| Deployed tag | `v0.2.2` |
+| Commit SHA | `4b1805e7946fd6ee7c0aefc1c98bb0aa19d9188d` |
+| Successful runs | `.../actions/runs/32639503102` (v0.2.1), `.../actions/runs/32641043824` (v0.2.2) |
 | Approval record | `APPROVAL.md`, sha256 `abf11641c6940c9100f1de131e1b7c511613067c640ebf51039c7c1a0dc745c6` |
+
+## v0.2.2 — the `verify_jwt` finding
+
+While working out how to actually reach the deployed function, found that
+Supabase's platform-level `verify_jwt` gateway check (on by default)
+inspects `Authorization` on every request before the function runs and
+requires a genuine Supabase JWT there. `POST /internal/images/{id}/status`
+and `GET /internal/metrics/time-to-publish` never send an `Authorization`
+header at all — they use their own shared-secret headers — so the platform
+would have rejected both with a `401` before `router.ts`'s own auth logic
+ever ran. Fixed with `supabase/config.toml`'s `[functions.arsene-api]
+verify_jwt = false` (Supabase's documented pattern for this exact case).
+Deployed in run `32641043824` (2026-08-23T13:00Z): test suite 2m8s, Edge
+Function deploy 26s, migrations 27s (safe no-op re-apply — schema already
+matched). See `CHANGELOG.md`'s `[0.2.2]` entry for full detail.
 
 ## Deploy attempts — the full sequence, in order
 
@@ -78,10 +93,10 @@ deploy this project has made.**
 
 ## Current live state
 
-- **Edge Function `arsene-api`**: deployed and running `v0.2.1`'s code
-  (with the NUL-byte fix) on the new, dedicated project.
-- **Migrations**: all five applied for real, for the first time, against
-  the real dedicated database.
+- **Edge Function `arsene-api`**: deployed and running `v0.2.2`'s code
+  (NUL-byte fix + `verify_jwt` disabled) on the new, dedicated project.
+- **Migrations**: all five applied for real against the real dedicated
+  database.
 - **Not yet done**: the Edge Function's own runtime secrets
   (`SUPABASE_JWT_SECRET`, `IMAGE_CALLBACK_SECRET`, `CDN_ORIGIN`,
   `WRITER_TOKEN`, `WRITER_ID`, `DASHBOARD_READ_SECRET`) have not been set

@@ -731,6 +731,15 @@
       "model": "sonnet",
       "artifacts": ["supabase/config.toml", "CHANGELOG.md"],
       "summary": "Found while working out how to actually reach the deployed function: Supabase's platform-level verify_jwt gateway check (on by default) inspects Authorization on every request before the function runs and requires a genuine Supabase JWT there. POST /internal/images/{id}/status and GET /internal/metrics/time-to-publish never send an Authorization header at all (they use their own shared-secret headers), so the platform would reject both with a 401 before router.ts's own already-correct auth logic ever ran. Not catchable by any existing test - neither the Node adapter nor local `deno run` has this extra gateway layer, it only exists on the real managed platform, the same class of gap the whole Deno-port effort exists to catch. Fixed by adding supabase/config.toml with [functions.arsene-api] verify_jwt = false, Supabase's documented pattern for functions mixing JWT and non-JWT callers - confirmed via current docs this setting applies to real deploys, not just local `functions serve`. router.ts's own route() already gates every request regardless, so this removes a redundant, actively-breaking platform check without removing any real protection. Recorded as v0.2.2 in CHANGELOG.md. Requires a redeploy to take effect on the already-deployed function."
+    },
+    {
+      "at": "2026-08-23T13:04:20Z",
+      "event": "pass",
+      "gate": "release",
+      "actor": "lionel.leboiteux@gmail.com",
+      "model": "sonnet",
+      "artifacts": ["RELEASE-EVIDENCE.md"],
+      "summary": "v0.2.2 tagged, pushed, and deployed successfully (GitHub Actions run 32641043824, 2026-08-23T13:00Z): test suite 2m8s, Edge Function deploy 26s, migrations 27s (safe no-op re-apply, schema already matched). The deployed function now has verify_jwt disabled and can genuinely be reached, pending its own runtime secrets being set via `supabase secrets set` (SUPABASE_JWT_SECRET, IMAGE_CALLBACK_SECRET, CDN_ORIGIN, WRITER_TOKEN, WRITER_ID, DASHBOARD_READ_SECRET) - still not automated by CI, by design. RELEASE-EVIDENCE.md updated with the full v0.2.1/v0.2.2 deploy record."
     }
   ]
 }
