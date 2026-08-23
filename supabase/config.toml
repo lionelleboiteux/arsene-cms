@@ -1,0 +1,14 @@
+# Only what deployment actually needs. `arsene-api` mixes writer-JWT auth
+# (create-draft, publish, upload, open, discard) with two shared-secret
+# routes that never send an Authorization header at all
+# (POST /internal/images/{id}/status, GET /internal/metrics/time-to-publish
+# — see src/api/router.ts's route()). Supabase's platform-level verify_jwt
+# check (on by default) inspects Authorization on every request before the
+# function ever runs and requires a genuine Supabase JWT there, which would
+# reject both shared-secret routes with a 401 before our own auth logic —
+# already correct and already verified — ever gets a chance to run.
+# Disabling it here hands request authorization entirely to router.ts's own
+# verify()/verifySharedSecret(), exactly Supabase's documented pattern for
+# functions that mix JWT and non-JWT callers (docs: "Authorization headers").
+[functions.arsene-api]
+verify_jwt = false

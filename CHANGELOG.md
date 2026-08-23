@@ -4,6 +4,12 @@ All notable changes to Arsène CMS will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-08-23
+
+### Fixed
+
+- **Platform-level `verify_jwt` blocks both shared-secret routes (High):** discovered while working out how to actually reach the deployed `v0.2.1` function. Supabase Edge Functions have a platform gateway check (`verify_jwt`, on by default) that inspects `Authorization` on every request *before* the function runs, and requires a genuine Supabase JWT there. `POST /internal/images/{id}/status` (the Lambda callback) and `GET /internal/metrics/time-to-publish` (the dashboard) never send an `Authorization` header at all — they use their own shared-secret headers — so the platform would reject both with a `401` before `router.ts`'s own (already-correct) auth logic ever ran. Not catchable by any existing test: neither the Node adapter nor a local `deno run` process has this extra gateway layer — it only exists in the real managed platform. Fixed by adding `supabase/config.toml` with `[functions.arsene-api] verify_jwt = false`, Supabase's documented pattern for functions that mix JWT and non-JWT callers — router.ts's own `route()` already gates every request regardless (JWT for writer routes, shared secret for the other two), so this removes a redundant, actively-breaking platform check without removing any real protection.
+
 ## [0.2.1] — 2026-08-23
 
 ### Fixed
