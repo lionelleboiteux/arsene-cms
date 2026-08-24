@@ -24,6 +24,13 @@ create table if not exists _migrations_applied (
   filename   text primary key,
   applied_at timestamptz not null default now()
 );
+
+-- Never leave this deploy-tooling-internal table reachable via the Data API:
+-- Supabase's default public-schema grants hand anon/authenticated
+-- read/write on any new table, and this one is created outside any tracked
+-- migration, so nothing else enables RLS on it. Idempotent, safe to re-run.
+alter table _migrations_applied enable row level security;
+revoke all on _migrations_applied from anon, authenticated;
 SQL
 
 for f in "$MIGRATIONS_DIR"/*.sql; do

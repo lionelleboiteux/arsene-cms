@@ -4,3 +4,4 @@ coverage/
 .schemathesis/
 .hypothesis/
 .DS_Store
+supabase/.temp/
