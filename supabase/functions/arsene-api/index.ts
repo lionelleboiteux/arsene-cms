@@ -22,6 +22,7 @@ import {
   DEFAULT_READ_TIMEOUT_MS,
   type ServerOptions,
 } from '../../../src/api/router.ts';
+import { createS3ObjectStore } from '../../../src/api/s3Storage.ts';
 
 function requireEnv(name: string): string {
   const value = Deno.env.get(name);
@@ -98,7 +99,32 @@ const opts: ServerOptions = {
 // inspection of src/api/repo.ts, never a named prepared statement), which is
 // what transaction pooling requires to be safe.
 const pool = new pg.Pool({ connectionString: opts.databaseUrl, max: 4 });
-const ctx = buildCtx(opts, pool);
+
+/**
+ * ADR-0004: the real originals landing zone is S3, not the in-memory
+ * stand-in `buildCtx` falls back to. Optional — a deployment with no AWS
+ * secrets configured still boots (uploads simply never leave `processing`,
+ * exactly today's pre-pipeline behavior), rather than refusing to start over
+ * a feature that isn't this project's fail-closed concern (JWKS's is, above).
+ */
+const awsAccessKeyId = Deno.env.get('AWS_ACCESS_KEY_ID');
+const awsSecretAccessKey = Deno.env.get('AWS_SECRET_ACCESS_KEY');
+const awsRegion = Deno.env.get('AWS_REGION');
+const s3Bucket = Deno.env.get('S3_BUCKET');
+const s3Storage =
+  awsAccessKeyId !== undefined &&
+  awsSecretAccessKey !== undefined &&
+  awsRegion !== undefined &&
+  s3Bucket !== undefined
+    ? createS3ObjectStore({
+        accessKeyId: awsAccessKeyId,
+        secretAccessKey: awsSecretAccessKey,
+        region: awsRegion,
+        bucket: s3Bucket,
+      })
+    : undefined;
+
+const ctx = buildCtx(opts, pool, { storage: s3Storage });
 
 const readTimeoutMs = opts.readTimeoutMs ?? DEFAULT_READ_TIMEOUT_MS;
 
@@ -185,7 +211,8 @@ Deno.serve({ ...(port === undefined ? {} : { port }) }, async (rawReq, info) => 
   });
   try {
     return await Promise.race([route(req, req.method, clientIp, ctx), timeout]);
-  } catch {
+  } catch (err) {
+    console.error('unhandled error in route():', err);
     return internalErrorResponse();
   } finally {
     if (timeoutId !== undefined) clearTimeout(timeoutId);

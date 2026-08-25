@@ -255,12 +255,18 @@ function createObjectStore(cdnOrigin: string) {
 }
 
 const observability = {
+  // `console.error`, not `process.stderr.write`: Supabase's Deno edge
+  // runtime does not reliably implement `process.stderr` (Node's stream
+  // compat surface), where a write can throw — and since this call sits
+  // between a successful DB write and returning `200` in
+  // `handleImageStatusCallback`, that throw was silently turning working
+  // callbacks into `500 INTERNAL_ERROR`. `console.error` is a real Deno
+  // primitive and is what production logs actually capture.
   record: (entry: {
     event: string;
     outcome: 'success' | 'failure';
     details?: Record<string, unknown>;
-  }) =>
-    void process.stderr.write(`${JSON.stringify({ level: 'info', ...entry })}\n`),
+  }) => console.error(JSON.stringify({ level: 'info', ...entry })),
 };
 
 function publishDeps(ctx: Ctx): PublishDeps {
@@ -676,7 +682,14 @@ function buildJwks(opts: ServerOptions): JWTVerifyGetKey | undefined {
   return undefined;
 }
 
-export function buildCtx(opts: ServerOptions, pool: pg.Pool): Ctx {
+/**
+ * `overrides.storage` lets the Deno entrypoint supply ADR-0004's real
+ * S3-backed store (`src/api/s3Storage.ts`) when AWS credentials are
+ * configured, without `router.ts` itself importing anything AWS-specific —
+ * every existing caller (the Node adapter, the whole test suite) passes no
+ * override and keeps today's in-memory stand-in unchanged.
+ */
+export function buildCtx(opts: ServerOptions, pool: pg.Pool, overrides?: { storage?: Shared['storage'] }): Ctx {
   // db/migrations/0002: the server-side seams write rows `authenticated` is
   // deliberately not granted (draft creation, publish-controlled columns).
   pool.on('connect', (client: pg.PoolClient) => void client.query('set role service_role'));
@@ -690,7 +703,7 @@ export function buildCtx(opts: ServerOptions, pool: pg.Pool): Ctx {
         window_ms: 60_000,
       }),
       idempotency: createIdempotencyStore(),
-      storage: createObjectStore(cdnOrigin),
+      storage: overrides?.storage ?? createObjectStore(cdnOrigin),
       imageStatusBody: imageStatusBody(cdnOrigin),
       jwks: buildJwks(opts),
     },

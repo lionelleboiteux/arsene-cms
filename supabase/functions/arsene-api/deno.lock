@@ -4,6 +4,7 @@
     "npm:@jsquash/jpeg@1.6.0": "1.6.0",
     "npm:@jsquash/png@3.1.1": "3.1.1",
     "npm:@jsquash/webp@1.5.0": "1.5.0",
+    "npm:aws4fetch@1.0.20": "1.0.20",
     "npm:jose@6.2.8": "6.2.8",
     "npm:pg@8.22.0": "8.22.0",
     "npm:sanitize-html@2.17.6": "2.17.6",
@@ -21,6 +22,9 @@
       "dependencies": [
         "wasm-feature-detect"
       ]
+    },
+    "aws4fetch@1.0.20": {
+      "integrity": "sha512-/djoAN709iY65ETD6LKCtyyEI04XIBP5xVvfmNxsEP0uJB5tyaGBztSryRr4HqMStr9R06PisQE7m9zDTXKu6g=="
     },
     "dayjs@1.11.23": {
       "integrity": "sha512-QDTCU0M0MxR3hQfnlDJfwekQiaanm1ubOD231u73WBckQ/fsamwRLiE2GBz6D3a/xF1NgfiDLJjXBa1hYOYTtQ=="
@@ -193,6 +197,7 @@
       "npm:@jsquash/jpeg@1.6.0",
       "npm:@jsquash/png@3.1.1",
       "npm:@jsquash/webp@1.5.0",
+      "npm:aws4fetch@1.0.20",
       "npm:jose@6.2.8",
       "npm:pg@8.22.0",
       "npm:sanitize-html@2.17.6",

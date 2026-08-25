@@ -80,7 +80,12 @@ export async function verifySupabaseJwt(
  */
 export function verifySharedSecret(provided: string | null, expected: string): boolean {
   if (provided === null || expected.length === 0) return false;
-  const a = Buffer.from(provided, 'utf8');
-  const b = Buffer.from(expected, 'utf8');
+  // `TextEncoder`, not `Buffer.from`: `Buffer` is a Node global that Deno's
+  // edge runtime does not provide, and this function runs on every callback
+  // that supplies a secret — every such call threw `ReferenceError: Buffer
+  // is not defined`, turning a correct callback into a silent `500` (the
+  // catch-all in `index.ts` swallowed it with no logging).
+  const a = new TextEncoder().encode(provided);
+  const b = new TextEncoder().encode(expected);
   return a.length === b.length && timingSafeEqual(a, b);
 }

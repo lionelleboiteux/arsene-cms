@@ -1,0 +1,16 @@
+{
+  "name": "arsene-image-convert",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "ADR-0004's Lambda: S3-triggered image conversion + status callback. Deployed as a container image (Dockerfile in this directory), not via npm.",
+  "dependencies": {
+    "sharp": "0.35.3",
+    "libheif-js": "^1.19.8",
+    "@aws-sdk/client-s3": "^3.1118.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.2"
+  }
+}
