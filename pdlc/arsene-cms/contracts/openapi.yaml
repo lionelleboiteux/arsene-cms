@@ -4,7 +4,7 @@ info:
   title: Arsène CMS API
   version: 1.0.0
   summary: >-
-    The four Arsène operations that need server-side atomicity and therefore
+    The five Arsène operations that need server-side atomicity and therefore
     exist as real Supabase Edge Function endpoints, instead of a direct
     PostgREST read/write against a table. Everything else in the writer
     editor (draft field edits/autosave, taxonomy/categories, the asset
@@ -12,7 +12,7 @@ info:
     under RLS and is deliberately NOT part of this contract — see "What is
     out of scope" below.
   description: |
-    ## What is in scope, and why only four endpoints
+    ## What is in scope, and why only five endpoints
 
     Arsène's writer editor is a single-page app that talks to Postgres
     directly via PostgREST/RLS for nearly everything: autosaving a draft's
@@ -31,7 +31,7 @@ info:
     uniqueness (AC-06) was always decided. Re-tagging an *existing* image as
     the cover has no route yet — see `04-green-evidence.v7.md` §6.1.
 
-    Four operations are different, because they have side effects that must
+    Five operations are different, because they have side effects that must
     happen exactly once, atomically, from the server, and cannot be expressed
     as a single-row PostgREST write:
 
@@ -46,13 +46,19 @@ info:
       metric with nothing to detect it.
     - `POST /v1/articles/{articleId}/open` — reopens an existing draft by
       attempting to take its edit lock, or reports who currently holds it
-      (AC-05). The lock decision (free/stale vs. actively held) and the
-      draft's current content must be resolved together, from the server, in
-      one atomic compare-and-swap against `locked_by`/`locked_at`
-      (`adr/0003-draft-locking-mechanism.md`) — a client cannot safely
-      perform "check who holds it, then maybe take it, then maybe read the
-      content" as three separate PostgREST calls without a race between two
-      writers opening the same draft at once.
+      (AC-05); also the **heartbeat refresh** call the writer already holding
+      the lock makes roughly every 20s to keep it current
+      (`adr/0003-draft-locking-mechanism.md`). The lock decision (free/stale
+      vs. actively held) and the draft's current content must be resolved
+      together, from the server, in one atomic compare-and-swap against
+      `locked_by`/`locked_at` — a client cannot safely perform "check who
+      holds it, then maybe take it, then maybe read the content" as three
+      separate PostgREST calls without a race between two writers opening the
+      same draft at once, and cannot refresh the lock via PostgREST at all:
+      `db/migrations/0003_lock_columns_service_role_only.sql` revoked
+      `update (locked_by, locked_at) on articles` from `authenticated`, after
+      a direct PostgREST heartbeat was found to let any writer steal or hold
+      open a colleague's lock.
     - `POST /v1/articles/{articleId}/publish` — validates publishability,
       generates the slug/JSON-LD/sitemap entry, flips the article live, and
       **synchronously** records the `article_published` telemetry event
@@ -63,17 +69,23 @@ info:
       the one place that must guarantee "no image reaches a writer-visible
       state without going through compression/format-conversion", which a
       raw PostgREST insert into a storage-backed table cannot guarantee.
+    - `DELETE /v1/articles/{articleId}/images/{imageId}` — discards an image
+      row that will never be usable (a failed conversion, a superseded
+      retry). Must run as the same atomic compare-and-swap `POST .../open`
+      does: `db/migrations/0004_image_role_service_role_only.sql` revoked
+      `update (role) on article_images` from `authenticated` specifically
+      because that grant was a way around this check, so there is no
+      PostgREST path left that could do this safely.
 
     ## What is out of scope
 
     Draft **field** edits (title/body/meta autosave after creation),
-    category/league CRUD, lock **heartbeat refresh** by the writer who
-    already holds it, alt-text edits after upload, and the asset library
-    listing are all direct PostgREST operations against Postgres tables (e.g.
+    category/league CRUD, and the asset library listing are direct PostgREST
+    operations against Postgres tables (e.g.
     `articles`, `article_images`, `categories`, `arsene_leagues`) governed by
     Supabase's auto-generated PostgREST OpenAPI surface and RLS policies.
     That surface is not hand-authored and is not duplicated here; this file
-    only covers the four operations above. Draft **creation** and
+    only covers the five operations above. Draft **creation** and
     **reopening** (taking the lock) are in scope precisely because of the
     atomicity argument above — everything else about a draft, once it exists
     and its lock is held, is not.
@@ -682,13 +694,9 @@ paths:
         way to clear such a row: `article_images.role` is not writable
         through PostgREST (see "Cover uniqueness" below).
 
-        > **Contract status.** This operation is implemented and exercised
-        > end to end (`AC-08-recovery-09/10/11`, `NFR-RECOVERY-INVARIANT-01`)
-        > but is documented here in prose rather than as its own path item.
-        > Declaring it as an operation requires a consumer test to exist for
-        > it (`CONTRACT-COVERAGE` in tests/contract/consumer.prism.test.ts)
-        > and a client method to call — both of which are test-suite work for
-        > a red gate, not a green one. See `04-green-evidence.v8.md` §7.
+        Declared below as its own path item
+        (`DELETE /v1/articles/{articleId}/images/{imageId}`); see that
+        operation for the full contract.
 
         **Cover uniqueness.** Uploading with `role: cover` demotes any
         image that was previously this article's cover to `role: body` in
@@ -831,6 +839,98 @@ paths:
         default:
           $ref: '#/components/responses/UnexpectedError'
 
+  /v1/articles/{articleId}/images/{imageId}:
+    delete:
+      operationId: discardImage
+      tags: [Images]
+      summary: Discard an image that will never be usable — AC-08's recovery path
+      description: |
+        The writer's way out of an image row their article can never be
+        published with: a conversion that failed for good, or an upload
+        superseded by a retry. Removes the row outright.
+
+        **The one restriction, and why it is the whole safety property.**
+        Only a row that is not `status: ready` may be discarded — refused
+        `409 CONFLICT` otherwise. A `ready` row is, by definition, one the
+        article can currently be published with (its live cover, or a
+        `ready` body image its `body_html` embeds), so this can never
+        become a way around `POST .../publish`'s `IMAGE_NOT_READY`. It is
+        also the only writer-facing way to clear such a row at all:
+        `article_images.role` is not writable through PostgREST (see
+        "Cover uniqueness" on the upload operation above).
+
+        **Draft locking (AC-05) is enforced here too**, exactly as on
+        upload and publish: a lock held by another writer and not yet
+        stale refuses this with `409 DRAFT_LOCKED` and deletes nothing.
+      security:
+        - supabaseWriterAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ArticleIdPathParam'
+        - $ref: '#/components/parameters/ImageIdPathParam'
+      responses:
+        '200':
+          description: The image row was deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscardImageResult'
+              example:
+                article_id: a1a1a1a1-0000-4a2b-9c3d-000000000001
+                image_id: d4d4d4d4-0000-4a2b-9c3d-dddddddddddd
+                discarded: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: >-
+            The referenced article, or the referenced image on that
+            article, does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: No image of this article was found matching that id.
+                  details:
+                    article_id: a1a1a1a1-0000-4a2b-9c3d-000000000001
+                    image_id: 00000000-0000-0000-0000-000000000000
+                  request_id: 9f0a1b2c-3d4e-4f5a-8b9c-7d8e9f0a1b2c
+        '409':
+          description: >-
+            Either the draft is currently locked by another writer
+            (`DRAFT_LOCKED`), or the image is `status: ready` and cannot be
+            discarded (`CONFLICT`) — the article may still be published
+            with it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                draftLocked:
+                  summary: another writer currently holds the edit lock and their lock has not gone stale
+                  value:
+                    error:
+                      code: DRAFT_LOCKED
+                      message: This draft is currently locked for editing by another writer.
+                      details:
+                        locked_by_writer_id: e5e5e5e5-0000-4a2b-9c3d-eeeeeeeeeeee
+                        locked_by_display_name: Marie D.
+                      request_id: 5e5e5e5e-5555-4a2b-9c3d-eeeeeeeeeeee
+                stillReady:
+                  summary: the image is ready and the article may still be published with it
+                  value:
+                    error:
+                      code: CONFLICT
+                      message: 'A ready image cannot be discarded: the article may still be published with it.'
+                      details:
+                        image_id: d4d4d4d4-0000-4a2b-9c3d-dddddddddddd
+                        role: cover
+                        status: ready
+                      request_id: 6f6f6f6f-6666-4a2b-9c3d-eeeeeeeeeeee
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+
 components:
 
   securitySchemes:
@@ -854,6 +954,16 @@ components:
         format: uuid
       description: An `articles.id` value.
       example: a1a1a1a1-0000-4a2b-9c3d-000000000001
+
+    ImageIdPathParam:
+      name: imageId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: An `article_images.id` value.
+      example: d4d4d4d4-0000-4a2b-9c3d-dddddddddddd
 
     IdempotencyKeyHeader:
       name: Idempotency-Key
@@ -1300,3 +1410,20 @@ components:
         created_at:
           type: string
           format: date-time
+
+    DiscardImageResult:
+      type: object
+      required:
+        - article_id
+        - image_id
+        - discarded
+      properties:
+        article_id:
+          type: string
+          format: uuid
+        image_id:
+          type: string
+          format: uuid
+        discarded:
+          type: boolean
+          enum: [true]

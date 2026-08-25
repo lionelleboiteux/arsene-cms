@@ -1,8 +1,9 @@
 /**
- * The editor SPA's typed client for Arsène's own two Edge Function endpoints.
- * Errors are surfaced as a branchable `code` (contracts/openapi.yaml, "Error
- * envelope"): the editor renders COVER_IMAGE_REQUIRED, DRAFT_LOCKED and
- * IMAGE_NOT_READY very differently, and must never branch on wording.
+ * The editor SPA's typed client for Arsène's own five Edge Function
+ * endpoints. Errors are surfaced as a branchable `code`
+ * (contracts/openapi.yaml, "Error envelope"): the editor renders
+ * COVER_IMAGE_REQUIRED, DRAFT_LOCKED and IMAGE_NOT_READY very differently,
+ * and must never branch on wording.
  */
 
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -34,6 +35,7 @@ export type ArseneClient = {
     role: 'cover' | 'body';
     file: { filename: string; content_type: string; bytes: Uint8Array };
   }): Promise<unknown>;
+  discardImage(args: { articleId: string; imageId: string }): Promise<unknown>;
 };
 
 function errorFrom(status: number, payload: unknown): ArseneApiError {
@@ -115,6 +117,14 @@ export function createArseneClient(opts: {
         body: form,
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
+      return parse(response);
+    },
+
+    async discardImage(args) {
+      const response = await fetch(
+        `${opts.baseUrl}/v1/articles/${args.articleId}/images/${args.imageId}`,
+        { method: 'DELETE', headers: headers({}), signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) },
+      );
       return parse(response);
     },
   };

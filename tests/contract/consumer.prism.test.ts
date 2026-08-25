@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadApiClient } from '../support/seams.js';
 import { contractOperations, validateAgainstSchema } from '../support/openapi.js';
 import { startPrismMock, type PrismMock } from '../support/prism.js';
-import { ARTICLE_ID } from '../support/fixtures.js';
+import { ARTICLE_ID, BODY_IMAGE_ID } from '../support/fixtures.js';
 import { validJpeg } from '../support/imageFixtures.js';
 
 /**
@@ -62,6 +62,11 @@ const CONSUMER_CASES: ConsumerCase[] = [
         role: 'cover',
         file: { filename: 'psg-om-cover.jpg', content_type: 'image/jpeg', bytes: validJpeg() },
       }),
+  },
+  {
+    operationId: 'discardImage',
+    responseSchema: 'DiscardImageResult',
+    call: (c) => c.discardImage({ articleId: ARTICLE_ID, imageId: BODY_IMAGE_ID }),
   },
 ];
 
