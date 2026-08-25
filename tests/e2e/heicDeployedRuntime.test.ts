@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadApiServer } from '../support/seams.js';
 import { freePort } from '../support/prism.js';
 import { REPO_ROOT, seedArticle, seedWriter, startTestDatabase, type TestDatabase } from '../support/pg.js';
-import { TEST_JWT_SECRET, bearer, mintSupabaseJwt } from '../support/jwt.js';
+import { TEST_JWKS_JSON, bearer, mintSupabaseJwt } from '../support/jwt.js';
 import { REAL_HEIC } from '../support/imageFixtures.js';
 
 /**
@@ -103,7 +103,7 @@ beforeAll(async () => {
       databaseUrl: db.connectionUri,
       writerToken: 'unused-legacy-token',
       writerId,
-      jwtSecret: TEST_JWT_SECRET,
+      jwksJson: TEST_JWKS_JSON,
     });
     started = {
       db,

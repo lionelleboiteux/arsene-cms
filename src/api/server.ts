@@ -25,10 +25,11 @@ export type RunningServer = { url: string; stop(): Promise<void> };
 export type SpawnedServerOptions = Omit<ServerOptions, 'readTimeoutMs'> & {
   /**
    * M3 (05-verification.v2.md): running on the legacy static token, with no
-   * JWT secret at all, stays a legitimate mode — but it has to be *chosen*.
-   * This flag is that choice, forwarded to the child as
+   * JWKS at all, stays a legitimate mode — but it has to be *chosen*. This
+   * flag is that choice, forwarded to the child as
    * `ALLOW_LEGACY_STATIC_AUTH=true`; without it, `serverMain.ts` refuses to
-   * start when `SUPABASE_JWT_SECRET` is missing or empty.
+   * start when both `SUPABASE_JWKS_URL` and `ARSENE_TEST_JWKS_JSON` are
+   * missing or empty.
    */
   allowLegacyAuth?: boolean;
 };
@@ -41,15 +42,16 @@ export async function startServer(opts: SpawnedServerOptions): Promise<RunningSe
       stdio: ['ignore', 'pipe', 'pipe'],
       // Secrets travel via env, never argv (serverMain.ts's own rule — they
       // must not show up in a process listing), but they still have to reach
-      // the child: `opts.jwtSecret`/`opts.imageCallbackSecret`, when the
+      // the child: `opts.jwksJson`/`opts.imageCallbackSecret`, when the
       // caller sets them, override whatever the parent process's own
       // environment already has under these two names. Previously this
-      // spawn call forwarded neither, so `ServerOptions.jwtSecret` was
-      // silently a no-op through this entry point (found and fixed at the
+      // spawn call forwarded neither of the JWT options, so `ServerOptions.jwtSecret`
+      // was silently a no-op through this entry point (found and fixed at the
       // second verify pass — see tests/e2e/deployedAuthBoundary.test.ts).
       env: {
         ...process.env,
-        ...(opts.jwtSecret !== undefined ? { SUPABASE_JWT_SECRET: opts.jwtSecret } : {}),
+        ...(opts.jwksUrl !== undefined ? { SUPABASE_JWKS_URL: opts.jwksUrl } : {}),
+        ...(opts.jwksJson !== undefined ? { ARSENE_TEST_JWKS_JSON: opts.jwksJson } : {}),
         ...(opts.imageCallbackSecret !== undefined
           ? { IMAGE_CALLBACK_SECRET: opts.imageCallbackSecret }
           : {}),

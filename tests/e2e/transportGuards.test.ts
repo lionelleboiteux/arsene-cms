@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadApiRouter } from '../support/seams.js';
 import { freePort } from '../support/prism.js';
 import { ARTICLE_ID, COVER_IMAGE_ID } from '../support/fixtures.js';
+import { TEST_JWKS_JSON } from '../support/jwt.js';
 
 /**
  * VERIFY-02 — `05-verification.v1.md` H2: `router.ts`'s `readBody()` buffers
@@ -146,7 +147,7 @@ beforeAll(async () => {
         databaseUrl: 'postgresql://unused:unused@127.0.0.1:1/unused',
         writerToken: 'unused-static-token',
         writerId: '00000000-0000-4000-8000-000000000000',
-        jwtSecret: 'arsene-test-only-jwt-secret-0123456789abcdefghijklmnopqrstuvwxyz',
+        jwksJson: TEST_JWKS_JSON,
         imageCallbackSecret: 'lambda-callback-shared-secret-not-the-writer-token',
       }),
     };
@@ -429,7 +430,7 @@ describe('stalled request bodies (verify v2 §5)', () => {
       databaseUrl: 'postgresql://unused:unused@127.0.0.1:1/unused',
       writerToken: 'unused-static-token',
       writerId: '00000000-0000-4000-8000-000000000000',
-      jwtSecret: 'arsene-test-only-jwt-secret-0123456789abcdefghijklmnopqrstuvwxyz',
+      jwksJson: TEST_JWKS_JSON,
       imageCallbackSecret: CALLBACK_SECRET,
       // Test-only override: the mechanism is what is under test here, not the
       // product's chosen number (NFR-DOS-03b pins that).

@@ -21,7 +21,9 @@ export type DenoServerOptions = {
   databaseUrl: string;
   writerToken: string;
   writerId: string;
-  jwtSecret?: string;
+  /** The local, no-network JWKS this suite always uses (no real project URL
+   *  to reach from a `deno run` rehearsal process). */
+  jwksJson?: string;
   jwtIssuer?: string;
   imageCallbackSecret?: string;
   cdnOrigin?: string;
@@ -50,7 +52,7 @@ export async function startDenoServer(opts: DenoServerOptions): Promise<RunningD
         DATABASE_URL: opts.databaseUrl,
         WRITER_TOKEN: opts.writerToken,
         WRITER_ID: opts.writerId,
-        ...(opts.jwtSecret !== undefined ? { SUPABASE_JWT_SECRET: opts.jwtSecret } : {}),
+        ...(opts.jwksJson !== undefined ? { ARSENE_TEST_JWKS_JSON: opts.jwksJson } : {}),
         ...(opts.jwtIssuer !== undefined ? { SUPABASE_JWT_ISSUER: opts.jwtIssuer } : {}),
         ...(opts.imageCallbackSecret !== undefined
           ? { IMAGE_CALLBACK_SECRET: opts.imageCallbackSecret }

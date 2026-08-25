@@ -23,6 +23,7 @@ import http from 'node:http';
 import { Readable } from 'node:stream';
 import pg from 'pg';
 import { z } from 'zod';
+import { createLocalJWKSet, createRemoteJWKSet, type JWTVerifyGetKey } from 'jose';
 import { MAX_UPLOAD_BYTES } from '../images/optimize.ts';
 import { createTelemetrySink } from '../telemetry/events.ts';
 import { verifySupabaseJwt, verifySharedSecret } from './auth.ts';
@@ -135,6 +136,47 @@ function send(response: HandlerResponse, extraHeaders?: Record<string, string>):
   return new Response(JSON.stringify(response.body), {
     status: response.status,
     headers: { 'content-type': 'application/json', ...extraHeaders },
+  });
+}
+
+/**
+ * CORS-01: the editor SPA is served from its own origin (arsene.fantasy-coach.fr,
+ * or local Vite dev), a different one from this Edge Function — and until this
+ * fix, nothing here ever set an `Access-Control-*` header, so every browser
+ * call was silently blocked before `route()` ever ran. `CORS_ALLOWED_ORIGINS`
+ * is a comma-separated env var (the only shape an env var can take); this
+ * turns it into the allow-list `route()` checks requests against.
+ */
+export function parseCorsOrigins(raw: string | undefined): string[] {
+  return (raw ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+}
+
+/**
+ * Reflects the exact requesting origin back only when it is allow-listed —
+ * never `*`. This is a bearer-token API: a wildcard would grant every origin
+ * on the internet read access to an authenticated response.
+ */
+function corsHeaders(request: Request, allowed: string[]): Record<string, string> {
+  const origin = request.headers.get('origin');
+  if (origin === null || !allowed.includes(origin)) return {};
+  return { 'access-control-allow-origin': origin, vary: 'origin' };
+}
+
+/** A preflight only ever needs the grant plus what the real request may send —
+ *  the same op-derived method `route()` itself enforces on the real request. */
+function preflightResponse(op: Operation, cors: Record<string, string>): Response {
+  if (Object.keys(cors).length === 0) return new Response(null, { status: 204 });
+  return new Response(null, {
+    status: 204,
+    headers: {
+      ...cors,
+      'access-control-allow-methods': `${methodOf(op)}, OPTIONS`,
+      'access-control-allow-headers': 'authorization, content-type, idempotency-key',
+      'access-control-max-age': '86400',
+    },
   });
 }
 
@@ -270,12 +312,12 @@ function draftDeps(ctx: Ctx): CreateDraftDeps {
  * Verify finding #3: the credential is the caller's own Supabase Auth JWT, so
  * `writer_id` comes from the token rather than from one process-wide constant.
  * The static `writerToken` is a fallback **only** for deployments configured
- * without a JWT secret at all (and the pre-JWT end-to-end suite). Once
- * `jwtSecret` is configured, it is the only accepted credential — a request
- * whose JWT fails to verify is rejected outright, never re-tried against the
- * static secret. A shared secret that still worked in parallel with real
- * per-writer verification would leave finding #3 open in substance while
- * closed in appearance.
+ * with no JWKS at all (and the pre-JWT end-to-end suite). Once a JWKS is
+ * configured (`jwksJson`/`jwksUrl`), it is the only accepted credential — a
+ * request whose JWT fails to verify is rejected outright, never re-tried
+ * against the static secret. A shared secret that still worked in parallel
+ * with real per-writer verification would leave finding #3 open in substance
+ * while closed in appearance.
  *
  * H-V3-01 (05-verification.v3.md §2): a signature-valid token says who is
  * calling, not that they may write. `service_role` (db/migrations/0002) bypasses
@@ -291,9 +333,9 @@ async function verify(
   ctx: Ctx,
 ): Promise<{ valid: boolean; writer_id?: string }> {
   const { opts } = ctx;
-  if (opts.jwtSecret !== undefined) {
+  if (ctx.shared.jwks !== undefined) {
     const jwt = await verifySupabaseJwt(token, {
-      secret: opts.jwtSecret,
+      jwks: ctx.shared.jwks,
       now: new Date(),
       ...(opts.jwtIssuer === undefined ? {} : { issuer: opts.jwtIssuer }),
     });
@@ -546,11 +588,24 @@ const metricsSummary = (request: Request, ctx: Ctx): Promise<HandlerResponse> =>
 export type ServerOptions = {
   port: number;
   databaseUrl: string;
-  /** Legacy static credential; superseded by `jwtSecret` (verify finding #3). */
+  /** Legacy static credential; superseded by a configured JWKS (verify finding #3). */
   writerToken: string;
   writerId: string;
-  /** The Supabase project's HS256 JWT secret. */
-  jwtSecret?: string;
+  /**
+   * The Supabase project's JWKS well-known URL
+   * (`https://<ref>.supabase.co/auth/v1/.well-known/jwks.json`) — real
+   * deployments verify against this (CORS-01: the real project has no legacy
+   * `SUPABASE_JWT_SECRET`, only Signing Keys). `jwksJson` below takes
+   * precedence when both are set.
+   */
+  jwksUrl?: string;
+  /**
+   * A JWKS as a raw JSON string (`{"keys":[...]}`) rather than a URL — for
+   * tests, which need no network fetch and must stay serializable across
+   * `server.ts`'s spawned-process boundary (env vars carry strings, never a
+   * `jose` key-getter function).
+   */
+  jwksJson?: string;
   /**
    * The Supabase project's token issuer, `https://<ref>.supabase.co/auth/v1`.
    * Contains the project ref, so it is configuration and not a constant; `iss`
@@ -575,6 +630,9 @@ export type ServerOptions = {
   /** How long a request may take to deliver its body; `DEFAULT_READ_TIMEOUT_MS`
    * when unset. */
   readTimeoutMs?: number;
+  /** CORS-01: origins allowed to call this deployment from a browser (e.g. the
+   *  editor SPA's own origin). Never a wildcard — this is a bearer-token API. */
+  corsOrigins?: string[];
 };
 
 type Shared = {
@@ -583,6 +641,14 @@ type Shared = {
   storage: ReturnType<typeof createObjectStore>;
   /** Built once, because the origin it validates against is per-deployment. */
   imageStatusBody: ReturnType<typeof imageStatusBody>;
+  /**
+   * Built once from `opts.jwksJson`/`opts.jwksUrl` — both `createLocalJWKSet`
+   * and `createRemoteJWKSet` are meant to be constructed a single time and
+   * reused (the remote one caches and rate-limits its own refetches).
+   * `undefined` when a deployment configures neither, i.e. runs on the
+   * legacy static writer token only.
+   */
+  jwks?: JWTVerifyGetKey;
   /** See `convert()`'s comment. Set only by `startHttpServer` (Node dev/test);
    * left unset by the Deno production adapter. */
   processUpload?: (
@@ -600,6 +666,16 @@ export type Ctx = { opts: ServerOptions; repo: Repo; shared: Shared };
  * entry point (`supabase/functions/arsene-api/index.ts`) — so the two never
  * drift on how a deployment's options become the dependencies `route()` uses.
  */
+function buildJwks(opts: ServerOptions): JWTVerifyGetKey | undefined {
+  if (opts.jwksJson !== undefined) {
+    return createLocalJWKSet(JSON.parse(opts.jwksJson) as { keys: Record<string, unknown>[] });
+  }
+  if (opts.jwksUrl !== undefined) {
+    return createRemoteJWKSet(new URL(opts.jwksUrl));
+  }
+  return undefined;
+}
+
 export function buildCtx(opts: ServerOptions, pool: pg.Pool): Ctx {
   // db/migrations/0002: the server-side seams write rows `authenticated` is
   // deliberately not granted (draft creation, publish-controlled columns).
@@ -616,6 +692,7 @@ export function buildCtx(opts: ServerOptions, pool: pg.Pool): Ctx {
       idempotency: createIdempotencyStore(),
       storage: createObjectStore(cdnOrigin),
       imageStatusBody: imageStatusBody(cdnOrigin),
+      jwks: buildJwks(opts),
     },
   };
 }
@@ -717,14 +794,19 @@ export async function route(
   if (op === null) {
     return send(errorResponse(404, 'NOT_FOUND', 'No operation matches this path.'));
   }
+  const cors = corsHeaders(request, ctx.opts.corsOrigins ?? []);
+  if (method === 'OPTIONS') {
+    return preflightResponse(op, cors);
+  }
   const expectedMethod = methodOf(op);
   if (method !== expectedMethod) {
     return send(errorResponse(405, 'CONFLICT', `Only ${expectedMethod} is supported on this path.`), {
       allow: expectedMethod,
+      ...cors,
     });
   }
   if (Number(request.headers.get('content-length') ?? 0) > MAX_UPLOAD_BYTES) {
-    return send(tooLarge());
+    return send(tooLarge(), cors);
   }
   // The callback carries a shared secret rather than a writer token (ADR-0004),
   // but it is checked here, from the headers alone, for the same reason the
@@ -739,20 +821,20 @@ export async function route(
         ctx.opts.imageCallbackSecret ?? '',
       )
     ) {
-      return send(errorResponse(401, 'UNAUTHORIZED', 'A valid image-callback secret is required.'));
+      return send(errorResponse(401, 'UNAUTHORIZED', 'A valid image-callback secret is required.'), cors);
     }
   } else if (op.kind === 'metrics-summary') {
     if (
       !verifySharedSecret(request.headers.get('x-arsene-dashboard-secret'), ctx.opts.dashboardReadSecret ?? '')
     ) {
-      return send(errorResponse(401, 'UNAUTHORIZED', 'A valid dashboard secret is required.'));
+      return send(errorResponse(401, 'UNAUTHORIZED', 'A valid dashboard secret is required.'), cors);
     }
   } else if (!(await verify(bearerToken(request.headers.get('authorization')), ctx)).valid) {
-    return send(errorResponse(401, 'UNAUTHORIZED', 'A valid Supabase Auth bearer token is required.'));
+    return send(errorResponse(401, 'UNAUTHORIZED', 'A valid Supabase Auth bearer token is required.'), cors);
   }
 
   const raw = await readBody(request);
-  return send(raw === null ? tooLarge() : await dispatch(request, clientIp, op, raw, ctx));
+  return send(raw === null ? tooLarge() : await dispatch(request, clientIp, op, raw, ctx), cors);
 }
 
 /**

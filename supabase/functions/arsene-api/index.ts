@@ -15,7 +15,13 @@
  */
 
 import pg from 'pg';
-import { buildCtx, route, DEFAULT_READ_TIMEOUT_MS, type ServerOptions } from '../../../src/api/router.ts';
+import {
+  buildCtx,
+  route,
+  parseCorsOrigins,
+  DEFAULT_READ_TIMEOUT_MS,
+  type ServerOptions,
+} from '../../../src/api/router.ts';
 
 function requireEnv(name: string): string {
   const value = Deno.env.get(name);
@@ -30,14 +36,24 @@ function requireEnv(name: string): string {
  * this is the only other place `ServerOptions` is built from environment, so
  * it is the place that must refuse to start silently in legacy mode rather
  * than quietly attribute every request to one static writer.
+ *
+ * CORS-01: `SUPABASE_URL` (always auto-injected for every Edge Function),
+ * not a manually-set secret, is what real deployments verify JWTs against
+ * now — its well-known JWKS endpoint, under Supabase's Signing Keys system.
+ * `ARSENE_TEST_JWKS_JSON` is the local-rehearsal-only escape hatch
+ * (`tests/support/denoServer.ts`), for a `deno run` process with no real
+ * project URL to reach.
  */
-const jwtSecret = Deno.env.get('SUPABASE_JWT_SECRET');
-if ((jwtSecret === undefined || jwtSecret === '') && Deno.env.get('ALLOW_LEGACY_STATIC_AUTH') !== 'true') {
+const supabaseUrl = Deno.env.get('SUPABASE_URL');
+const testJwksJson = Deno.env.get('ARSENE_TEST_JWKS_JSON');
+const hasJwksConfig =
+  (supabaseUrl !== undefined && supabaseUrl !== '') || (testJwksJson !== undefined && testJwksJson !== '');
+if (!hasJwksConfig && Deno.env.get('ALLOW_LEGACY_STATIC_AUTH') !== 'true') {
   throw new Error(
-    'refusing to start: SUPABASE_JWT_SECRET is missing or empty, so every request would be ' +
+    'refusing to start: SUPABASE_URL is missing or empty, so every request would be ' +
       "authenticated by the shared static writer token instead of the caller's own Supabase Auth " +
-      'JWT. Set SUPABASE_JWT_SECRET, or set ALLOW_LEGACY_STATIC_AUTH=true to choose the legacy ' +
-      'static-token mode deliberately.',
+      'JWT verified against the project JWKS. Set SUPABASE_URL (normally automatic), or set ' +
+      'ALLOW_LEGACY_STATIC_AUTH=true to choose the legacy static-token mode deliberately.',
   );
 }
 
@@ -60,11 +76,16 @@ const opts: ServerOptions = {
   databaseUrl: resolveDatabaseUrl(),
   writerToken: Deno.env.get('WRITER_TOKEN') ?? '',
   writerId: Deno.env.get('WRITER_ID') ?? '',
-  jwtSecret,
+  jwksJson: testJwksJson,
+  jwksUrl:
+    testJwksJson !== undefined || supabaseUrl === undefined
+      ? undefined
+      : `${supabaseUrl}/auth/v1/.well-known/jwks.json`,
   jwtIssuer: Deno.env.get('SUPABASE_JWT_ISSUER'),
   imageCallbackSecret: Deno.env.get('IMAGE_CALLBACK_SECRET'),
   cdnOrigin: Deno.env.get('CDN_ORIGIN'),
   dashboardReadSecret: Deno.env.get('DASHBOARD_READ_SECRET'),
+  corsOrigins: parseCorsOrigins(Deno.env.get('CORS_ALLOWED_ORIGINS')),
   readTimeoutMs: (() => {
     const raw = Deno.env.get('READ_TIMEOUT_MS');
     return raw === undefined ? undefined : Number(raw);
@@ -127,7 +148,36 @@ function internalErrorResponse(): Response {
 // explicitly, since the platform default (8000) is a common local collision.
 const port = Deno.env.get('PORT') === undefined ? undefined : Number(Deno.env.get('PORT'));
 
-Deno.serve({ ...(port === undefined ? {} : { port }) }, async (req, info) => {
+/**
+ * DENO-07: confirmed empirically against the real deployed project — the
+ * platform's gateway strips `/functions/v1` but leaves the function's own
+ * name in the path this handler sees (Supabase's routing guide: paths
+ * "must be prefixed by function name"; its Hono example sets
+ * `basePath('/<function-name>')` for exactly this reason). `route()` and
+ * every local test harness (`startHttpServer`, local `deno run`) only ever
+ * see the bare `/v1/...` shape, so this went uncaught until a request was
+ * actually driven through the real gateway. Stripped here, once, at the one
+ * adapter that faces the real platform — `route()` itself stays
+ * transport-agnostic, same as `nodeRequestToWebRequest`'s job on the Node
+ * side.
+ */
+const FUNCTION_NAME = 'arsene-api';
+
+function stripFunctionNamePrefix(req: Request): Request {
+  const url = new URL(req.url);
+  const prefix = `/${FUNCTION_NAME}`;
+  if (url.pathname !== prefix && !url.pathname.startsWith(`${prefix}/`)) return req;
+  url.pathname = url.pathname.slice(prefix.length) || '/';
+  const hasBody = req.method !== 'GET' && req.method !== 'HEAD';
+  return new Request(url.href, {
+    method: req.method,
+    headers: req.headers,
+    ...(hasBody ? { body: req.body, duplex: 'half' } : {}),
+  });
+}
+
+Deno.serve({ ...(port === undefined ? {} : { port }) }, async (rawReq, info) => {
+  const req = stripFunctionNamePrefix(rawReq);
   const clientIp = info.remoteAddr.hostname;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<Response>((resolve) => {

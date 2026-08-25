@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { loadAuth } from '../support/seams.js';
 import { WRITER_A } from '../support/fixtures.js';
-import { SUPABASE_ISSUER, TEST_JWT_SECRET, mintSupabaseJwt } from '../support/jwt.js';
+import { SUPABASE_ISSUER, TEST_JWKS, mintSupabaseJwt } from '../support/jwt.js';
 
 /**
  * L-V3-02 (`05-verification.v3.md` §6) — `verifySupabaseJwt` requires neither
@@ -114,7 +114,7 @@ describe('Supabase Auth JWT claim validation (verify v3, L-V3-02)', () => {
     const { verifySupabaseJwt } = await loadAuth();
 
     const result = await verifySupabaseJwt(await c.token(), {
-      secret: TEST_JWT_SECRET,
+      jwks: TEST_JWKS,
       now: NOW,
       issuer: SUPABASE_ISSUER,
     });

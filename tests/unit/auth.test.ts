@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { AUTH_MODULE_PATH, loadAuth } from '../support/seams.js';
 import { REPO_ROOT } from '../support/pg.js';
 import { WRITER_A, WRITER_B } from '../support/fixtures.js';
-import { TEST_JWT_SECRET, WRONG_JWT_SECRET, mintSupabaseJwt } from '../support/jwt.js';
+import { TEST_JWKS, mintSupabaseJwt } from '../support/jwt.js';
 
 /**
  * VERIFY-03 — `05-verification.v1.md` H3: auth is one static shared secret
@@ -45,8 +45,8 @@ const CASES: TokenCase[] = [
   },
   {
     id: 'NFR-JWT-02',
-    klass: 'a well-formed token signed with somebody else’s secret',
-    token: () => mintSupabaseJwt({ sub: WRITER_A, issuedAt: NOW, secret: WRONG_JWT_SECRET }),
+    klass: 'a well-formed token signed with somebody else’s key',
+    token: () => mintSupabaseJwt({ sub: WRITER_A, issuedAt: NOW, wrongKey: true }),
     valid: false,
     writer_id: undefined,
   },
@@ -83,6 +83,14 @@ const CASES: TokenCase[] = [
     valid: false,
     writer_id: undefined,
   },
+  {
+    id: 'NFR-JWT-ALG',
+    klass:
+      'the classic algorithm-confusion attack — a token whose header claims HS256 and is "signed" with the public JWKS key\'s own coordinate as a fake HMAC secret',
+    token: () => mintSupabaseJwt({ sub: WRITER_A, issuedAt: NOW, alg: 'HS256' }),
+    valid: false,
+    writer_id: undefined,
+  },
 ];
 
 describe('Supabase Auth JWT verification', () => {
@@ -98,7 +106,7 @@ describe('Supabase Auth JWT verification', () => {
     const { verifySupabaseJwt } = await loadAuth();
 
     const result = await verifySupabaseJwt(await c.token(), {
-      secret: TEST_JWT_SECRET,
+      jwks: TEST_JWKS,
       now: NOW,
     });
 

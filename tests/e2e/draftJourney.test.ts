@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadApiRouter } from '../support/seams.js';
 import { freePort } from '../support/prism.js';
 import { seedWriter, startTestDatabase, type TestDatabase } from '../support/pg.js';
-import { TEST_JWT_SECRET, bearer, mintSupabaseJwt } from '../support/jwt.js';
+import { TEST_JWKS_JSON, bearer, mintSupabaseJwt } from '../support/jwt.js';
 
 /**
  * VERIFY-04 — `05-verification.v1.md` §4: there is currently **no way to create
@@ -56,7 +56,7 @@ beforeAll(async () => {
       // exactly what verify finding #3 says must stop being the credential.
       writerToken: 'unused-static-token',
       writerId: writerA,
-      jwtSecret: TEST_JWT_SECRET,
+      jwksJson: TEST_JWKS_JSON,
       imageCallbackSecret: 'lambda-callback-shared-secret-not-the-writer-token',
     });
     started = {
@@ -176,7 +176,7 @@ describe('draft creation over its real route (verify finding #4)', () => {
   it('VERIFY-03-REGRESSION: the legacy static writer token is refused once a JWT secret is configured, so it cannot act as a permanent bypass of real per-writer auth', async () => {
     const { server } = ctx();
 
-    // This server was started with BOTH jwtSecret (see beforeAll) and the
+    // This server was started with BOTH jwksJson (see beforeAll) and the
     // legacy writerToken option 'unused-static-token' — kept only so the
     // option shape stays compatible with deployments that have no JWT secret
     // at all. Presenting that static credential here must fail exactly like

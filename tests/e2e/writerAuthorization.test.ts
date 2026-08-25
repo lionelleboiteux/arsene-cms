@@ -8,7 +8,7 @@ import {
   startTestDatabase,
   type TestDatabase,
 } from '../support/pg.js';
-import { TEST_JWT_SECRET, bearer, mintSupabaseJwt } from '../support/jwt.js';
+import { TEST_JWKS_JSON, bearer, mintSupabaseJwt } from '../support/jwt.js';
 import { validJpeg } from '../support/imageFixtures.js';
 
 /**
@@ -154,11 +154,11 @@ beforeAll(async () => {
     const server = await startServer({
       port: await freePort(),
       databaseUrl: db.connectionUri,
-      // Kept only so the option shape stays compatible; `jwtSecret` below is
+      // Kept only so the option shape stays compatible; `jwksJson` below is
       // the credential this file exercises.
       writerToken: 'unused-legacy-token',
       writerId,
-      jwtSecret: TEST_JWT_SECRET,
+      jwksJson: TEST_JWKS_JSON,
     });
     started = {
       db,

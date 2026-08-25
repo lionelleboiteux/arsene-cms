@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadApiRouter } from '../support/seams.js';
 import { freePort } from '../support/prism.js';
 import { seedWriter, startTestDatabase, type TestDatabase } from '../support/pg.js';
-import { TEST_JWT_SECRET, mintSupabaseJwt } from '../support/jwt.js';
+import { TEST_JWKS_JSON, mintSupabaseJwt } from '../support/jwt.js';
 
 /**
  * Schemathesis fuzzing `POST /v1/articles` found a title containing a NUL
@@ -48,7 +48,7 @@ beforeAll(async () => {
       databaseUrl: db.connectionUri,
       writerToken: 'unused-static-token',
       writerId,
-      jwtSecret: TEST_JWT_SECRET,
+      jwksJson: TEST_JWKS_JSON,
     });
     started = { db, server, writerId };
   } catch (err) {

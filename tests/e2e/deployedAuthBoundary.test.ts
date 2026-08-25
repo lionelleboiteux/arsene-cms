@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadApiServer } from '../support/seams.js';
 import { freePort } from '../support/prism.js';
 import { seedWriter, startTestDatabase, type TestDatabase } from '../support/pg.js';
-import { mintSupabaseJwt, TEST_JWT_SECRET } from '../support/jwt.js';
+import { mintSupabaseJwt, TEST_JWKS_JSON } from '../support/jwt.js';
 
 /**
  * Every other test that proves JWT verification works (tests/e2e/draftJourney.test.ts,
@@ -46,7 +46,7 @@ beforeAll(async () => {
       databaseUrl: db.connectionUri,
       writerToken: 'unused-legacy-token',
       writerId,
-      jwtSecret: TEST_JWT_SECRET,
+      jwksJson: TEST_JWKS_JSON,
     });
     started = { db, server, writerId };
   } catch (err) {
@@ -60,8 +60,8 @@ afterAll(async () => {
   await started?.db.stop().catch(() => undefined);
 });
 
-describe('the real child-process server boundary honours jwtSecret (verify finding #3, second pass)', () => {
-  it('VERIFY-03-DEPLOY-01: a request carrying a validly-signed JWT succeeds against the real spawned server, so jwtSecret genuinely reaches the child process, not just the in-process test harness', async () => {
+describe('the real child-process server boundary honours a configured JWKS (verify finding #3, second pass)', () => {
+  it('VERIFY-03-DEPLOY-01: a request carrying a validly-signed JWT succeeds against the real spawned server, so the JWKS config genuinely reaches the child process, not just the in-process test harness', async () => {
     const { server, writerId } = ctx();
     const token = await mintSupabaseJwt({ sub: writerId });
 
@@ -74,7 +74,7 @@ describe('the real child-process server boundary honours jwtSecret (verify findi
     expect(res.status).toBe(201);
   });
 
-  it('VERIFY-03-DEPLOY-02: the legacy static token is refused against the real spawned server once jwtSecret is configured, exactly as the in-process check already proved — this is the same regression, verified through the boundary a real deployment actually uses', async () => {
+  it('VERIFY-03-DEPLOY-02: the legacy static token is refused against the real spawned server once a JWKS is configured, exactly as the in-process check already proved — this is the same regression, verified through the boundary a real deployment actually uses', async () => {
     const { server } = ctx();
 
     const res = await fetch(`${server.url}/v1/articles`, {

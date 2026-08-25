@@ -7,26 +7,69 @@
  * implementation catching up with a decision already made: verify a real
  * Supabase-issued JWT and take `writer_id` from its `sub` claim.
  *
- * Supabase Auth signs access tokens with **HS256**, using the project's JWT
- * secret (a symmetric string from the project settings) — not RS256/JWKS. The
- * tokens minted here have the same header, algorithm and claim set as a real
- * one, so the production verifier is exercised against the real token shape.
+ * CORS-01's redeploy found `arsene-api` refusing to boot in production:
+ * `SUPABASE_JWT_SECRET` (the legacy shared HS256 secret this file used to
+ * mint tokens against) is not configured on the real project, which instead
+ * only ever receives the newer **Signing Keys** secrets (`SUPABASE_JWKS` and
+ * friends) — Supabase's current, asymmetric, JWKS-based token system
+ * (https://supabase.com/docs/guides/auth/signing-keys), not the deprecated
+ * shared-secret one. `verifySupabaseJwt` was migrated to verify against a
+ * JWKS instead, so tokens here are now signed with a real ES256 key pair
+ * (Supabase's own recommended default under Signing Keys) and exposed as a
+ * JWKS, exactly the shape `jose`'s `createLocalJWKSet`/`createRemoteJWKSet`
+ * consume — the production verifier is exercised against the real token and
+ * key shape, same as before.
  *
- * `TEST_JWT_SECRET` below is a value invented for this suite. It is not, and
- * must never be, a real project secret: production reads its secret from the
- * environment and passes it in through `deps`/`ServerOptions`, which is
- * exactly the seam these tests configure.
+ * The two key pairs below are fixed and invented for this suite. They are
+ * not, and must never be, real project keys.
  */
 
-import { SignJWT } from 'jose';
+import { SignJWT, importJWK, createLocalJWKSet, type JWK, type JWTVerifyGetKey } from 'jose';
 
-/** A test-only symmetric key of realistic length. Never a real project key. */
-export const TEST_JWT_SECRET =
-  'arsene-test-only-jwt-secret-0123456789abcdefghijklmnopqrstuvwxyz';
+/** A test-only ES256 key pair of realistic shape. Never a real project key. */
+const TEST_PRIVATE_JWK: JWK = {
+  kty: 'EC',
+  crv: 'P-256',
+  x: 'nN5Hng5EkaTq1pw3VKYvlXmD7RwDLKLKWiOlF6YH9ZI',
+  y: 'Or0ZUvt-gfGxDY9AMk6RHndcZxcM_fx8tLQ-GdWVdLo',
+  d: '62_52oKIrEWX7GheYYO8OAx1QH-wYsilqYehUbqdS-o',
+  kid: 'arsene-test-key-1',
+  alg: 'ES256',
+};
 
-/** A different key of the same shape, for the "signed by someone else" case. */
-export const WRONG_JWT_SECRET =
-  'arsene-test-only-WRONG-secret-0123456789abcdefghijklmnopqrstuvwxyz';
+const TEST_PUBLIC_JWK: JWK = {
+  kty: 'EC',
+  crv: 'P-256',
+  x: TEST_PRIVATE_JWK.x,
+  y: TEST_PRIVATE_JWK.y,
+  kid: 'arsene-test-key-1',
+  alg: 'ES256',
+  use: 'sig',
+};
+
+/** A different key pair, for the "signed by someone else" case. */
+const WRONG_PRIVATE_JWK: JWK = {
+  kty: 'EC',
+  crv: 'P-256',
+  x: 'oXM-nkOWSXX9DSPoV47A2iIkS-N5kOuu3drFNfTj8OQ',
+  y: 'on4NuMIMsdDB4aZrAUpaqge6bACdaOn3ZQpld_UlrKU',
+  d: 'hNTlHvZj4L74S2XEycuEdnD0_aPnbbhqcIYmBzPdqms',
+  kid: 'arsene-test-wrong-key',
+  alg: 'ES256',
+};
+
+/** The JWKS a deployment's `SUPABASE_JWKS`/well-known endpoint would publish —
+ *  only the public half. Serializable as a plain string, unlike a `jose`
+ *  `JWTVerifyGetKey`, so it can cross `server.ts`'s spawned-process boundary
+ *  (env vars carry strings, never functions). */
+export const TEST_JWKS_JSON = JSON.stringify({ keys: [TEST_PUBLIC_JWK] });
+
+/** The same JWKS, already built into a `jose` `JWTVerifyGetKey` — for tests
+ *  that call `verifySupabaseJwt` directly rather than through a server. */
+export const TEST_JWKS: JWTVerifyGetKey = createLocalJWKSet({ keys: [TEST_PUBLIC_JWK] });
+
+const privateKeyPromise = importJWK(TEST_PRIVATE_JWK, 'ES256');
+const wrongPrivateKeyPromise = importJWK(WRONG_PRIVATE_JWK, 'ES256');
 
 export const SUPABASE_ISSUER = 'https://projectref.supabase.co/auth/v1';
 
@@ -37,12 +80,15 @@ export type MintOptions = {
    * signature that still cannot be attributed to a writer.
    */
   sub: string | null;
-  secret?: string;
+  /** Signs with the "wrong" key pair instead of the one `TEST_JWKS_JSON`
+   *  publishes — the "signed by someone else" case. */
+  wrongKey?: boolean;
   issuedAt?: Date;
   expiresAt?: Date;
   email?: string;
-  /** Only for the "not really signed" negative case. */
-  alg?: 'HS256' | 'HS512';
+  /** `'HS256'` mints the algorithm-confusion attack case (see `mintSupabaseJwt`) —
+   *  resigns with the public key's own material as a fake HMAC secret. */
+  alg?: 'ES256' | 'HS256';
 
   // -------------------------------------------------------------------------
   // Claim overrides added by the fourth remediation pass, for L-V3-02
@@ -64,8 +110,8 @@ export type MintOptions = {
   audience?: string | null;
   /**
    * The `role` claim Supabase stamps on an access token. `'anon'` is the value
-   * carried by the project's **public** anon key, which every editor SPA ships
-   * to the browser — the reason this claim has to be checked.
+   * carried by the project's **public** anon key, which every editor SPA
+   * ships to the browser — the reason this claim has to be checked.
    */
   role?: string | null;
 };
@@ -76,7 +122,17 @@ const seconds = (date: Date): number => Math.floor(date.getTime() / 1000);
 export async function mintSupabaseJwt(opts: MintOptions): Promise<string> {
   const issuedAt = opts.issuedAt ?? new Date();
   const expiresAt = opts.expiresAt ?? new Date(issuedAt.getTime() + 3_600_000);
-  const key = new TextEncoder().encode(opts.secret ?? TEST_JWT_SECRET);
+  // NFR-JWT-ALG: the classic RS/ES256->HS256 "algorithm confusion" attack —
+  // resign with the *public* key's own coordinate as if it were an HMAC
+  // secret. `verifySupabaseJwt` must reject this on `alg` alone, since a
+  // JWKS-based verifier has no HMAC secret to compare against in the first
+  // place; the key material here exists only to prove the rejection isn't
+  // coincidentally a signature failure.
+  const key: Uint8Array | Awaited<typeof privateKeyPromise> =
+    opts.alg === 'HS256'
+      ? new TextEncoder().encode(String(TEST_PUBLIC_JWK.x))
+      : await (opts.wrongKey === true ? wrongPrivateKeyPromise : privateKeyPromise);
+  const kid = opts.wrongKey === true ? WRONG_PRIVATE_JWK.kid : TEST_PRIVATE_JWK.kid;
 
   const role = opts.role === undefined ? 'authenticated' : opts.role;
   const issuer = opts.issuer === undefined ? SUPABASE_ISSUER : opts.issuer;
@@ -89,7 +145,7 @@ export async function mintSupabaseJwt(opts: MintOptions): Promise<string> {
     amr: [{ method: 'password', timestamp: seconds(issuedAt) }],
     session_id: 'e0f8a1d2-3b4c-4d5e-8f90-a1b2c3d4e5f6',
   })
-    .setProtectedHeader({ alg: opts.alg ?? 'HS256', typ: 'JWT' })
+    .setProtectedHeader({ alg: opts.alg ?? 'ES256', typ: 'JWT', kid })
     .setIssuedAt(seconds(issuedAt));
 
   if (issuer !== null) jwt.setIssuer(issuer);

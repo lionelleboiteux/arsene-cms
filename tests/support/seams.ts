@@ -638,7 +638,9 @@ export interface ApiServerModule {
     writerToken: string;
     writerId: string;
     /** Verify finding #3, second pass: must genuinely reach the spawned child. */
-    jwtSecret?: string;
+    jwksUrl?: string;
+    /** The test-only, no-network JWKS path — see `RouterOptions.jwksJson`. */
+    jwksJson?: string;
     imageCallbackSecret?: string;
     /**
      * M-V3-04 (`05-verification.v3.md` §6), sixth remediation pass: the CDN
@@ -753,14 +755,15 @@ export type JwtVerification = {
 
 export interface AuthModule {
   /**
-   * Verifies a Supabase Auth access token: HS256, signed with the project's
-   * JWT secret, `sub` -> `writer_id`, `exp` honoured against the injected
-   * clock (02-architecture.v1.md §10).
+   * Verifies a Supabase Auth access token: ES256/RS256, signed with a key
+   * from the project's JWKS (Signing Keys — CORS-01, superseding the legacy
+   * shared HS256 secret), `sub` -> `writer_id`, `exp` honoured against the
+   * injected clock (02-architecture.v1.md §10).
    */
   verifySupabaseJwt(
     token: string | null,
     opts: {
-      secret: string;
+      jwks: import('jose').JWTVerifyGetKey;
       now: Date;
       /**
        * L-V3-02 (`05-verification.v3.md` §6), fourth remediation pass: the
@@ -887,8 +890,11 @@ export type RouterOptions = {
   databaseUrl: string;
   writerToken: string;
   writerId: string;
-  /** The Supabase project's JWT secret (HS256) — verify finding #3. */
-  jwtSecret?: string;
+  /** The Supabase project's JWKS well-known URL — verify finding #3. */
+  jwksUrl?: string;
+  /** A JWKS as raw JSON — the test-only, no-network path. Takes precedence
+   *  over `jwksUrl` when both are set. */
+  jwksJson?: string;
   /** ADR-0004's Lambda callback shared secret. */
   imageCallbackSecret?: string;
   /**
@@ -902,6 +908,9 @@ export type RouterOptions = {
   readTimeoutMs?: number;
   /** `GET /internal/metrics/time-to-publish`'s shared secret (John's dashboard gate). */
   dashboardReadSecret?: string;
+  /** CORS-01: origins allowed to call this deployment from a browser (e.g. the
+   *  editor SPA's own origin). Never a wildcard — this is a bearer-token API. */
+  corsOrigins?: string[];
 };
 
 export interface ApiRouterModule {
@@ -913,6 +922,9 @@ export interface ApiRouterModule {
    * leave the default at Node's 300 s" is not a way through the gate.
    */
   DEFAULT_READ_TIMEOUT_MS: number;
+  /** CORS-01: turns `CORS_ALLOWED_ORIGINS` (a comma-separated env var) into
+   *  the allow-list `route()` checks requests against. */
+  parseCorsOrigins(raw: string | undefined): string[];
 }
 
 export async function loadApiRouter(): Promise<ApiRouterModule> {

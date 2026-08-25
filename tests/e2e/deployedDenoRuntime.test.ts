@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startDenoServer, type RunningDenoServer } from '../support/denoServer.js';
 import { freePort } from '../support/prism.js';
 import { seedWriter, startTestDatabase, type TestDatabase } from '../support/pg.js';
-import { mintSupabaseJwt, TEST_JWT_SECRET } from '../support/jwt.js';
+import { mintSupabaseJwt, TEST_JWKS_JSON } from '../support/jwt.js';
 import { BASE_JPEG } from '../support/imageFixtures.js';
 
 /**
@@ -70,7 +70,7 @@ beforeAll(async () => {
       databaseUrl: db.connectionUri,
       writerToken: 'unused-legacy-token',
       writerId,
-      jwtSecret: TEST_JWT_SECRET,
+      jwksJson: TEST_JWKS_JSON,
       imageCallbackSecret: 'test-callback-secret',
     });
     started = { db, server, writerId };
@@ -101,7 +101,7 @@ describe('the real Deno Edge Function entry point (Deno-port pipeline finding, c
     expect(typeof body.article_id).toBe('string');
   });
 
-  it('DENO-02: the legacy static token is refused once jwtSecret is configured — the same auth boundary the Node deployment enforces, verified through the runtime that actually ships', async () => {
+  it('DENO-02: the legacy static token is refused once a JWKS is configured — the same auth boundary the Node deployment enforces, verified through the runtime that actually ships', async () => {
     const { server } = ctx();
 
     const res = await fetch(`${server.url}/v1/articles`, {
@@ -213,5 +213,29 @@ describe('the real Deno Edge Function entry point (Deno-port pipeline finding, c
     expect(res.status).toBe(200);
     const row = await db.client.query('select status from article_images where id = $1', [image_id]);
     expect(row.rows[0].status).toBe('ready');
+  });
+
+  it('DENO-07: a request shaped exactly like Supabase\'s real gateway presents it — path prefixed with the function\'s own name, not just /v1/... — is routed correctly, not 404d', async () => {
+    const { server, writerId } = ctx();
+    const token = await mintSupabaseJwt({ sub: writerId });
+
+    // Confirmed empirically against the real deployed project: Supabase's
+    // gateway strips `/functions/v1` but leaves the function name itself in
+    // the path the handler sees (`https://<ref>.supabase.co/functions/v1/
+    // arsene-api/v1/articles` arrives as pathname `/arsene-api/v1/articles`,
+    // per the platform's own routing guide — Hono examples there set
+    // `basePath('/<function-name>')` for exactly this reason). Every local
+    // rehearsal and e2e test up to this one talks to this server on its bare
+    // path (`/v1/articles`), which is why this gap went unnoticed: nothing
+    // ever simulated the platform's own prefix until now.
+    const res = await fetch(`${server.url}/arsene-api/v1/articles`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Preuve du vrai prefixe de la plateforme' }),
+    });
+
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { article_id: string };
+    expect(typeof body.article_id).toBe('string');
   });
 });

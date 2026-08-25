@@ -1,16 +1,30 @@
 /**
  * Who is calling — verify finding #3.
  *
- * Supabase Auth signs access tokens with HS256 using the project's JWT secret,
- * so verification is a pure function of (token, secret, now, expected issuer):
+ * CORS-01's production redeploy found `arsene-api` refusing to boot: the real
+ * project has no `SUPABASE_JWT_SECRET` configured, because it was created
+ * under Supabase's newer **Signing Keys** system (asymmetric, JWKS-based —
+ * https://supabase.com/docs/guides/auth/signing-keys), which does not hand
+ * out a legacy shared HS256 secret at all. Verification here now checks the
+ * token's signature against the project's JWKS instead of a shared secret,
+ * using `jose`'s recommended pattern (`createRemoteJWKSet`/
+ * `createLocalJWKSet` + `jwtVerify(token, jwks)`); everything else is
+ * unchanged — a pure function of (token, jwks, now, expected issuer):
  * signature, then the claims Supabase always issues (`exp`, `iss`, `aud`,
  * `role`), then the `sub` claim, which *is* the writer's id
  * (02-architecture.v1.md §7/§10). Nothing here trusts a process-wide constant,
  * so two writers' requests can never be attributed to the same identity.
+ *
+ * `algorithms` is pinned explicitly to the two Signing Keys actually issues
+ * (ES256, RS256) rather than left to infer from the JWKS: without it, a
+ * token whose header claims `HS256` and is "signed" with, say, the public
+ * key's own coordinate bytes as a fake HMAC secret is a well-known key-
+ * confusion attack against JWKS-based verifiers, and must be refused on the
+ * algorithm alone, before any key lookup.
  */
 
 import { timingSafeEqual } from 'node:crypto';
-import { jwtVerify } from 'jose';
+import { jwtVerify, type JWTVerifyGetKey } from 'jose';
 
 export type JwtVerification = {
   valid: boolean;
@@ -32,13 +46,13 @@ export async function verifySupabaseJwt(
   token: string | null,
   /** `issuer` is the project's `https://<ref>.supabase.co/auth/v1`, so it is
    *  configuration rather than a constant; `iss` is pinned only when given. */
-  opts: { secret: string; now: Date; issuer?: string },
+  opts: { jwks: JWTVerifyGetKey; now: Date; issuer?: string },
 ): Promise<JwtVerification> {
   if (token === null) return { valid: false, reason: 'no bearer token' };
 
   try {
-    const { payload } = await jwtVerify(token, new TextEncoder().encode(opts.secret), {
-      algorithms: ['HS256'],
+    const { payload } = await jwtVerify(token, opts.jwks, {
+      algorithms: ['ES256', 'RS256'],
       currentDate: opts.now,
       // `jose` honours `exp` only when the claim is present, so a token minted
       // without one would never expire unless it is required outright.

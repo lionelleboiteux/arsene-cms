@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadApiRouter } from '../support/seams.js';
 import { freePort } from '../support/prism.js';
 import { insertTelemetry, seedArticle, seedWriter, startTestDatabase, type TestDatabase } from '../support/pg.js';
-import { TEST_JWT_SECRET, mintSupabaseJwt } from '../support/jwt.js';
+import { TEST_JWKS_JSON, mintSupabaseJwt } from '../support/jwt.js';
 
 /**
  * `GET /internal/metrics/time-to-publish`'s transport wiring — John's
@@ -55,7 +55,7 @@ beforeAll(async () => {
       databaseUrl: db.connectionUri,
       writerToken: 'unused-static-token',
       writerId,
-      jwtSecret: TEST_JWT_SECRET,
+      jwksJson: TEST_JWKS_JSON,
       dashboardReadSecret: DASHBOARD_SECRET,
     });
     started = { db, server, writerId };
