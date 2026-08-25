@@ -196,6 +196,22 @@ describe('OpenAPI consumer contract (Prism mock)', () => {
     expect(code).toBe(expectedCode);
   });
 
+  it("CONTRACT-CONSUMER-openDraft / DETAILS: a DRAFT_LOCKED error carries the envelope's details (locked_by_display_name), not just its code — the editor's LockBanner has nothing else to name who holds the draft", async () => {
+    const { createArseneClient } = await loadApiClient();
+    const client = createArseneClient({
+      baseUrl: prism.baseUrl,
+      bearerToken: WRITER_TOKEN,
+      headers: { Prefer: 'code=409, example=draftLocked' },
+    });
+
+    const details = await client
+      .openDraft({ articleId: ARTICLE_ID })
+      .then(() => null)
+      .catch((err: { details?: unknown }) => err.details);
+
+    expect(details).toMatchObject({ locked_by_display_name: expect.any(String) });
+  });
+
   it('CONTRACT-COVERAGE: every operation declared in openapi.yaml has a consumer test in this file', () => {
     const declared = contractOperations().map((o) => o.operationId).sort();
 

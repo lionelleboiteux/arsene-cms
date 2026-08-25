@@ -1,0 +1,92 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+body {
+  margin: 0;
+  background: canvas;
+  color: canvastext;
+}
+
+.auth-page {
+  max-width: 24rem;
+  margin: 4rem auto;
+  padding: 0 1rem;
+}
+
+.auth-page form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.error-text {
+  color: #c0392b;
+}
+
+.compose-page {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.compose-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.lock-banner {
+  background: #fdf2e0;
+  border: 1px solid #e0b34d;
+  border-radius: 0.375rem;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+}
+
+.field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 1rem 0;
+}
+
+.body-editor {
+  min-height: 16rem;
+  border: 1px solid #ccc;
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+}
+
+.body-editor:focus {
+  outline: 2px solid #3a7bd5;
+}
+
+.image-slot {
+  border: 1px dashed #999;
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.image-slot img {
+  max-width: 100%;
+  max-height: 12rem;
+  display: block;
+}
+
+.error-banner {
+  background: #fdecea;
+  border: 1px solid #e0704d;
+  border-radius: 0.375rem;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+}
+
+.save-indicator {
+  color: #666;
+  font-size: 0.875rem;
+}

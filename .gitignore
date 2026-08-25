@@ -5,3 +5,6 @@ coverage/
 .hypothesis/
 .DS_Store
 supabase/.temp/
+frontend/dist/
+.env
+.env.local

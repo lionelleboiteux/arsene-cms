@@ -11,12 +11,17 @@ const REQUEST_TIMEOUT_MS = 30_000;
 export class ArseneApiError extends Error {
   readonly code: string;
   readonly status: number;
+  /** The error envelope's own `details` — e.g. `DRAFT_LOCKED`'s
+   *  `locked_by_writer_id`/`locked_by_display_name` — shape varies by `code`
+   *  (contracts/openapi.yaml, per-operation `409`/`400` examples). */
+  readonly details: unknown;
 
-  constructor(code: string, message: string, status: number) {
+  constructor(code: string, message: string, status: number, details: unknown = null) {
     super(message);
     this.name = 'ArseneApiError';
     this.code = code;
     this.status = status;
+    this.details = details;
   }
 }
 
@@ -39,10 +44,10 @@ export type ArseneClient = {
 };
 
 function errorFrom(status: number, payload: unknown): ArseneApiError {
-  const error = (payload as { error?: { code?: unknown; message?: unknown } } | null)?.error;
+  const error = (payload as { error?: { code?: unknown; message?: unknown; details?: unknown } } | null)?.error;
   const code = typeof error?.code === 'string' ? error.code : 'INTERNAL_ERROR';
   const message = typeof error?.message === 'string' ? error.message : `HTTP ${status}`;
-  return new ArseneApiError(code, message, status);
+  return new ArseneApiError(code, message, status, error?.details ?? null);
 }
 
 async function parse(response: Response): Promise<unknown> {

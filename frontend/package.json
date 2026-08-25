@@ -1,0 +1,24 @@
+{
+  "name": "arsene-editor",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Arsène's writer-editor SPA — login + compose (02-architecture.v1.md's 'small authenticated SPA', deployed separately from the future public site).",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.48.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7"
+  }
+}
