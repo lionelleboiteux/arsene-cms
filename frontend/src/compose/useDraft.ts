@@ -63,6 +63,25 @@ function embeddedName(value: unknown): string {
   return typeof name === 'string' ? name : '';
 }
 
+/** `supabase-js`'s query builder is lazy — it only actually fires the
+ *  request once awaited/`.then()`'d, so this must always be consumed, never
+ *  fired-and-forgotten with a bare `void`. */
+async function persistFields(articleId: string, fields: DraftFields): Promise<void> {
+  const { error } = await supabase
+    .from('articles')
+    .update({
+      title: fields.title,
+      body_html: fields.body_html,
+      league_id: fields.league_id,
+      category_id: fields.category_id,
+      meta_title: fields.meta_title,
+      meta_description: fields.meta_description,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', articleId);
+  if (error !== null) throw new Error(error.message);
+}
+
 async function hydrateExtraFields(articleId: string): Promise<Partial<DraftFields>> {
   const { data } = await supabase
     .from('articles')
@@ -94,6 +113,15 @@ export function useDraft(articleIdFromUrl: string | null) {
   const lastEditAtRef = useRef(new Date());
   const lastSavedAtRef = useRef<Date | null>(null);
 
+  const fieldsRef = useRef<DraftFields>(emptyFields());
+  const articleIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (state.status === 'editable') {
+      fieldsRef.current = state.fields;
+      articleIdRef.current = state.articleId;
+    }
+  }, [state]);
+
   const setField = useCallback(<K extends keyof DraftFields>(key: K, value: DraftFields[K]) => {
     dirtyRef.current = true;
     lastEditAtRef.current = new Date();
@@ -103,23 +131,13 @@ export function useDraft(articleIdFromUrl: string | null) {
   /** Exposed for `useTaxonomy`: an immediate write, not waiting on the next
    *  autosave tick, since it also gates the image/publish flow. */
   const saveNow = useCallback(async (patch: Partial<DraftFields>) => {
-    setState((prev) => {
-      if (prev.status !== 'editable') return prev;
-      const fields = { ...prev.fields, ...patch };
-      void supabase
-        .from('articles')
-        .update({
-          title: fields.title,
-          body_html: fields.body_html,
-          league_id: fields.league_id,
-          category_id: fields.category_id,
-          meta_title: fields.meta_title,
-          meta_description: fields.meta_description,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', prev.articleId);
-      return { ...prev, fields };
-    });
+    const articleId = articleIdRef.current;
+    if (articleId === null) return;
+    const fields = { ...fieldsRef.current, ...patch };
+    await persistFields(articleId, fields);
+    fieldsRef.current = fields;
+    lastSavedAtRef.current = new Date();
+    setState((prev) => (prev.status === 'editable' ? { ...prev, fields, lastSavedAt: lastSavedAtRef.current } : prev));
   }, []);
 
   // ---- mount: create or open -------------------------------------------
@@ -220,23 +238,17 @@ export function useDraft(articleIdFromUrl: string | null) {
       if (decision.save) {
         dirtyRef.current = false;
         lastSavedAtRef.current = new Date();
-        setState((prev) => {
-          if (prev.status !== 'editable') return prev;
-          const { fields } = prev;
-          void supabase
-            .from('articles')
-            .update({
-              title: fields.title,
-              body_html: fields.body_html,
-              league_id: fields.league_id,
-              category_id: fields.category_id,
-              meta_title: fields.meta_title,
-              meta_description: fields.meta_description,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', articleId);
-          return { ...prev, savedIndicator: decision.indicator, lastSavedAt: lastSavedAtRef.current };
+        void persistFields(articleId, fieldsRef.current).catch((err: unknown) => {
+          // Autosave failing silently would be worse than noisy: the writer
+          // has no other signal their last minute of edits didn't land.
+          // eslint-disable-next-line no-console
+          console.error('autosave failed', err);
         });
+        setState((prev) =>
+          prev.status === 'editable'
+            ? { ...prev, savedIndicator: decision.indicator, lastSavedAt: lastSavedAtRef.current }
+            : prev,
+        );
       } else {
         setState((prev) => (prev.status === 'editable' ? { ...prev, savedIndicator: decision.indicator } : prev));
       }
