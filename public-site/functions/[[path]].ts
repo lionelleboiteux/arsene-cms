@@ -8,6 +8,15 @@
  * custom domains are, the same external-DNS/CNAME mechanism already proven
  * working for arsene.fantasy-coach.fr (arsene-editor). This project exists
  * only to be that attachment point; it holds no content of its own.
+ *
+ * Supabase's platform rewrites any Edge Function GET response whose
+ * Content-Type is `text/html` to `text/plain` (documented, and confirmed
+ * against this exact deployment — a real browser rendered the article as raw
+ * source, not a page). So `arsene-api`'s public routes hand back the
+ * rendered HTML as a JSON string field instead; this is the one place in the
+ * whole system where `Content-Type: text/html` is actually allowed to reach
+ * a browser, which is the entire reason this proxy project exists rather
+ * than a plain DNS pointer at the Edge Function.
  */
 
 const UPSTREAM_ORIGIN = 'https://wpicvtlfjhdofpmfdzrb.supabase.co/functions/v1/arsene-api';
@@ -27,7 +36,15 @@ export const onRequest: PagesFunction = async (context) => {
     return new Response('Bad Gateway', { status: 502 });
   }
 
-  const headers = new Headers(upstreamResponse.headers);
-  headers.delete('content-security-policy');
-  return new Response(upstreamResponse.body, { status: upstreamResponse.status, headers });
+  let page: { html: string };
+  try {
+    page = await upstreamResponse.json();
+  } catch {
+    return new Response('Bad Gateway', { status: 502 });
+  }
+
+  return new Response(page.html, {
+    status: upstreamResponse.status,
+    headers: { 'content-type': 'text/html; charset=utf-8' },
+  });
 };

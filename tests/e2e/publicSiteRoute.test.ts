@@ -67,24 +67,30 @@ afterAll(async () => {
 });
 
 describe('the real public site routes', () => {
-  it('PUBLIC-ROUTE-01: the homepage requires no credential and lists the published article', async () => {
+  it('PUBLIC-ROUTE-01: the homepage requires no credential and lists the published article, as JSON-wrapped HTML', async () => {
     const { server } = ctx();
     const res = await fetch(`${server.url}/public/`);
 
+    // Supabase rewrites any GET response with `Content-Type: text/html` to
+    // `text/plain` (functions/http-methods docs) — confirmed against the real
+    // deployment. So this route hands the rendered HTML back as JSON
+    // (`{ html }`), and the Cloudflare proxy in front of it (not this route)
+    // is what actually serves `text/html` to a browser.
     expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toContain('text/html');
-    expect(await res.text()).toContain('data-article-title="PP test"');
+    expect(res.headers.get('content-type')).toContain('application/json');
+    const { html } = (await res.json()) as { html: string };
+    expect(html).toContain('data-article-title="PP test"');
   });
 
-  it('PUBLIC-ROUTE-02: the article page requires no credential and renders the published article', async () => {
+  it('PUBLIC-ROUTE-02: the article page requires no credential and renders the published article, as JSON-wrapped HTML', async () => {
     const { server } = ctx();
     const res = await fetch(`${server.url}/public/articles/pp-test`);
 
     expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toContain('text/html');
-    const body = await res.text();
-    expect(body).toContain('data-article-title="PP test"');
-    expect(body).toContain(SITE_ORIGIN);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    const { html } = (await res.json()) as { html: string };
+    expect(html).toContain('data-article-title="PP test"');
+    expect(html).toContain(SITE_ORIGIN);
   });
 
   it('PUBLIC-ROUTE-03: an unknown slug is a real 404, not a 200 with an empty page', async () => {

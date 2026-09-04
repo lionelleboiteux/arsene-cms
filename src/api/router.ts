@@ -612,8 +612,24 @@ function getSiteRenderer(ctx: Ctx): ReturnType<typeof createSiteRenderer> {
   return ctx.shared.siteRenderer;
 }
 
-function htmlResponse(html: string, status: number, cors: Record<string, string>): Response {
-  return new Response(html, { status, headers: { 'content-type': 'text/html; charset=utf-8', ...cors } });
+/**
+ * Never `text/html`: Supabase's own docs (functions/http-methods) state
+ * plainly that a GET response with `Content-Type: text/html` is rewritten to
+ * `text/plain` by the platform — confirmed empirically against this exact
+ * deployment (curl showed `content-type: text/plain` despite this code
+ * setting `text/html`) after a real browser rendered the article as raw
+ * source instead of a page. No header trick from inside the function works
+ * around this; it's a platform-level rewrite. So this hands the already-
+ * rendered HTML back as a JSON string field — `application/json` passes
+ * through unmodified — and the actual `text/html` response is built one
+ * layer up, by the Cloudflare Pages proxy (`public-site/functions/`) that
+ * isn't subject to this restriction.
+ */
+function jsonPageResponse(html: string, status: number, cors: Record<string, string>): Response {
+  return new Response(JSON.stringify({ html }), {
+    status,
+    headers: { 'content-type': 'application/json', ...cors },
+  });
 }
 
 async function renderPublicPage(
@@ -623,14 +639,14 @@ async function renderPublicPage(
 ): Promise<Response> {
   const renderer = await getSiteRenderer(ctx);
   if (op.kind === 'public-home') {
-    return htmlResponse((await renderer.renderHomepage()).html, 200, cors);
+    return jsonPageResponse((await renderer.renderHomepage()).html, 200, cors);
   }
   const page = await renderer.renderArticlePage({ slug: op.slug });
   // `renderArticlePage`'s own not-found path (`src/site/render.ts`) never
   // populates `json_ld` — true for no article it actually found — so an
   // empty array is the not-found signal this route has to work with without
   // changing that module's return shape.
-  return htmlResponse(page.html, page.json_ld.length === 0 ? 404 : 200, cors);
+  return jsonPageResponse(page.html, page.json_ld.length === 0 ? 404 : 200, cors);
 }
 
 export type ServerOptions = {
