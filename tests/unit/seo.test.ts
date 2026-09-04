@@ -90,11 +90,47 @@ describe('technical SEO fields', () => {
 
     expect({ entry, contract_errors: validateAgainstSchema('SitemapEntry', entry) }).toEqual({
       entry: {
-        loc: 'https://fantasycoach.example/ligue-1/pronos/pronos-ligue-1-journee-12',
+        loc: 'https://fantasycoach.example/articles/ligue-1/26-27/pronos/pronos-ligue-1-journee-12',
         lastmod: '2026-08-11',
       },
       contract_errors: [],
     });
+  });
+
+  it('the public path nests league, season and type ahead of the article slug', async () => {
+    const { categoryPath, articlePath } = await loadSeo();
+
+    expect({
+      category: categoryPath(PUBLISHED),
+      article: articlePath(PUBLISHED),
+    }).toEqual({
+      category: '/articles/ligue-1/26-27/pronos',
+      article: '/articles/ligue-1/26-27/pronos/pronos-ligue-1-journee-12',
+    });
+  });
+});
+
+describe('seasonSlug', () => {
+  it('Aug 1 starts a season and Jul 31 ends the previous one, both in UTC', async () => {
+    const { seasonSlug } = await loadSeo();
+
+    expect({
+      season_start: seasonSlug(new Date('2026-08-01T00:00:00Z')),
+      season_end: seasonSlug(new Date('2027-07-31T23:59:59Z')),
+      mid_season: seasonSlug(new Date('2026-12-25T12:00:00Z')),
+    }).toEqual({
+      season_start: '26-27',
+      season_end: '26-27',
+      mid_season: '26-27',
+    });
+  });
+
+  it('uses the UTC instant, not a host-local calendar date, at the season boundary', async () => {
+    const { seasonSlug } = await loadSeo();
+
+    // Local wall-clock time reads Aug 1, but the UTC instant is still Jul 31
+    // — must land in the season that ended, not the one that's about to start.
+    expect(seasonSlug(new Date('2026-08-01T00:30:00+02:00'))).toBe('25-26');
   });
 });
 

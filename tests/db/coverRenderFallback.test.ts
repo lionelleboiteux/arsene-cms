@@ -144,7 +144,7 @@ beforeAll(async () => {
         datePublished: PUBLISHED_AT,
         dateModified: PUBLISHED_AT,
         author: { '@type': 'Person', name: 'Lionel Le Boiteux' },
-        mainEntityOfPage: `${SITE_ORIGIN}/ligue-1/pronos/${SLUG}`,
+        mainEntityOfPage: `${SITE_ORIGIN}/articles/ligue-1/26-27/pronos/${SLUG}`,
       }),
     ]);
 
@@ -166,7 +166,12 @@ afterAll(async () => {
 
 /** Everything §5 names as the public symptom, read off the real render pass. */
 async function coverAsPublicallyServed(c: Ctx) {
-  const page = await c.renderer.renderArticlePage({ slug: SLUG });
+  const page = await c.renderer.renderArticlePage({
+    league_slug: 'ligue-1',
+    season_slug: '26-27',
+    type_slug: 'pronos',
+    slug: SLUG,
+  });
   const home = await c.renderer.renderHomepage();
   const jsonLdImage = page.json_ld[0]?.image;
   return {

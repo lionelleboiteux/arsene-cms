@@ -44,9 +44,16 @@ const CREATE_DRAFT_ROUTE = '/v1/articles';
 const IMAGE_STATUS_ROUTE = /^\/internal\/images\/([^/]+)\/status$/;
 const METRICS_SUMMARY_ROUTE = '/internal/metrics/time-to-publish';
 /** The public reader-facing routes (stopgap for ADR-0001's not-yet-built
- *  Next.js/ISR app — see `src/site/render.ts`'s own doc comment). */
+ *  Next.js/ISR app — see `src/site/render.ts`'s own doc comment). Four
+ *  shapes, fully anchored and disambiguated by segment count alone, so
+ *  match order doesn't matter for correctness:
+ *   - `/public/articles/{slug}` — legacy flat form, now a redirect only.
+ *   - `/public/articles/{league}/{season}/{type}` — a listing page.
+ *   - `/public/articles/{league}/{season}/{type}/{slug}` — an article. */
 const PUBLIC_HOME_ROUTE = '/public/';
-const PUBLIC_ARTICLE_ROUTE = /^\/public\/articles\/([^/]+)$/;
+const PUBLIC_ARTICLE_LEGACY_ROUTE = /^\/public\/articles\/([^/]+)$/;
+const PUBLIC_CATEGORY_ROUTE = /^\/public\/articles\/([^/]+)\/([^/]+)\/([^/]+)$/;
+const PUBLIC_ARTICLE_ROUTE = /^\/public\/articles\/([^/]+)\/([^/]+)\/([^/]+)\/([^/]+)$/;
 
 /**
  * Assets are served through the CDN, never from Supabase Storage (§4). The
@@ -633,7 +640,7 @@ function jsonPageResponse(html: string, status: number, cors: Record<string, str
 }
 
 async function renderPublicPage(
-  op: Extract<Operation, { kind: 'public-home' | 'public-article' }>,
+  op: Extract<Operation, { kind: 'public-home' | 'public-article' | 'public-category' }>,
   ctx: Ctx,
   cors: Record<string, string>,
 ): Promise<Response> {
@@ -641,12 +648,49 @@ async function renderPublicPage(
   if (op.kind === 'public-home') {
     return jsonPageResponse((await renderer.renderHomepage()).html, 200, cors);
   }
-  const page = await renderer.renderArticlePage({ slug: op.slug });
+  if (op.kind === 'public-category') {
+    const category = await renderer.renderCategoryPage(op);
+    return jsonPageResponse(category.html, 200, cors);
+  }
+  const page = await renderer.renderArticlePage(op);
   // `renderArticlePage`'s own not-found path (`src/site/render.ts`) never
   // populates `json_ld` — true for no article it actually found — so an
   // empty array is the not-found signal this route has to work with without
   // changing that module's return shape.
   return jsonPageResponse(page.html, page.json_ld.length === 0 ? 404 : 200, cors);
+}
+
+/**
+ * The legacy flat `/articles/{slug}` URL a browser or search index might
+ * still hold — redirects to the real nested path rather than 404ing outright,
+ * so a link already handed out keeps working.
+ *
+ * Signals the redirect as JSON (`{ redirect: url }`), not a real HTTP 301:
+ * confirmed empirically against the real deployed proxy
+ * (`public-site/functions/[[path]].ts`) that a genuine 301 from this Edge
+ * Function does not survive the proxy's own `fetch()` call intact —
+ * Cloudflare's Workers runtime returns an opaque/unreadable response for a
+ * `redirect: 'manual'` fetch of a cross-origin 3xx in at least this
+ * configuration, so `page.json()` there throws and the whole thing 502s.
+ * Routing the redirect through the same JSON envelope `jsonPageResponse`
+ * already uses for `text/html` sidesteps trusting that undocumented
+ * behavior at all — the proxy decides, from data it can actually read,
+ * whether to emit a real 301 to the browser.
+ */
+async function redirectLegacyArticle(
+  op: Extract<Operation, { kind: 'public-article-legacy' }>,
+  ctx: Ctx,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const renderer = await getSiteRenderer(ctx);
+  const path = await renderer.resolvePublishedPath({ slug: op.slug });
+  if (path === null) {
+    return jsonPageResponse((await renderer.renderNotFound()).html, 404, cors);
+  }
+  return new Response(JSON.stringify({ redirect: `${ctx.opts.siteOrigin ?? DEFAULT_SITE_ORIGIN}${path}` }), {
+    status: 200,
+    headers: { 'content-type': 'application/json', ...cors },
+  });
 }
 
 export type ServerOptions = {
@@ -790,7 +834,9 @@ type Operation =
   | { kind: 'image-status'; image_id: string }
   | { kind: 'metrics-summary' }
   | { kind: 'public-home' }
-  | { kind: 'public-article'; slug: string };
+  | { kind: 'public-article'; league_slug: string; season_slug: string; type_slug: string; slug: string }
+  | { kind: 'public-category'; league_slug: string; season_slug: string; type_slug: string }
+  | { kind: 'public-article-legacy'; slug: string };
 
 function matchRoute(path: string): Operation | null {
   if (path === CREATE_DRAFT_ROUTE) return { kind: 'create-draft' };
@@ -798,7 +844,35 @@ function matchRoute(path: string): Operation | null {
   if (path === PUBLIC_HOME_ROUTE) return { kind: 'public-home' };
 
   const publicArticle = PUBLIC_ARTICLE_ROUTE.exec(path);
-  if (publicArticle?.[1] !== undefined) return { kind: 'public-article', slug: publicArticle[1] };
+  if (
+    publicArticle?.[1] !== undefined &&
+    publicArticle[2] !== undefined &&
+    publicArticle[3] !== undefined &&
+    publicArticle[4] !== undefined
+  ) {
+    return {
+      kind: 'public-article',
+      league_slug: publicArticle[1],
+      season_slug: publicArticle[2],
+      type_slug: publicArticle[3],
+      slug: publicArticle[4],
+    };
+  }
+
+  const publicCategory = PUBLIC_CATEGORY_ROUTE.exec(path);
+  if (publicCategory?.[1] !== undefined && publicCategory[2] !== undefined && publicCategory[3] !== undefined) {
+    return {
+      kind: 'public-category',
+      league_slug: publicCategory[1],
+      season_slug: publicCategory[2],
+      type_slug: publicCategory[3],
+    };
+  }
+
+  const publicArticleLegacy = PUBLIC_ARTICLE_LEGACY_ROUTE.exec(path);
+  if (publicArticleLegacy?.[1] !== undefined) {
+    return { kind: 'public-article-legacy', slug: publicArticleLegacy[1] };
+  }
 
   const article = ARTICLE_ROUTE.exec(path);
   if (article?.[1] !== undefined) {
@@ -818,7 +892,15 @@ function matchRoute(path: string): Operation | null {
  * and the read-only dashboard adapter (`GET`). */
 const methodOf = (op: Operation): string => {
   if (op.kind === 'discard-image') return 'DELETE';
-  if (op.kind === 'metrics-summary' || op.kind === 'public-home' || op.kind === 'public-article') return 'GET';
+  if (
+    op.kind === 'metrics-summary' ||
+    op.kind === 'public-home' ||
+    op.kind === 'public-article' ||
+    op.kind === 'public-category' ||
+    op.kind === 'public-article-legacy'
+  ) {
+    return 'GET';
+  }
   return 'POST';
 };
 
@@ -853,10 +935,13 @@ function dispatch(
       return metricsSummary(request, ctx);
     case 'public-home':
     case 'public-article':
-      // `route()` returns a raw HTML `Response` for these before `dispatch()`
-      // is ever called (`renderPublicPage()`) — they carry no JSON envelope
-      // for `send()` to wrap. These cases exist only so this switch stays
-      // exhaustive over `Operation`.
+    case 'public-category':
+    case 'public-article-legacy':
+      // `route()` returns a raw HTML or redirect `Response` for these before
+      // `dispatch()` is ever called (`renderPublicPage()`/
+      // `redirectLegacyArticle()`) — they carry no JSON envelope for `send()`
+      // to wrap. These cases exist only so this switch stays exhaustive over
+      // `Operation`.
       throw new Error(`unreachable: '${op.kind}' is handled by route() before dispatch()`);
   }
 }
@@ -911,8 +996,11 @@ export async function route(
   // none for an anonymous website visitor to hold — and their response is
   // HTML, not this API's JSON envelope, so they return here rather than
   // falling into the auth chain and `send()` below.
-  if (op.kind === 'public-home' || op.kind === 'public-article') {
+  if (op.kind === 'public-home' || op.kind === 'public-article' || op.kind === 'public-category') {
     return renderPublicPage(op, ctx, cors);
+  }
+  if (op.kind === 'public-article-legacy') {
+    return redirectLegacyArticle(op, ctx, cors);
   }
   // The callback carries a shared secret rather than a writer token (ADR-0004),
   // but it is checked here, from the headers alone, for the same reason the

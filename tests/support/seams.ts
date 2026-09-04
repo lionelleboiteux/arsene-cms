@@ -178,6 +178,17 @@ export interface SeoModule {
   generateSlug(title: string, opts?: { existingSlugs?: readonly string[] }): string;
   /** AC-13: pre-filled suggestion the writer may edit before confirming. */
   suggestMeta(article: ArticleSeoContext): MetaSuggestion;
+  /** Aug–Jul football-season slug (e.g. "26-27") a date falls in, UTC. */
+  seasonSlug(date: Date): string;
+  /** The public path a league/season/type listing is served at. */
+  categoryPath(category: { league_name: string; type_name: string; first_published_at: string }): string;
+  /** The public path an article is served at, under its listing's path. */
+  articlePath(article: {
+    league_name: string;
+    type_name: string;
+    first_published_at: string;
+    slug: string;
+  }): string;
   /** AC-14: schema.org JSON-LD embedded in the published page. */
   buildStructuredData(article: PublishedArticleView, origin?: string): Record<string, unknown>;
   /** AC-14: the article's sitemap entry. */
@@ -713,8 +724,16 @@ export type RenderedPage = {
 export interface SiteRenderModule {
   createSiteRenderer(opts: { databaseUrl: string; siteOrigin: string }): Promise<{
     renderHomepage(): Promise<RenderedPage>;
-    renderCategoryPage(args: { league_slug: string; type_slug: string }): Promise<RenderedPage>;
-    renderArticlePage(args: { slug: string }): Promise<RenderedPage>;
+    renderNotFound(): Promise<RenderedPage>;
+    renderCategoryPage(args: { league_slug: string; season_slug: string; type_slug: string }): Promise<RenderedPage>;
+    renderArticlePage(args: {
+      league_slug: string;
+      season_slug: string;
+      type_slug: string;
+      slug: string;
+    }): Promise<RenderedPage>;
+    /** Bare-slug lookup for the legacy-URL redirect — no prefix to check. */
+    resolvePublishedPath(args: { slug: string }): Promise<string | null>;
     renderSitemap(): Promise<string>;
     close(): Promise<void>;
   }>;

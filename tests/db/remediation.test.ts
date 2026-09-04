@@ -99,7 +99,14 @@ describe('public site XSS defence in depth (verify finding #1)', () => {
     });
     let html = '';
     try {
-      html = (await renderer.renderArticlePage({ slug: 'journee-15-les-affiches' })).html;
+      html = (
+        await renderer.renderArticlePage({
+          league_slug: 'ligue-1',
+          season_slug: '26-27',
+          type_slug: 'pronos',
+          slug: 'journee-15-les-affiches',
+        })
+      ).html;
     } finally {
       await renderer.close().catch(() => undefined);
     }

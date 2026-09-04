@@ -271,8 +271,8 @@ describe('publish', () => {
 
     expect(revalidatedPaths[0]?.slice().sort()).toEqual([
       '/',
-      '/ligue-1/pronos',
-      '/ligue-1/pronos/pronos-ligue-1-journee-12',
+      '/articles/ligue-1/26-27/pronos',
+      '/articles/ligue-1/26-27/pronos/pronos-ligue-1-journee-12',
     ]);
   });
 

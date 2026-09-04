@@ -4,15 +4,16 @@ import { freePort } from '../support/prism.js';
 import { seedArticle, seedImage, seedWriter, startTestDatabase, type TestDatabase } from '../support/pg.js';
 
 /**
- * `GET /public/` and `GET /public/articles/:slug`'s transport wiring — the
- * minimal-stopgap public reader routes added on top of the Edge Function
- * that is already deployed, standing in for ADR-0001's not-yet-built
- * Next.js/ISR app. The render pass's own correctness (listing order, cover
- * fallback, JSON-LD, sitemap) is proven in `tests/db/publicSiteRender.test.ts`
- * against `src/site/render.ts` directly; this proves the two routes are
- * actually reachable over the real spawned router, require no credential
- * (unlike every other route here), answer HTML rather than this API's JSON
- * envelope, and 404 an unknown slug.
+ * The public reader-facing routes' transport wiring — homepage, the nested
+ * league/season/category article and listing routes, and the legacy flat
+ * `/articles/{slug}` redirect — added on top of the Edge Function that is
+ * already deployed, standing in for ADR-0001's not-yet-built Next.js/ISR
+ * app. The render pass's own correctness (listing order, cover fallback,
+ * JSON-LD, sitemap, season scoping) is proven in
+ * `tests/db/publicSiteRender.test.ts` against `src/site/render.ts` directly;
+ * this proves the routes are actually reachable over the real spawned
+ * router, require no credential (unlike every other route here), answer
+ * HTML rather than this API's JSON envelope, and 404 an unknown slug.
  */
 
 const SITE_ORIGIN = 'https://fantasycoach.example';
@@ -82,9 +83,9 @@ describe('the real public site routes', () => {
     expect(html).toContain('data-article-title="PP test"');
   });
 
-  it('PUBLIC-ROUTE-02: the article page requires no credential and renders the published article, as JSON-wrapped HTML', async () => {
+  it('PUBLIC-ROUTE-02: the nested article page requires no credential and renders the published article, as JSON-wrapped HTML', async () => {
     const { server } = ctx();
-    const res = await fetch(`${server.url}/public/articles/pp-test`);
+    const res = await fetch(`${server.url}/public/articles/ligue-1/26-27/pronos/pp-test`);
 
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('application/json');
@@ -93,16 +94,54 @@ describe('the real public site routes', () => {
     expect(html).toContain(SITE_ORIGIN);
   });
 
-  it('PUBLIC-ROUTE-03: an unknown slug is a real 404, not a 200 with an empty page', async () => {
+  it('PUBLIC-ROUTE-03: an unknown slug under a real league/season/category is a real 404, not a 200 with an empty page', async () => {
     const { server } = ctx();
-    const res = await fetch(`${server.url}/public/articles/does-not-exist`);
+    const res = await fetch(`${server.url}/public/articles/ligue-1/26-27/pronos/does-not-exist`);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('PUBLIC-ROUTE-03b: the right slug under the wrong league/season/category prefix is also a 404, not the article', async () => {
+    const { server } = ctx();
+    const res = await fetch(`${server.url}/public/articles/premier-league/26-27/pronos/pp-test`);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('PUBLIC-ROUTE-06: the league/season/category listing requires no credential and lists the published article', async () => {
+    const { server } = ctx();
+    const res = await fetch(`${server.url}/public/articles/ligue-1/26-27/pronos`);
+
+    expect(res.status).toBe(200);
+    const { html } = (await res.json()) as { html: string };
+    expect(html).toContain('data-article-title="PP test"');
+  });
+
+  it('PUBLIC-ROUTE-07: the legacy flat /articles/{slug} URL signals a redirect to the real nested path as JSON, not a real 3xx', async () => {
+    const { server } = ctx();
+    const res = await fetch(`${server.url}/public/articles/pp-test`);
+
+    // JSON, not a real HTTP redirect: the Cloudflare proxy in front of this
+    // route (public-site/functions/[[path]].ts) is the one that turns this
+    // into an actual 301 for a browser — confirmed by trial against the real
+    // deployment that a genuine 301 here does not survive that proxy's own
+    // fetch of it intact (its own doc comment has the full story).
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    const body = (await res.json()) as { redirect?: string };
+    expect(body.redirect).toBe(`${SITE_ORIGIN}/articles/ligue-1/26-27/pronos/pp-test`);
+  });
+
+  it('PUBLIC-ROUTE-08: the legacy flat URL 404s for a slug that never existed, rather than redirecting anywhere', async () => {
+    const { server } = ctx();
+    const res = await fetch(`${server.url}/public/articles/never-existed`);
 
     expect(res.status).toBe(404);
   });
 
   it('PUBLIC-ROUTE-04: POST (the wrong method) is refused 405', async () => {
     const { server } = ctx();
-    const res = await fetch(`${server.url}/public/articles/pp-test`, { method: 'POST' });
+    const res = await fetch(`${server.url}/public/articles/ligue-1/26-27/pronos/pp-test`, { method: 'POST' });
 
     expect(res.status).toBe(405);
   });

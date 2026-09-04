@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useDraft } from '../compose/useDraft.ts';
+import { useEffect, useRef, useState } from 'react';
+import { useDraft, type DraftFields } from '../compose/useDraft.ts';
 import { useTaxonomy } from '../compose/useTaxonomy.ts';
 import { LockBanner } from '../compose/LockBanner.tsx';
 import { SaveIndicator } from '../compose/SaveIndicator.tsx';
@@ -13,10 +13,47 @@ function currentArticleId(): string | null {
   return new URLSearchParams(window.location.search).get('id');
 }
 
+/**
+ * The only two leagues with an actual writer today — everything else still
+ * goes through "Autre"'s free-text fields below, unchanged. Not a stored
+ * taxonomy table: picking one of these just fills `league_name`/`type_name`
+ * with the same strings the old free-text fields would have held, so the
+ * existing `useTaxonomy.resolve()` → `saveNow()` pipeline needs no change.
+ */
+const FIXED_CATEGORIES = [
+  { key: 'l1-pp', label: 'L1 PP', league_name: 'Ligue 1', type_name: 'Player Picks' },
+  { key: 'prem-pp', label: 'PremPP', league_name: 'Premier League', type_name: 'Player Picks' },
+] as const;
+
+/** Which dropdown option a draft's current league/type reflects — used only
+ *  to restore the right selection when reopening an already-tagged draft,
+ *  never to impose a default on a new one (empty fields → the placeholder). */
+function categoryChoiceFor(fields: Pick<DraftFields, 'league_name' | 'type_name'>): string {
+  const fixed = FIXED_CATEGORIES.find(
+    (c) => c.league_name === fields.league_name && c.type_name === fields.type_name,
+  );
+  if (fixed !== undefined) return fixed.key;
+  return fields.league_name !== '' || fields.type_name !== '' ? 'autre' : '';
+}
+
 export function ComposePage({ writerId: _writerId }: { writerId: string }) {
   const { state, setField, saveNow } = useDraft(currentArticleId());
   const taxonomy = useTaxonomy();
   const [taxonomyError, setTaxonomyError] = useState<string | null>(null);
+
+  // No pre-selection logic for a brand-new draft (empty fields → the
+  // placeholder option) — only reflects what an already-tagged draft
+  // actually has, once, when it finishes loading. Runs again if the writer
+  // navigates to a different draft (`state.articleId` changes), but never
+  // re-derives on every keystroke, or picking "Autre" then typing something
+  // that happens to match a fixed pair would fight the writer's own choice.
+  const [categoryChoice, setCategoryChoice] = useState('');
+  const hydratedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (state.status !== 'editable' || hydratedForRef.current === state.articleId) return;
+    hydratedForRef.current = state.articleId;
+    setCategoryChoice(categoryChoiceFor(state.fields));
+  }, [state]);
 
   if (state.status === 'loading') {
     return (
@@ -77,33 +114,62 @@ export function ComposePage({ writerId: _writerId }: { writerId: string }) {
       </div>
 
       <div className="field-row">
-        <label htmlFor="league">Ligue</label>
-        <input
-          id="league"
-          type="text"
-          list="league-options"
-          value={fields.league_name}
-          onChange={(event) => setField('league_name', event.target.value)}
-        />
-        <datalist id="league-options">
-          {taxonomy.leagues.map((l) => (
-            <option key={l.id} value={l.name} />
+        <label htmlFor="category-choice">Catégorie</label>
+        <select
+          id="category-choice"
+          value={categoryChoice}
+          onChange={(event) => {
+            const key = event.target.value;
+            setCategoryChoice(key);
+            const fixed = FIXED_CATEGORIES.find((c) => c.key === key);
+            if (fixed !== undefined) {
+              setField('league_name', fixed.league_name);
+              setField('type_name', fixed.type_name);
+            }
+          }}
+        >
+          <option value="" disabled>
+            Choisir…
+          </option>
+          {FIXED_CATEGORIES.map((c) => (
+            <option key={c.key} value={c.key}>
+              {c.label}
+            </option>
           ))}
-        </datalist>
+          <option value="autre">Autre</option>
+        </select>
 
-        <label htmlFor="type">Type</label>
-        <input
-          id="type"
-          type="text"
-          list="type-options"
-          value={fields.type_name}
-          onChange={(event) => setField('type_name', event.target.value)}
-        />
-        <datalist id="type-options">
-          {taxonomy.categories.map((c) => (
-            <option key={c.id} value={c.name} />
-          ))}
-        </datalist>
+        {categoryChoice === 'autre' && (
+          <>
+            <label htmlFor="league">Ligue</label>
+            <input
+              id="league"
+              type="text"
+              list="league-options"
+              value={fields.league_name}
+              onChange={(event) => setField('league_name', event.target.value)}
+            />
+            <datalist id="league-options">
+              {taxonomy.leagues.map((l) => (
+                <option key={l.id} value={l.name} />
+              ))}
+            </datalist>
+
+            <label htmlFor="type">Type</label>
+            <input
+              id="type"
+              type="text"
+              list="type-options"
+              value={fields.type_name}
+              onChange={(event) => setField('type_name', event.target.value)}
+            />
+            <datalist id="type-options">
+              {taxonomy.categories.map((c) => (
+                <option key={c.id} value={c.name} />
+              ))}
+            </datalist>
+          </>
+        )}
 
         <button
           type="button"

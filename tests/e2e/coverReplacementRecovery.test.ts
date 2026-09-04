@@ -222,7 +222,14 @@ describe('recovering from a rejected cover upload (verify v4, M-V4-01)', () => {
     });
     let html = '';
     try {
-      html = (await renderer.renderArticlePage({ slug: fx.live_slug })).html;
+      html = (
+        await renderer.renderArticlePage({
+          league_slug: 'ligue-1',
+          season_slug: '26-27',
+          type_slug: 'pronos',
+          slug: fx.live_slug,
+        })
+      ).html;
     } finally {
       await renderer.close().catch(() => undefined);
     }

@@ -91,17 +91,30 @@ export function suggestMeta(article: ArticleSeoContext): MetaSuggestion {
   };
 }
 
-/** The public path a category is served at: /{league}/{type}. */
-export function categoryPath(category: { league_name: string; type_name: string }): string {
-  return `/${toSlug(category.league_name)}/${toSlug(category.type_name)}`;
+/**
+ * Aug (UTC month index 7) starts a season; Jul ends it — e.g. any date from
+ * 2026-08-01T00:00:00Z through 2027-07-31T23:59:59Z is season "26-27".
+ * Deliberately UTC (`getUTCMonth`/`getUTCFullYear`, not the local-time
+ * equivalents): this runs inside both a Deno Edge Function and Vitest, and
+ * `PublishedArticleView` timestamps are always UTC ISO strings, so a
+ * host-timezone-dependent boundary would put the same article in a
+ * different season depending on where the process happens to run.
+ */
+export function seasonSlug(date: Date): string {
+  const twoDigit = (year: number): string => String(((year % 100) + 100) % 100).padStart(2, '0');
+  const startYear = date.getUTCMonth() >= 7 ? date.getUTCFullYear() : date.getUTCFullYear() - 1;
+  return `${twoDigit(startYear)}-${twoDigit(startYear + 1)}`;
 }
 
-/** The public path an article is served at: /{league}/{type}/{slug}. */
-export function articlePath(article: {
-  league_name: string;
-  type_name: string;
-  slug: string;
-}): string {
+type PathLocation = { league_name: string; type_name: string; first_published_at: string };
+
+/** The public path a category is served at: /articles/{league}/{season}/{type}. */
+export function categoryPath(category: PathLocation): string {
+  return `/articles/${toSlug(category.league_name)}/${seasonSlug(new Date(category.first_published_at))}/${toSlug(category.type_name)}`;
+}
+
+/** The public path an article is served at: /articles/{league}/{season}/{type}/{slug}. */
+export function articlePath(article: PathLocation & { slug: string }): string {
   return `${categoryPath(article)}/${article.slug}`;
 }
 
@@ -114,7 +127,7 @@ export function htmlToText(html: string): string {
 }
 
 export function canonicalUrl(
-  article: { league_name: string; type_name: string; slug: string },
+  article: PathLocation & { slug: string },
   origin: string = SITE_ORIGIN,
 ): string {
   return `${origin}${articlePath(article)}`;

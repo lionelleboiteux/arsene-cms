@@ -113,7 +113,11 @@ describe('public site', () => {
   it('AC-11: a category with no published article shows "No articles yet" rather than an error or a blank page', async () => {
     const { renderer } = ctx();
 
-    const page = await renderer.renderCategoryPage({ league_slug: 'serie-a', type_slug: 'mercato' });
+    const page = await renderer.renderCategoryPage({
+      league_slug: 'serie-a',
+      season_slug: '26-27',
+      type_slug: 'mercato',
+    });
 
     expect({
       says_no_articles_yet: page.html.includes('No articles yet'),
@@ -124,7 +128,11 @@ describe('public site', () => {
   it('AC-06: the category listing and the social preview both use the cover image, and never a body image', async () => {
     const { renderer, coverUrl } = ctx();
 
-    const page = await renderer.renderCategoryPage({ league_slug: 'ligue-1', type_slug: 'pronos' });
+    const page = await renderer.renderCategoryPage({
+      league_slug: 'ligue-1',
+      season_slug: '26-27',
+      type_slug: 'pronos',
+    });
     const images = [...page.html.matchAll(/https:\/\/cdn\.fantasycoach\.example\/[^"'\s]+/g)].map((m) => m[0]);
     const ogImage = page.html.match(/property="og:image"\s+content="([^"]+)"/)?.[1];
 
@@ -137,9 +145,14 @@ describe('public site', () => {
   it('AC-14: the published article page embeds its schema.org markup and the sitemap carries its canonical URL, with no writer action', async () => {
     const { renderer } = ctx();
 
-    const page = await renderer.renderArticlePage({ slug: 'pronos-ligue-1-journee-12' });
+    const page = await renderer.renderArticlePage({
+      league_slug: 'ligue-1',
+      season_slug: '26-27',
+      type_slug: 'pronos',
+      slug: 'pronos-ligue-1-journee-12',
+    });
     const sitemap = await renderer.renderSitemap();
-    const canonical = `${SITE_ORIGIN}/ligue-1/pronos/pronos-ligue-1-journee-12`;
+    const canonical = `${SITE_ORIGIN}/articles/ligue-1/26-27/pronos/pronos-ligue-1-journee-12`;
 
     expect({
       json_ld_types: page.json_ld.map((b) => b['@type']),
@@ -157,8 +170,13 @@ describe('public site', () => {
 
     const pages = [
       (await renderer.renderHomepage()).html,
-      (await renderer.renderCategoryPage({ league_slug: 'ligue-1', type_slug: 'pronos' })).html,
-      (await renderer.renderArticlePage({ slug: 'pronos-ligue-1-journee-12' })).html,
+      (await renderer.renderCategoryPage({ league_slug: 'ligue-1', season_slug: '26-27', type_slug: 'pronos' })).html,
+      (await renderer.renderArticlePage({
+        league_slug: 'ligue-1',
+        season_slug: '26-27',
+        type_slug: 'pronos',
+        slug: 'pronos-ligue-1-journee-12',
+      })).html,
     ];
 
     expect(pages.filter((html) => html.includes('supabase.co'))).toEqual([]);
@@ -174,5 +192,62 @@ describe('public site', () => {
       homepage_mentions_draft: home.html.includes('Brouillon Serie A'),
       sitemap_mentions_draft: /brouillon/i.test(sitemap),
     }).toEqual({ homepage_mentions_draft: false, sitemap_mentions_draft: false });
+  });
+
+  it('a listing page is scoped to its season: the same league and category from an earlier season is excluded', async () => {
+    const { renderer, db } = ctx();
+    // Same league/category as the "26-27" fixture above, but published a
+    // season earlier — the URL bucket (league/season/category) must not
+    // blend articles across seasons just because they share a league+type.
+    await seedArticle(db.client, {
+      writer_id: await seedWriter(db.client, 'Ancien Rédacteur'),
+      title: 'Pronos Ligue 1 - Journée 3 (saison passée)',
+      league_name: 'Ligue 1',
+      type_name: 'Pronos',
+      status: 'published',
+      slug: 'pronos-ligue-1-journee-3-saison-passee',
+      published_at: '2025-09-01T10:00:00Z',
+    });
+
+    const currentSeason = await renderer.renderCategoryPage({
+      league_slug: 'ligue-1',
+      season_slug: '26-27',
+      type_slug: 'pronos',
+    });
+    const priorSeason = await renderer.renderCategoryPage({
+      league_slug: 'ligue-1',
+      season_slug: '25-26',
+      type_slug: 'pronos',
+    });
+
+    expect({
+      current_season_titles: [...currentSeason.html.matchAll(/data-article-title="([^"]+)"/g)].map((m) => m[1]),
+      prior_season_titles: [...priorSeason.html.matchAll(/data-article-title="([^"]+)"/g)].map((m) => m[1]),
+    }).toEqual({
+      current_season_titles: ['Pronos Ligue 1 - Journée 12'],
+      prior_season_titles: ['Pronos Ligue 1 - Journée 3 (saison passée)'],
+    });
+  });
+
+  it('an article URL whose league/season/category prefix does not match the article it actually names is not found', async () => {
+    const { renderer } = ctx();
+
+    const wrongLeague = await renderer.renderArticlePage({
+      league_slug: 'premier-league',
+      season_slug: '26-27',
+      type_slug: 'pronos',
+      slug: 'pronos-ligue-1-journee-12',
+    });
+    const wrongSeason = await renderer.renderArticlePage({
+      league_slug: 'ligue-1',
+      season_slug: '19-20',
+      type_slug: 'pronos',
+      slug: 'pronos-ligue-1-journee-12',
+    });
+
+    expect({
+      wrong_league_found: wrongLeague.json_ld.length > 0,
+      wrong_season_found: wrongSeason.json_ld.length > 0,
+    }).toEqual({ wrong_league_found: false, wrong_season_found: false });
   });
 });

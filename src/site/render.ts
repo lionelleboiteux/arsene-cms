@@ -13,6 +13,7 @@ import { sanitizePastedHtml } from '../domain/paste.ts';
 import {
   articlePath,
   buildStructuredData,
+  seasonSlug,
   toSlug,
   type PublishedArticleView,
 } from '../domain/seo.ts';
@@ -182,26 +183,52 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
     return { html: page(title, head, body), json_ld: [] };
   };
 
+  const notFound = (): RenderedPage => ({
+    html: page('Introuvable', '', '<p class="empty">No articles yet</p>'),
+    json_ld: [],
+  });
+
   return {
     async renderHomepage(): Promise<RenderedPage> {
       return listing('Fantasy Coach', await published());
     },
 
+    /** Shared not-found page — used by `renderArticlePage`'s own miss and by
+     *  the legacy-URL redirect route (`router.ts`) when a slug never
+     *  existed at all. */
+    async renderNotFound(): Promise<RenderedPage> {
+      return notFound();
+    },
+
     async renderCategoryPage(args: {
       league_slug: string;
+      season_slug: string;
       type_slug: string;
     }): Promise<RenderedPage> {
       const rows = (await published()).filter(
         (row) =>
-          toSlug(row.league_name) === args.league_slug && toSlug(row.type_name) === args.type_slug,
+          toSlug(row.league_name) === args.league_slug &&
+          seasonSlug(row.first_published_at) === args.season_slug &&
+          toSlug(row.type_name) === args.type_slug,
       );
-      return listing(`${args.league_slug} / ${args.type_slug}`, rows);
+      return listing(`${args.league_slug} / ${args.season_slug} / ${args.type_slug}`, rows);
     },
 
-    async renderArticlePage(args: { slug: string }): Promise<RenderedPage> {
-      const row = (await published()).find((candidate) => candidate.slug === args.slug);
+    async renderArticlePage(args: {
+      league_slug: string;
+      season_slug: string;
+      type_slug: string;
+      slug: string;
+    }): Promise<RenderedPage> {
+      const row = (await published()).find(
+        (candidate) =>
+          candidate.slug === args.slug &&
+          toSlug(candidate.league_name) === args.league_slug &&
+          seasonSlug(candidate.first_published_at) === args.season_slug &&
+          toSlug(candidate.type_name) === args.type_slug,
+      );
       if (row === undefined) {
-        return { html: page('Introuvable', '', '<p class="empty">No articles yet</p>'), json_ld: [] };
+        return notFound();
       }
       const view = viewOf(row);
       const jsonLd = buildStructuredData(view, opts.siteOrigin);
@@ -237,6 +264,17 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
       const articleBody = `<div class="body">${sanitizePastedHtml(row.body_html)}</div>`;
       const body = `<main data-article-title="${escape(row.title)}">${hero}${meta}${articleBody}</main>`;
       return { html: page(row.title, head, body), json_ld: [jsonLd] };
+    },
+
+    /**
+     * Backs the legacy flat `/articles/{slug}` route's redirect to its real
+     * nested path — deliberately looks up by bare slug alone (unlike
+     * `renderArticlePage`, which now also checks the league/season/type
+     * prefix), since a legacy URL never carried one to check.
+     */
+    async resolvePublishedPath(args: { slug: string }): Promise<string | null> {
+      const row = (await published()).find((candidate) => candidate.slug === args.slug);
+      return row === undefined ? null : articlePath(viewOf(row));
     },
 
     /** AC-14: every published article, and nothing that is still a draft. */
