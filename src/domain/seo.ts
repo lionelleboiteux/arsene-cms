@@ -121,7 +121,10 @@ export function canonicalUrl(
 }
 
 /** AC-14: schema.org JSON-LD embedded verbatim in the published page. */
-export function buildStructuredData(article: PublishedArticleView): Record<string, unknown> {
+export function buildStructuredData(
+  article: PublishedArticleView,
+  origin: string = SITE_ORIGIN,
+): Record<string, unknown> {
   return {
     '@context': 'https://schema.org',
     '@type': 'NewsArticle',
@@ -130,7 +133,7 @@ export function buildStructuredData(article: PublishedArticleView): Record<strin
     datePublished: article.first_published_at,
     dateModified: article.published_at,
     author: { '@type': 'Person', name: article.writer_display_name },
-    mainEntityOfPage: canonicalUrl(article),
+    mainEntityOfPage: canonicalUrl(article, origin),
   };
 }
 

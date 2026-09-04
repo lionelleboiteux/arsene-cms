@@ -179,7 +179,7 @@ export interface SeoModule {
   /** AC-13: pre-filled suggestion the writer may edit before confirming. */
   suggestMeta(article: ArticleSeoContext): MetaSuggestion;
   /** AC-14: schema.org JSON-LD embedded in the published page. */
-  buildStructuredData(article: PublishedArticleView): Record<string, unknown>;
+  buildStructuredData(article: PublishedArticleView, origin?: string): Record<string, unknown>;
   /** AC-14: the article's sitemap entry. */
   buildSitemapEntry(article: PublishedArticleView): { loc: string; lastmod: string };
   /** AC-15: alt text derived from the article's own context. */

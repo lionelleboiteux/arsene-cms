@@ -158,7 +158,7 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
         return { html: page('Introuvable', '', '<p class="empty">No articles yet</p>'), json_ld: [] };
       }
       const view = viewOf(row);
-      const jsonLd = buildStructuredData(view);
+      const jsonLd = buildStructuredData(view, opts.siteOrigin);
       const head = [
         `<link rel="canonical" href="${opts.siteOrigin}${articlePath(view)}"/>`,
         `<meta property="og:image" content="${escape(view.cover_image_url)}"/>`,
