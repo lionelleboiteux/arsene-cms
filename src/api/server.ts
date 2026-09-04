@@ -57,6 +57,7 @@ export async function startServer(opts: SpawnedServerOptions): Promise<RunningSe
           : {}),
         ...(opts.jwtIssuer !== undefined ? { SUPABASE_JWT_ISSUER: opts.jwtIssuer } : {}),
         ...(opts.cdnOrigin !== undefined ? { CDN_ORIGIN: opts.cdnOrigin } : {}),
+        ...(opts.siteOrigin !== undefined ? { SITE_ORIGIN: opts.siteOrigin } : {}),
         ...(opts.dashboardReadSecret !== undefined
           ? { DASHBOARD_READ_SECRET: opts.dashboardReadSecret }
           : {}),

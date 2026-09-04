@@ -59,6 +59,7 @@ const server = await startHttpServer({
   // placeholder on the reserved `.example` TLD. Not a secret, but read from
   // the same place for the same reason: it differs per deployment.
   cdnOrigin: process.env.CDN_ORIGIN,
+  siteOrigin: process.env.SITE_ORIGIN,
   dashboardReadSecret: process.env.DASHBOARD_READ_SECRET,
 });
 

@@ -36,12 +36,17 @@ import { handlePublishArticle, type PublishDeps } from './publishArticle.ts';
 import { createRateLimiter, PUBLISH_RATE_LIMIT_PER_MINUTE } from './rateLimit.ts';
 import { createRepo, type Repo } from './repo.ts';
 import { handleUploadImage, type UploadDeps } from './uploadImage.ts';
+import { createSiteRenderer } from '../site/render.ts';
 
 const ARTICLE_ROUTE = /^\/v1\/articles\/([^/]+)\/(publish|images|open)$/;
 const ARTICLE_IMAGE_ROUTE = /^\/v1\/articles\/([^/]+)\/images\/([^/]+)$/;
 const CREATE_DRAFT_ROUTE = '/v1/articles';
 const IMAGE_STATUS_ROUTE = /^\/internal\/images\/([^/]+)\/status$/;
 const METRICS_SUMMARY_ROUTE = '/internal/metrics/time-to-publish';
+/** The public reader-facing routes (stopgap for ADR-0001's not-yet-built
+ *  Next.js/ISR app — see `src/site/render.ts`'s own doc comment). */
+const PUBLIC_HOME_ROUTE = '/public/';
+const PUBLIC_ARTICLE_ROUTE = /^\/public\/articles\/([^/]+)$/;
 
 /**
  * Assets are served through the CDN, never from Supabase Storage (§4). The
@@ -53,6 +58,10 @@ const METRICS_SUMMARY_ROUTE = '/internal/metrics/time-to-publish';
  * falls back to.
  */
 const DEFAULT_CDN_ORIGIN = 'https://cdn.fantasycoach.example';
+
+/** Same reserved-TLD placeholder pattern as `DEFAULT_CDN_ORIGIN`, for the
+ *  canonical link `src/site/render.ts`'s article page emits. */
+const DEFAULT_SITE_ORIGIN = 'https://fantasy-coach.example';
 
 /** A Postgres foreign-key violation: this token's `sub` is not a writer here. */
 const FOREIGN_KEY_VIOLATION = '23503';
@@ -591,6 +600,39 @@ const metricsSummary = (request: Request, ctx: Ctx): Promise<HandlerResponse> =>
     { dashboardSecret: ctx.opts.dashboardReadSecret ?? '', repo: ctx.repo },
   );
 
+/** See `Shared.siteRenderer`'s comment: built once, on first public-page
+ *  request, and reused for every request after. */
+function getSiteRenderer(ctx: Ctx): ReturnType<typeof createSiteRenderer> {
+  if (ctx.shared.siteRenderer === undefined) {
+    ctx.shared.siteRenderer = createSiteRenderer({
+      databaseUrl: ctx.opts.databaseUrl,
+      siteOrigin: ctx.opts.siteOrigin ?? DEFAULT_SITE_ORIGIN,
+    });
+  }
+  return ctx.shared.siteRenderer;
+}
+
+function htmlResponse(html: string, status: number, cors: Record<string, string>): Response {
+  return new Response(html, { status, headers: { 'content-type': 'text/html; charset=utf-8', ...cors } });
+}
+
+async function renderPublicPage(
+  op: Extract<Operation, { kind: 'public-home' | 'public-article' }>,
+  ctx: Ctx,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const renderer = await getSiteRenderer(ctx);
+  if (op.kind === 'public-home') {
+    return htmlResponse((await renderer.renderHomepage()).html, 200, cors);
+  }
+  const page = await renderer.renderArticlePage({ slug: op.slug });
+  // `renderArticlePage`'s own not-found path (`src/site/render.ts`) never
+  // populates `json_ld` — true for no article it actually found — so an
+  // empty array is the not-found signal this route has to work with without
+  // changing that module's return shape.
+  return htmlResponse(page.html, page.json_ld.length === 0 ? 404 : 200, cors);
+}
+
 export type ServerOptions = {
   port: number;
   databaseUrl: string;
@@ -633,6 +675,12 @@ export type ServerOptions = {
    * store writes. `DEFAULT_CDN_ORIGIN` when unset (M-V3-04).
    */
   cdnOrigin?: string;
+  /**
+   * The origin the public reader-facing pages' canonical link is built
+   * against (`src/site/render.ts`'s `renderArticlePage`). `DEFAULT_SITE_ORIGIN`
+   * when unset — same fallback pattern as `cdnOrigin`.
+   */
+  siteOrigin?: string;
   /** How long a request may take to deliver its body; `DEFAULT_READ_TIMEOUT_MS`
    * when unset. */
   readTimeoutMs?: number;
@@ -661,6 +709,15 @@ type Shared = {
     image_id: string,
     file: { filename: string; content_type: string; bytes: Uint8Array },
   ) => void;
+  /**
+   * Lazily built and cached on first public-page request, then reused for
+   * every request after — `createSiteRenderer` opens one long-lived Postgres
+   * client (see its own doc comment), so this must not be constructed fresh
+   * per request. Same "built once, reused for the process's life" shape as
+   * `jwks`/`rateLimiter`/`idempotency` above; unlike those it cannot be built
+   * eagerly in `buildCtx` because connecting is async and `buildCtx` is not.
+   */
+  siteRenderer?: ReturnType<typeof createSiteRenderer>;
 };
 
 export type Ctx = { opts: ServerOptions; repo: Repo; shared: Shared };
@@ -715,11 +772,17 @@ type Operation =
   | { kind: 'discard-image'; article_id: string; image_id: string }
   | { kind: 'create-draft' }
   | { kind: 'image-status'; image_id: string }
-  | { kind: 'metrics-summary' };
+  | { kind: 'metrics-summary' }
+  | { kind: 'public-home' }
+  | { kind: 'public-article'; slug: string };
 
 function matchRoute(path: string): Operation | null {
   if (path === CREATE_DRAFT_ROUTE) return { kind: 'create-draft' };
   if (path === METRICS_SUMMARY_ROUTE) return { kind: 'metrics-summary' };
+  if (path === PUBLIC_HOME_ROUTE) return { kind: 'public-home' };
+
+  const publicArticle = PUBLIC_ARTICLE_ROUTE.exec(path);
+  if (publicArticle?.[1] !== undefined) return { kind: 'public-article', slug: publicArticle[1] };
 
   const article = ARTICLE_ROUTE.exec(path);
   if (article?.[1] !== undefined) {
@@ -739,7 +802,7 @@ function matchRoute(path: string): Operation | null {
  * and the read-only dashboard adapter (`GET`). */
 const methodOf = (op: Operation): string => {
   if (op.kind === 'discard-image') return 'DELETE';
-  if (op.kind === 'metrics-summary') return 'GET';
+  if (op.kind === 'metrics-summary' || op.kind === 'public-home' || op.kind === 'public-article') return 'GET';
   return 'POST';
 };
 
@@ -772,6 +835,13 @@ function dispatch(
       return imageStatus(request, op.image_id, raw, ctx);
     case 'metrics-summary':
       return metricsSummary(request, ctx);
+    case 'public-home':
+    case 'public-article':
+      // `route()` returns a raw HTML `Response` for these before `dispatch()`
+      // is ever called (`renderPublicPage()`) — they carry no JSON envelope
+      // for `send()` to wrap. These cases exist only so this switch stays
+      // exhaustive over `Operation`.
+      throw new Error(`unreachable: '${op.kind}' is handled by route() before dispatch()`);
   }
 }
 
@@ -820,6 +890,13 @@ export async function route(
   }
   if (Number(request.headers.get('content-length') ?? 0) > MAX_UPLOAD_BYTES) {
     return send(tooLarge(), cors);
+  }
+  // The public reader-facing pages require no credential at all — there is
+  // none for an anonymous website visitor to hold — and their response is
+  // HTML, not this API's JSON envelope, so they return here rather than
+  // falling into the auth chain and `send()` below.
+  if (op.kind === 'public-home' || op.kind === 'public-article') {
+    return renderPublicPage(op, ctx, cors);
   }
   // The callback carries a shared secret rather than a writer token (ADR-0004),
   // but it is checked here, from the headers alone, for the same reason the
@@ -946,6 +1023,12 @@ export async function startHttpServer(opts: ServerOptions): Promise<RunningServe
     url: `http://127.0.0.1:${opts.port}`,
     async stop() {
       await new Promise<void>((resolve) => server.close(() => resolve()));
+      // `getSiteRenderer` opens its own connection, independent of `pool`
+      // above, only on the first public-page request (`Ctx.shared.siteRenderer`'s
+      // own doc comment) — closed here only when a test/run actually made one,
+      // so a container torn down afterwards doesn't kill it out from under an
+      // open `pg.Client` and surface as an unhandled connection-terminated error.
+      await ctx.shared.siteRenderer?.then((renderer) => renderer.close()).catch(() => undefined);
       await pool.end();
     },
   };

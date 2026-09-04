@@ -85,6 +85,7 @@ const opts: ServerOptions = {
   jwtIssuer: Deno.env.get('SUPABASE_JWT_ISSUER'),
   imageCallbackSecret: Deno.env.get('IMAGE_CALLBACK_SECRET'),
   cdnOrigin: Deno.env.get('CDN_ORIGIN'),
+  siteOrigin: Deno.env.get('SITE_ORIGIN'),
   dashboardReadSecret: Deno.env.get('DASHBOARD_READ_SECRET'),
   corsOrigins: parseCorsOrigins(Deno.env.get('CORS_ALLOWED_ORIGINS')),
   readTimeoutMs: (() => {

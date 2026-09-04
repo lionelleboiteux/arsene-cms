@@ -911,6 +911,8 @@ export type RouterOptions = {
   /** CORS-01: origins allowed to call this deployment from a browser (e.g. the
    *  editor SPA's own origin). Never a wildcard — this is a bearer-token API. */
   corsOrigins?: string[];
+  /** The origin `GET /public/articles/:slug`'s canonical link is built against. */
+  siteOrigin?: string;
 };
 
 export interface ApiRouterModule {
