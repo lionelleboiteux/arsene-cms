@@ -77,6 +77,49 @@ const PUBLISHED_ARTICLES_SQL = `
 const escape = (text: string): string =>
   text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+const dateFormatter = new Intl.DateTimeFormat('fr-FR', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+const formatDateTime = (iso: string): string => dateFormatter.format(new Date(iso));
+
+/**
+ * Inlined rather than a separate stylesheet route: everything this site
+ * serves goes through the JSON-wrapping detour `renderPublicPage`'s own
+ * comment (`src/api/router.ts`) documents for `text/html` — adding a second
+ * asset route would mean solving that problem twice for one page's worth of
+ * CSS.
+ */
+const SITE_CSS = `
+:root{--bg:#fff;--fg:#16181c;--muted:#6b7280;--card-bg:#f4f4f5}
+@media (prefers-color-scheme:dark){:root{--bg:#0b0b0c;--fg:#f2f2f3;--muted:#9a9aa2;--card-bg:#1c1c1f}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);line-height:1.55;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+a{color:inherit}
+main{max-width:680px;margin:0 auto}
+.hero{position:relative;margin:0;background:#000}
+.hero img{display:block;width:100%;max-height:70vh;object-fit:cover}
+.hero .scrim{position:absolute;inset:0;
+  background:linear-gradient(to top,rgba(0,0,0,.88),rgba(0,0,0,.1) 60%,transparent)}
+.hero h1{position:absolute;left:0;right:0;bottom:0;margin:0;padding:1.5rem 1.25rem;color:#fff;
+  font-size:clamp(1.5rem,4vw,2.25rem);font-weight:800;line-height:1.2}
+h1.title-only{padding:2rem 1.25rem 0;font-size:clamp(1.5rem,4vw,2.25rem);font-weight:800;line-height:1.2}
+.meta{padding:1rem 1.25rem 0;margin:0;color:var(--muted);font-size:.95rem}
+.meta .author{color:var(--fg);font-weight:600}
+.meta .sep{margin:0 .4em}
+.body{padding:1.25rem 1.25rem 3rem;font-size:1.08rem}
+.body img{max-width:100%;height:auto;border-radius:8px;margin:.5rem 0}
+ul.articles{list-style:none;margin:0;padding:1rem;display:grid;gap:1rem;max-width:900px;margin-inline:auto}
+.article-card{background:var(--card-bg);border-radius:12px;overflow:hidden}
+.article-card img{display:block;width:100%;height:200px;object-fit:cover}
+.article-card a{display:block;padding:.9rem 1rem;font-weight:700;text-decoration:none}
+p.empty{padding:2rem;color:var(--muted)}
+`;
+
 function viewOf(row: ArticleRow): PublishedArticleView {
   return {
     article_id: row.id,
@@ -99,8 +142,8 @@ function articleCard(row: ArticleRow): string {
       : `<img src="${escape(row.cover_image_url)}" alt="${escape(row.title)}"/>`;
   return [
     `<li class="article-card" data-article-title="${escape(row.title)}">`,
-    `<a href="${articlePath(viewOf(row))}">${escape(row.title)}</a>`,
     cover,
+    `<a href="${articlePath(viewOf(row))}">${escape(row.title)}</a>`,
     '</li>',
   ].join('');
 }
@@ -108,7 +151,10 @@ function articleCard(row: ArticleRow): string {
 function page(title: string, head: string, body: string): string {
   return [
     '<!doctype html><html lang="fr"><head>',
+    '<meta charset="utf-8"/>',
+    '<meta name="viewport" content="width=device-width, initial-scale=1"/>',
     `<title>${escape(title)}</title>`,
+    `<style>${SITE_CSS}</style>`,
     head,
     '</head><body>',
     body,
@@ -164,11 +210,32 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
         `<meta property="og:image" content="${escape(view.cover_image_url)}"/>`,
         `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`,
       ].join('');
+      const hero = view.cover_image_url
+        ? `<figure class="hero"><img src="${escape(view.cover_image_url)}" alt="${escape(row.title)}"/><div class="scrim"></div><h1>${escape(row.title)}</h1></figure>`
+        : `<h1 class="title-only">${escape(row.title)}</h1>`;
+
+      // AC-14's timestamps double as the update indicator: first_published_at
+      // never moves after the first publish, so it and published_at diverging
+      // is exactly "this article has been updated since it first went live".
+      const updated =
+        view.published_at === view.first_published_at
+          ? ''
+          : ` <span class="sep">·</span> Mis à jour le ${formatDateTime(view.published_at)}`;
+      const meta = [
+        '<p class="meta">',
+        `<span class="author">${escape(row.writer_display_name)}</span>`,
+        '<span class="sep">·</span>',
+        `Publié le ${formatDateTime(view.first_published_at)}`,
+        updated,
+        '</p>',
+      ].join('');
+
       // Defence in depth (H1): publish sanitises what it stores, and this pass
       // sanitises again, so a row poisoned another way — a direct PostgREST
       // PATCH, a row written before publish sanitised — still cannot execute in
       // a visitor's browser.
-      const body = `<article data-article-title="${escape(row.title)}">${sanitizePastedHtml(row.body_html)}</article>`;
+      const articleBody = `<div class="body">${sanitizePastedHtml(row.body_html)}</div>`;
+      const body = `<main data-article-title="${escape(row.title)}">${hero}${meta}${articleBody}</main>`;
       return { html: page(row.title, head, body), json_ld: [jsonLd] };
     },
 
