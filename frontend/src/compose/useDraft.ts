@@ -4,6 +4,7 @@ import { HEARTBEAT_INTERVAL_MS } from '../../../src/domain/lock.ts';
 import { ArseneApiError } from '../../../src/api/client.ts';
 import { supabase } from '../lib/supabaseClient.ts';
 import { arseneClient } from '../lib/arseneApi.ts';
+import { embeddedName } from '../lib/embeddedName.ts';
 
 /** Retry cadence while waiting to acquire a lock someone else holds —
  *  deliberately different from the 20s heartbeat cadence, so "trying to
@@ -54,15 +55,6 @@ function emptyFields(): DraftFields {
   };
 }
 
-/** No generated Supabase `Database` types are wired up for this small app, so
- *  an embedded relation's inferred shape isn't reliable — PostgREST returns
- *  it as a single object for a to-one foreign key either way. */
-function embeddedName(value: unknown): string {
-  const row = Array.isArray(value) ? value[0] : value;
-  const name = (row as { name?: unknown } | undefined)?.name;
-  return typeof name === 'string' ? name : '';
-}
-
 /** `supabase-js`'s query builder is lazy — it only actually fires the
  *  request once awaited/`.then()`'d, so this must always be consumed, never
  *  fired-and-forgotten with a bare `void`. */
@@ -107,7 +99,7 @@ async function hydrateExtraFields(articleId: string): Promise<Partial<DraftField
   };
 }
 
-export function useDraft(articleIdFromUrl: string | null) {
+export function useDraft(articleId: string) {
   const [state, setState] = useState<DraftState>({ status: 'loading' });
   const dirtyRef = useRef(false);
   const lastEditAtRef = useRef(new Date());
@@ -140,12 +132,13 @@ export function useDraft(articleIdFromUrl: string | null) {
     setState((prev) => (prev.status === 'editable' ? { ...prev, fields, lastSavedAt: lastSavedAtRef.current } : prev));
   }, []);
 
-  // ---- mount: create or open -------------------------------------------
+  // ---- mount: open the draft (creation now happens on the home page,
+  // before an articleId ever reaches this hook) --------------------------
   useEffect(() => {
     let cancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
-    async function tryOpen(articleId: string) {
+    async function tryOpen() {
       try {
         const client = await arseneClient();
         const opened = (await client.openDraft({ articleId })) as { title: string; body_html: string };
@@ -163,44 +156,21 @@ export function useDraft(articleIdFromUrl: string | null) {
         if (cancelled) return;
         if (err instanceof ArseneApiError && err.code === 'DRAFT_LOCKED') {
           setState({ status: 'locked', locked_by_display_name: lockedByDisplayName(err.details) });
-          retryTimer = setTimeout(() => void tryOpen(articleId), LOCK_RETRY_INTERVAL_MS);
+          retryTimer = setTimeout(() => void tryOpen(), LOCK_RETRY_INTERVAL_MS);
           return;
         }
         setState({ status: 'error', message: err instanceof Error ? err.message : String(err) });
       }
     }
 
-    async function createNew() {
-      try {
-        const client = await arseneClient();
-        const created = (await client.createDraft()) as { article_id: string };
-        if (cancelled) return;
-        const url = new URL(window.location.href);
-        url.searchParams.set('id', created.article_id);
-        window.history.replaceState(null, '', url.toString());
-        lastSavedAtRef.current = new Date();
-        setState({
-          status: 'editable',
-          articleId: created.article_id,
-          fields: emptyFields(),
-          lastSavedAt: lastSavedAtRef.current,
-          savedIndicator: null,
-        });
-      } catch (err) {
-        if (cancelled) return;
-        setState({ status: 'error', message: err instanceof Error ? err.message : String(err) });
-      }
-    }
-
-    if (articleIdFromUrl === null) void createNew();
-    else void tryOpen(articleIdFromUrl);
+    void tryOpen();
 
     return () => {
       cancelled = true;
       if (retryTimer !== undefined) clearTimeout(retryTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [articleIdFromUrl]);
+  }, [articleId]);
 
   // ---- heartbeat: only while holding the lock ---------------------------
   useEffect(() => {

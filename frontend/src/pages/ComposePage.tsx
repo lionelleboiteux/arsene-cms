@@ -8,22 +8,22 @@ import { CoverImageSlot } from '../compose/CoverImageSlot.tsx';
 import { BodyImageList } from '../compose/BodyImageList.tsx';
 import { PublishPanel } from '../compose/PublishPanel.tsx';
 import { supabase } from '../lib/supabaseClient.ts';
-
-function currentArticleId(): string | null {
-  return new URLSearchParams(window.location.search).get('id');
-}
+import { HOME_LEAGUES, TYPE_NAME_PLAYER_PICKS } from '../lib/leagues.ts';
 
 /**
- * The only two leagues with an actual writer today — everything else still
- * goes through "Autre"'s free-text fields below, unchanged. Not a stored
- * taxonomy table: picking one of these just fills `league_name`/`type_name`
- * with the same strings the old free-text fields would have held, so the
- * existing `useTaxonomy.resolve()` → `saveNow()` pipeline needs no change.
+ * The home page's five leagues, each offered as a Player Picks shortcut —
+ * everything else still goes through "Autre"'s free-text fields below,
+ * unchanged. Not a stored taxonomy table: picking one of these just fills
+ * `league_name`/`type_name` with the same strings the old free-text fields
+ * would have held, so the existing `useTaxonomy.resolve()` → `saveNow()`
+ * pipeline needs no change.
  */
-const FIXED_CATEGORIES = [
-  { key: 'l1-pp', label: 'L1 PP', league_name: 'Ligue 1', type_name: 'Player Picks' },
-  { key: 'prem-pp', label: 'PremPP', league_name: 'Premier League', type_name: 'Player Picks' },
-] as const;
+const FIXED_CATEGORIES = HOME_LEAGUES.map((l) => ({
+  key: l.key,
+  label: l.dropdown_label,
+  league_name: l.league_name,
+  type_name: TYPE_NAME_PLAYER_PICKS,
+}));
 
 /** Which dropdown option a draft's current league/type reflects — used only
  *  to restore the right selection when reopening an already-tagged draft,
@@ -36,8 +36,8 @@ function categoryChoiceFor(fields: Pick<DraftFields, 'league_name' | 'type_name'
   return fields.league_name !== '' || fields.type_name !== '' ? 'autre' : '';
 }
 
-export function ComposePage({ writerId: _writerId }: { writerId: string }) {
-  const { state, setField, saveNow } = useDraft(currentArticleId());
+export function ComposePage({ articleId, onBack }: { articleId: string; onBack: () => void }) {
+  const { state, setField, saveNow } = useDraft(articleId);
   const taxonomy = useTaxonomy();
   const [taxonomyError, setTaxonomyError] = useState<string | null>(null);
 
@@ -81,7 +81,7 @@ export function ComposePage({ writerId: _writerId }: { writerId: string }) {
     );
   }
 
-  const { articleId, fields } = state;
+  const { fields } = state;
 
   async function confirmTaxonomy() {
     setTaxonomyError(null);
@@ -96,6 +96,9 @@ export function ComposePage({ writerId: _writerId }: { writerId: string }) {
   return (
     <main className="compose-page">
       <header className="compose-header">
+        <button type="button" onClick={onBack}>
+          ← Accueil
+        </button>
         <SaveIndicator indicator={state.savedIndicator} />
         <button type="button" onClick={() => void supabase.auth.signOut()}>
           Se déconnecter
@@ -201,6 +204,7 @@ export function ComposePage({ writerId: _writerId }: { writerId: string }) {
           setField('meta_title', meta_title);
           setField('meta_description', meta_description);
         }}
+        onPublished={onBack}
       />
     </main>
   );

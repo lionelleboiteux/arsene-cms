@@ -7,14 +7,24 @@ import type { DraftFields } from './useDraft.ts';
 /** AC-13/17: meta title/description are suggested, writer-editable, and
  *  republish (calling publish again on an already-published article) is the
  *  same button — `is_republish` only changes the confirmation copy. */
+/** How long the "Publié : /slug" confirmation stays up before this panel
+ *  hands off to `onPublished` — long enough to read, short enough that
+ *  landing back on the article list still feels like the direct result of
+ *  clicking Publier. */
+const PUBLISHED_HANDOFF_DELAY_MS = 1_500;
+
 export function PublishPanel({
   articleId,
   fields,
   onMetaChange,
+  onPublished,
 }: {
   articleId: string;
   fields: DraftFields;
   onMetaChange: (meta_title: string, meta_description: string) => void;
+  /** Called once, `PUBLISHED_HANDOFF_DELAY_MS` after a successful publish —
+   *  not on republish specifically or on error, every successful publish. */
+  onPublished: () => void;
 }) {
   const [publishing, setPublishing] = useState(false);
   const [result, setResult] = useState<
@@ -45,6 +55,7 @@ export function PublishPanel({
         idempotencyKey: crypto.randomUUID(),
       })) as { slug: string; is_republish: boolean };
       setResult({ status: 'success', slug: response.slug, is_republish: response.is_republish });
+      setTimeout(onPublished, PUBLISHED_HANDOFF_DELAY_MS);
     } catch (err) {
       if (err instanceof ArseneApiError) {
         setResult({ status: 'error', code: err.code, message: messageFor(err) });
