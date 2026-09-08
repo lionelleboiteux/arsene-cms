@@ -31,6 +31,7 @@ import {
  */
 
 const SITE_ORIGIN = 'https://fantasycoach.example';
+const CDN_ORIGIN = 'https://cdn.fantasycoach.example';
 
 type Ctx = { db: TestDatabase; pool: pg.Pool; writerA: string; writerB: string };
 
@@ -96,6 +97,7 @@ describe('public site XSS defence in depth (verify finding #1)', () => {
     const renderer = await createSiteRenderer({
       databaseUrl: db.connectionUri,
       siteOrigin: SITE_ORIGIN,
+      cdnOrigin: CDN_ORIGIN,
     });
     let html = '';
     try {
@@ -111,14 +113,19 @@ describe('public site XSS defence in depth (verify finding #1)', () => {
       await renderer.close().catch(() => undefined);
     }
 
-    // The JSON-LD block is a legitimate <script type="application/ld+json">,
-    // so only executable script elements are counted.
-    const executableScripts = [...html.matchAll(/<script(?![^>]*application\/ld\+json)/gi)].length;
+    // Scoped to the article body specifically, not the whole page: the page
+    // legitimately carries its own <script> tags in <head> (JSON-LD, and —
+    // since this session's fc-shared integration — the shared nav/ads
+    // loaders), none of which are the thing this test is about. What must
+    // never survive is the poisoned *body_html* reaching a visitor's
+    // browser, so that's the one substring these checks run against.
+    const bodyMatch = /<div class="body">([\s\S]*?)<\/div><\/main>/.exec(html);
+    const body = bodyMatch?.[1] ?? '';
 
     expect({
-      executable_script_tags: executableScripts,
-      inline_event_handlers: /\son(error|click|load|mouseover)\s*=/i.test(html),
-      javascript_href: /href\s*=\s*["']?\s*javascript:/i.test(html),
+      executable_script_tags: [...body.matchAll(/<script/gi)].length,
+      inline_event_handlers: /\son(error|click|load|mouseover)\s*=/i.test(body),
+      javascript_href: /href\s*=\s*["']?\s*javascript:/i.test(body),
       still_renders_the_article: html.includes('PSG reçoit Marseille dimanche soir.'),
     }).toEqual({
       executable_script_tags: 0,

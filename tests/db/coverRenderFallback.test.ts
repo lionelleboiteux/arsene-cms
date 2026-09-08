@@ -89,6 +89,7 @@ import {
  */
 
 const SITE_ORIGIN = 'https://fantasycoach.example';
+const CDN_ORIGIN = 'https://cdn.fantasycoach.example';
 const SLUG = 'pronos-ligue-1-journee-14';
 /** The cover this article was published with, and is serving to visitors. */
 const PUBLISHED_COVER_URL = 'https://cdn.fantasycoach.example/live/couverture-publiee.webp';
@@ -151,6 +152,7 @@ beforeAll(async () => {
     const renderer = await createSiteRenderer({
       databaseUrl: db.connectionUri,
       siteOrigin: SITE_ORIGIN,
+      cdnOrigin: CDN_ORIGIN,
     });
     started = { db, renderer, article, cover };
   } catch (err) {

@@ -723,7 +723,7 @@ export type RenderedPage = {
 };
 
 export interface SiteRenderModule {
-  createSiteRenderer(opts: { databaseUrl: string; siteOrigin: string }): Promise<{
+  createSiteRenderer(opts: { databaseUrl: string; siteOrigin: string; cdnOrigin: string }): Promise<{
     renderHomepage(): Promise<RenderedPage>;
     renderNotFound(): Promise<RenderedPage>;
     renderCategoryPage(args: { league_slug: string; season_slug: string; type_slug: string }): Promise<RenderedPage>;

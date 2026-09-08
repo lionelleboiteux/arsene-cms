@@ -77,6 +77,7 @@ import { corruptedJpeg } from '../support/imageFixtures.js';
 
 const WRITER_TOKEN = 'red-gate-writer-token';
 const SITE_ORIGIN = 'https://fantasycoach.example';
+const CDN_ORIGIN = 'https://cdn.fantasycoach.example';
 
 type Fixtures = {
   /** A live article whose ready cover a failed upload must not cost it. */
@@ -219,6 +220,7 @@ describe('recovering from a rejected cover upload (verify v4, M-V4-01)', () => {
     const renderer = await createSiteRenderer({
       databaseUrl: db.connectionUri,
       siteOrigin: SITE_ORIGIN,
+      cdnOrigin: CDN_ORIGIN,
     });
     let html = '';
     try {

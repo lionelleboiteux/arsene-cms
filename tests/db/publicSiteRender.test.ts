@@ -14,6 +14,7 @@ import { seedArticle, seedCategory, seedImage, seedWriter, startTestDatabase, ty
  */
 
 const SITE_ORIGIN = 'https://fantasycoach.example';
+const CDN_ORIGIN = 'https://cdn.fantasycoach.example';
 
 type Renderer = Awaited<ReturnType<Awaited<ReturnType<typeof loadSiteRender>>['createSiteRenderer']>>;
 
@@ -83,7 +84,11 @@ beforeAll(async () => {
       optimized_url: 'https://cdn.fantasycoach.example/a1a1a1a1/body-1-optimized.webp',
     });
 
-    const renderer = await createSiteRenderer({ databaseUrl: db.connectionUri, siteOrigin: SITE_ORIGIN });
+    const renderer = await createSiteRenderer({
+      databaseUrl: db.connectionUri,
+      siteOrigin: SITE_ORIGIN,
+      cdnOrigin: CDN_ORIGIN,
+    });
     started = { db, renderer, coverUrl };
   } catch (err) {
     startupError = err as Error;

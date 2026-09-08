@@ -101,6 +101,15 @@ const SITE_CSS = `
 body{margin:0;background:var(--bg);color:var(--fg);line-height:1.55;
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
 a{color:inherit}
+/* fc-nav's own injected CSS (fc-shared/nav.js) gives .site-banner a
+   margin:0 -1rem bleed, assuming a host page with padding:0 1rem it's
+   cancelling out — pronos/DNP/compos all have that. This page's body has
+   none (padding lives on the inner content blocks instead, deliberately,
+   so it stays untouched), so left as-is the bleed would push the banner
+   past the viewport edge and cause horizontal scroll. This selector is
+   more specific than nav.js's own .site-banner rule, so it wins regardless
+   of which <style> tag the cascade sees second. */
+body>fc-nav.site-banner{margin:0 0 1.5rem}
 main{max-width:680px;margin:0 auto}
 .hero{position:relative;margin:0;background:#000}
 .hero img{display:block;width:100%;max-height:70vh;object-fit:cover}
@@ -149,6 +158,22 @@ function articleCard(row: ArticleRow): string {
   ].join('');
 }
 
+/**
+ * The fantasy-coach.fr sibling sites (pronos, DNP, compos) all share their
+ * nav/ads/feedback through `fc-shared` (a separate repo,
+ * github.com/lionelleboiteux/fc-shared) — dependency-free Web Components
+ * pulled straight from jsDelivr, no build step, matching this file's own
+ * "plain HTML string, no framework" shape exactly. `nav.js` defines
+ * `<fc-nav>`; `ads.js` is the AdSense + consent loader, same publisher ID
+ * across every site. Pinned to `@main` (not a version tag) like every
+ * other sibling site, so a `nav.js` edit over there reaches this site too,
+ * on jsDelivr's ~12h branch-ref cache.
+ */
+const FC_SHARED_HEAD = [
+  '<script src="https://cdn.jsdelivr.net/gh/lionelleboiteux/fc-shared@main/nav.js" defer></script>',
+  '<script src="https://cdn.jsdelivr.net/gh/lionelleboiteux/fc-shared@main/ads.js" async></script>',
+].join('');
+
 function page(title: string, head: string, body: string): string {
   return [
     '<!doctype html><html lang="fr"><head>',
@@ -156,8 +181,10 @@ function page(title: string, head: string, body: string): string {
     '<meta name="viewport" content="width=device-width, initial-scale=1"/>',
     `<title>${escape(title)}</title>`,
     `<style>${SITE_CSS}</style>`,
+    FC_SHARED_HEAD,
     head,
     '</head><body>',
+    '<fc-nav current="arsene"></fc-nav>',
     body,
     '</body></html>',
   ].join('');
