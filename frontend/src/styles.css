@@ -151,6 +151,17 @@ body {
   gap: 0.75rem;
 }
 
+.article-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.delete-button {
+  color: #c0392b;
+  border-color: #c0392b;
+}
+
 .article-link {
   background: none;
   border: none;

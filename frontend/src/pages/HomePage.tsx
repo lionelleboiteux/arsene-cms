@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient.ts';
 import { arseneClient } from '../lib/arseneApi.ts';
+import { ArseneApiError } from '../../../src/api/client.ts';
 import { useArticleList, type ArticleListItem } from '../home/useArticleList.ts';
 import { useTaxonomy } from '../compose/useTaxonomy.ts';
 import { EXTRA_LEAGUE_CATEGORIES, HOME_LEAGUES, TYPE_NAME_PLAYER_PICKS } from '../lib/leagues.ts';
@@ -30,6 +31,43 @@ export function HomePage({
   // league name alone no longer uniquely identifies which one is in flight.
   const [creating, setCreating] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
+
+  // Delete is admin-only (`router.ts`'s `verifyAdmin` on `/v1/admin/*`) —
+  // discovered the same way `SettingsPage.tsx` discovers it: try an
+  // admin-gated call, a 401 means "not admin". Client-side hiding is UX
+  // polish only; the real gate is the route itself refusing anyone else.
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const client = await arseneClient();
+        await client.listWriters();
+        setIsAdmin(true);
+      } catch (err) {
+        if (err instanceof ArseneApiError && err.status === 401) return;
+        // Anything else (network hiccup, etc.) — no admin controls this
+        // load, same as a 401; not worth its own error banner here.
+      }
+    })();
+  }, []);
+
+  async function handleDelete(articleId: string) {
+    if (!window.confirm('Supprimer définitivement ce brouillon ? Cette action est irréversible.')) return;
+    setDeleteError(null);
+    setDeletingId(articleId);
+    try {
+      const client = await arseneClient();
+      await client.deleteArticle({ articleId });
+      await refresh();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   async function createArticle(league_name: string, type_name: string) {
     setCreateError(null);
@@ -74,6 +112,11 @@ export function HomePage({
           {createError}
         </p>
       )}
+      {deleteError !== null && (
+        <p role="alert" className="error-text">
+          {deleteError}
+        </p>
+      )}
 
       {loading ? (
         <p>Chargement…</p>
@@ -99,12 +142,22 @@ export function HomePage({
                 articles={articles.filter((a) => a.league_name === league.league_name)}
                 onOpenArticle={onOpenArticle}
                 quickCreates={quickCreates}
+                isAdmin={isAdmin}
+                deletingId={deletingId}
+                onDelete={(id) => void handleDelete(id)}
               />
             );
           })}
 
           {other.length > 0 && (
-            <LeagueSection title="Autres" articles={other} onOpenArticle={onOpenArticle} />
+            <LeagueSection
+              title="Autres"
+              articles={other}
+              onOpenArticle={onOpenArticle}
+              isAdmin={isAdmin}
+              deletingId={deletingId}
+              onDelete={(id) => void handleDelete(id)}
+            />
           )}
         </>
       )}
@@ -121,11 +174,17 @@ function LeagueSection({
   articles,
   onOpenArticle,
   quickCreates,
+  isAdmin,
+  deletingId,
+  onDelete,
 }: {
   title: string;
   articles: ArticleListItem[];
   onOpenArticle: (articleId: string) => void;
   quickCreates?: { label: string; onClick: () => void; creating: boolean }[];
+  isAdmin?: boolean;
+  deletingId?: string | null;
+  onDelete?: (articleId: string) => void;
 }) {
   return (
     <section className="league-section">
@@ -144,7 +203,19 @@ function LeagueSection({
               <button type="button" className="article-link" onClick={() => onOpenArticle(article.id)}>
                 {article.title === '' ? 'Sans titre' : article.title}
               </button>
-              <span className={`status-badge status-${article.status}`}>{STATUS_LABEL[article.status]}</span>
+              <div className="article-list-actions">
+                <span className={`status-badge status-${article.status}`}>{STATUS_LABEL[article.status]}</span>
+                {isAdmin === true && article.status === 'draft' && onDelete !== undefined && (
+                  <button
+                    type="button"
+                    className="delete-button"
+                    disabled={deletingId === article.id}
+                    onClick={() => onDelete(article.id)}
+                  >
+                    {deletingId === article.id ? 'Suppression…' : 'Supprimer'}
+                  </button>
+                )}
+              </div>
             </li>
           ))}
         </ul>

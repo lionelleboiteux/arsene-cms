@@ -334,6 +334,20 @@ export function createRepo(pool: pg.Pool) {
       }
     },
 
+    /** Admin-only cleanup of an article that was never published — publish
+     *  is irreversible in a way a plain draft never was (a live public URL,
+     *  JSON-LD, a sitemap entry), so this only ever touches `status =
+     *  'draft'` rows. The four tables that reference `articles.id`
+     *  (`article_images`, `pronos_entries`, and the two telemetry tables —
+     *  0001/0006) all cascade-delete, so nothing is left orphaned. */
+    async deleteDraftArticle(article_id: string): Promise<'deleted' | 'not_found' | 'not_draft'> {
+      if (!UUID.test(article_id)) return 'not_found';
+      const res = await pool.query(`delete from articles where id = $1 and status = 'draft'`, [article_id]);
+      if (res.rowCount === 1) return 'deleted';
+      const existing = await pool.query(`select 1 from articles where id = $1`, [article_id]);
+      return existing.rowCount === 1 ? 'not_draft' : 'not_found';
+    },
+
     async markPublished(input: {
       article_id: string;
       published_at: Date;

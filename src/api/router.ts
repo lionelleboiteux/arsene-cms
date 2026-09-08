@@ -35,6 +35,7 @@ import {
   handleSetWriterRevoked,
   type AdminWritersDeps,
 } from './adminWriters.ts';
+import { handleDeleteArticle, type AdminArticlesDeps } from './adminArticles.ts';
 import { authAdminHeaders, createOrFindAuthUser, generateSignInLink } from './authAdmin.ts';
 import { bearerToken, errorResponse, type HandlerResponse } from './http.ts';
 import { handleImageStatusCallback } from './imageStatus.ts';
@@ -71,6 +72,10 @@ const PUBLIC_ARTICLE_ROUTE = /^\/public\/articles\/([^/]+)\/([^/]+)\/([^/]+)\/([
 const ADMIN_WRITERS_ROUTE = '/v1/admin/writers';
 const ADMIN_INVITE_WRITER_ROUTE = '/v1/admin/writers/invite';
 const ADMIN_WRITER_ACTION_ROUTE = /^\/v1\/admin\/writers\/([^/]+)\/(revoke|reinstate)$/;
+/** DELETE-only, like `ARTICLE_IMAGE_ROUTE` — no other verb ever shares this
+ *  exact path, so there's no CORS-preflight-advertising conflict to worry
+ *  about (see the comment above on the writers routes). */
+const ADMIN_ARTICLE_ROUTE = /^\/v1\/admin\/articles\/([^/]+)$/;
 
 /**
  * Assets are served through the CDN, never from Supabase Storage (§4). The
@@ -358,6 +363,13 @@ function adminWritersDeps(ctx: Ctx): AdminWritersDeps {
   };
 }
 
+function adminArticlesDeps(ctx: Ctx): AdminArticlesDeps {
+  return {
+    auth: { verifyAdmin: async (token) => verifyAdmin(token, ctx) },
+    repo: ctx.repo,
+  };
+}
+
 function draftDeps(ctx: Ctx): CreateDraftDeps {
   return {
     now: () => new Date(),
@@ -634,6 +646,12 @@ const adminWriterAction = (
   handleSetWriterRevoked(
     { authorization: request.headers.get('authorization'), writer_id, action },
     adminWritersDeps(ctx),
+  );
+
+const adminDeleteArticle = (request: Request, article_id: string, ctx: Ctx): Promise<HandlerResponse> =>
+  handleDeleteArticle(
+    { authorization: request.headers.get('authorization'), article_id },
+    adminArticlesDeps(ctx),
   );
 
 /**
@@ -938,7 +956,8 @@ type Operation =
   | { kind: 'public-article-legacy'; slug: string }
   | { kind: 'admin-list-writers' }
   | { kind: 'admin-invite-writer' }
-  | { kind: 'admin-writer-action'; writer_id: string; action: 'revoke' | 'reinstate' };
+  | { kind: 'admin-writer-action'; writer_id: string; action: 'revoke' | 'reinstate' }
+  | { kind: 'admin-delete-article'; article_id: string };
 
 function matchRoute(path: string): Operation | null {
   if (path === CREATE_DRAFT_ROUTE) return { kind: 'create-draft' };
@@ -954,6 +973,11 @@ function matchRoute(path: string): Operation | null {
       writer_id: adminWriterAction[1],
       action: adminWriterAction[2] as 'revoke' | 'reinstate',
     };
+  }
+
+  const adminDeleteArticle = ADMIN_ARTICLE_ROUTE.exec(path);
+  if (adminDeleteArticle?.[1] !== undefined) {
+    return { kind: 'admin-delete-article', article_id: adminDeleteArticle[1] };
   }
 
   const publicArticle = PUBLIC_ARTICLE_ROUTE.exec(path);
@@ -1004,7 +1028,7 @@ function matchRoute(path: string): Operation | null {
 /** Every operation is a `POST`, bar the one that removes a resource (`DELETE`)
  * and the read-only dashboard adapter (`GET`). */
 const methodOf = (op: Operation): string => {
-  if (op.kind === 'discard-image') return 'DELETE';
+  if (op.kind === 'discard-image' || op.kind === 'admin-delete-article') return 'DELETE';
   if (
     op.kind === 'metrics-summary' ||
     op.kind === 'public-home' ||
@@ -1053,6 +1077,8 @@ function dispatch(
       return adminInviteWriter(request, raw, ctx);
     case 'admin-writer-action':
       return adminWriterAction(request, op.writer_id, op.action, ctx);
+    case 'admin-delete-article':
+      return adminDeleteArticle(request, op.article_id, ctx);
     case 'public-home':
     case 'public-article':
     case 'public-category':
@@ -1146,7 +1172,8 @@ export async function route(
   } else if (
     op.kind === 'admin-list-writers' ||
     op.kind === 'admin-invite-writer' ||
-    op.kind === 'admin-writer-action'
+    op.kind === 'admin-writer-action' ||
+    op.kind === 'admin-delete-article'
   ) {
     // A writer bearer token alone is not enough here — verifyAdmin() layers
     // the admin decision on top of verify()'s own active-writer check, so a

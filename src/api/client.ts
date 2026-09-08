@@ -47,6 +47,9 @@ export type ArseneClient = {
   listWriters(): Promise<unknown>;
   inviteWriter(args: { email: string; display_name: string }): Promise<unknown>;
   setWriterRevoked(args: { writerId: string; action: 'revoke' | 'reinstate' }): Promise<unknown>;
+  /** Admin-only, drafts only — the home page's "unneeded drafts and tests"
+   *  cleanup action. A published article is refused `409 CONFLICT`. */
+  deleteArticle(args: { articleId: string }): Promise<unknown>;
 };
 
 function errorFrom(status: number, payload: unknown): ArseneApiError {
@@ -167,6 +170,15 @@ export function createArseneClient(opts: {
           signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         },
       );
+      return parse(response);
+    },
+
+    async deleteArticle(args) {
+      const response = await fetch(`${opts.baseUrl}/v1/admin/articles/${args.articleId}`, {
+        method: 'DELETE',
+        headers: headers({}),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
       return parse(response);
     },
   };

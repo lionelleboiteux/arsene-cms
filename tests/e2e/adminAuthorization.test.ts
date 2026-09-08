@@ -90,6 +90,19 @@ const revokeAction = (token: string, writer_id: string, action: 'revoke' | 'rein
     body: '{}',
   });
 
+const createDraft = (token: string) =>
+  fetch(`${ctx().server.url}/v1/articles`, {
+    method: 'POST',
+    headers: { authorization: bearer(token), 'content-type': 'application/json' },
+    body: JSON.stringify({ title: 'Delete-me test draft' }),
+  });
+
+const deleteArticle = (token: string, article_id: string) =>
+  fetch(`${ctx().server.url}/v1/admin/articles/${article_id}`, {
+    method: 'DELETE',
+    headers: { authorization: bearer(token) },
+  });
+
 async function answer(res: Response): Promise<{ status: number; code: string | undefined }> {
   const body = (await res.json().catch(() => ({}))) as { error?: { code?: string } };
   return { status: res.status, code: body.error?.code };
@@ -157,5 +170,51 @@ describe('admin authorization: a writer token is not an admin token', () => {
     const res = await revokeAction(adminToken, adminId, 'revoke');
 
     expect(await answer(res)).toEqual({ status: 409, code: 'LAST_ADMIN_CANNOT_BE_REVOKED' });
+  });
+});
+
+describe('admin delete-article authorization', () => {
+  it('ADMIN-DELETE-AUTHZ-01: a stranger, a revoked writer and an ordinary active writer are all refused 401, not just an admin bearer token', async () => {
+    const { strangerToken, revokedToken, writerToken, adminToken } = ctx();
+    const created = await createDraft(adminToken);
+    const { article_id } = (await created.json()) as { article_id: string };
+
+    expect(await answer(await deleteArticle(strangerToken, article_id))).toEqual({
+      status: 401,
+      code: 'UNAUTHORIZED',
+    });
+    expect(await answer(await deleteArticle(revokedToken, article_id))).toEqual({
+      status: 401,
+      code: 'UNAUTHORIZED',
+    });
+    expect(await answer(await deleteArticle(writerToken, article_id))).toEqual({
+      status: 401,
+      code: 'UNAUTHORIZED',
+    });
+  });
+
+  it('ADMIN-DELETE-AUTHZ-02: the real admin deletes a draft — including one another writer created — and it is really gone, not just unlisted', async () => {
+    const { adminToken, writerToken } = ctx();
+    const created = await createDraft(writerToken);
+    const { article_id } = (await created.json()) as { article_id: string };
+
+    const res = await deleteArticle(adminToken, article_id);
+    expect(await answer(res)).toEqual({ status: 200, code: undefined });
+
+    // Gone for real: re-opening it is now a 404, not a lock/permission refusal.
+    const reopenRes = await fetch(`${ctx().server.url}/v1/articles/${article_id}/open`, {
+      method: 'POST',
+      headers: { authorization: bearer(adminToken), 'content-type': 'application/json' },
+      body: '{}',
+    });
+    expect(reopenRes.status).toBe(404);
+  });
+
+  it('ADMIN-DELETE-AUTHZ-03: deleting an id with no article row at all is 404, not a silent success', async () => {
+    const { adminToken } = ctx();
+
+    const res = await deleteArticle(adminToken, '00000000-0000-0000-0000-000000000000');
+
+    expect(await answer(res)).toEqual({ status: 404, code: 'NOT_FOUND' });
   });
 });
