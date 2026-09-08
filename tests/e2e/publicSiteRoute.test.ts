@@ -139,6 +139,16 @@ describe('the real public site routes', () => {
     expect(res.status).toBe(404);
   });
 
+  it('PUBLIC-ROUTE-09: /public/articles/{league_slug} requires no credential and lists every published article in that league', async () => {
+    const { server } = ctx();
+    const res = await fetch(`${server.url}/public/articles/ligue-1`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    const { html } = (await res.json()) as { html: string };
+    expect(html).toContain('data-article-title="PP test"');
+  });
+
   it('PUBLIC-ROUTE-04: POST (the wrong method) is refused 405', async () => {
     const { server } = ctx();
     const res = await fetch(`${server.url}/public/articles/ligue-1/26-27/pronos/pp-test`, { method: 'POST' });

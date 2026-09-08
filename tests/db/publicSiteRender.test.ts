@@ -255,4 +255,70 @@ describe('public site', () => {
       wrong_season_found: wrongSeason.json_ld.length > 0,
     }).toEqual({ wrong_league_found: false, wrong_season_found: false });
   });
+
+  describe('renderLeaguePage — every published article in a league, across seasons and types', () => {
+    it('groups by type, sorted alphabetically, only once a league has more than one type', async () => {
+      const { renderer, db } = ctx();
+      // The beforeAll fixture already published one Ligue 1 / Pronos article;
+      // a second type turns the listing from flat into grouped.
+      await seedArticle(db.client, {
+        writer_id: await seedWriter(db.client, 'Nouvelle Recrue'),
+        title: 'Player Picks, Ligue 1, J1',
+        league_name: 'Ligue 1',
+        type_name: 'Player Picks',
+        status: 'published',
+        slug: 'player-picks-ligue-1-j1',
+        published_at: '2026-08-20T09:00:00Z',
+      });
+
+      const page = await renderer.renderLeaguePage({ league_slug: 'ligue-1' });
+      const sections = [...(page?.html.matchAll(/<h2 class="section-title">([^<]+)<\/h2>/g) ?? [])].map(
+        (m) => m[1],
+      );
+      const titlesUnderPlayerPicks = page?.html
+        .split('<h2 class="section-title">Pronos</h2>')[0]
+        ?.match(/data-article-title="([^"]+)"/g);
+
+      expect({
+        found: page !== null,
+        sections,
+        player_picks_listed_first: titlesUnderPlayerPicks?.some((t) => t.includes('Player Picks, Ligue 1, J1')),
+      }).toEqual({
+        found: true,
+        sections: ['Player Picks', 'Pronos'],
+        player_picks_listed_first: true,
+      });
+    });
+
+    it('a league with only one type renders a flat list, no section heading', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderLeaguePage({ league_slug: 'bundesliga' });
+
+      expect({
+        found: page !== null,
+        // Not a substring check on "section-title" alone: that class name is
+        // always present in the page's own inlined CSS, whether or not any
+        // <h2> actually uses it.
+        has_section_heading: page?.html.includes('<h2 class="section-title">') ?? null,
+        lists_the_article: page?.html.includes('data-article-title="Mercato Bundesliga - Août"'),
+      }).toEqual({ found: true, has_section_heading: false, lists_the_article: true });
+    });
+
+    it('a real league with no published articles says "No articles yet", not null', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderLeaguePage({ league_slug: 'serie-a' });
+
+      expect({
+        found: page !== null,
+        says_no_articles_yet: page?.html.includes('No articles yet'),
+      }).toEqual({ found: true, says_no_articles_yet: true });
+    });
+
+    it('a slug that names no league at all returns null, so the router can fall back to the legacy-slug lookup', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderLeaguePage({ league_slug: 'not-a-real-league' });
+
+      expect(page).toBeNull();
+    });
+  });
 });

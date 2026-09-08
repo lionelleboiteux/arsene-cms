@@ -123,12 +123,17 @@ h1.title-only{padding:2rem 1.25rem 0;font-size:clamp(1.5rem,4vw,2.25rem);font-we
 .meta .sep{margin:0 .4em}
 .body{padding:1.25rem 1.25rem 3rem;font-size:1.08rem}
 .body img{max-width:100%;height:auto;border-radius:8px;margin:.5rem 0}
+h2.section-title{max-width:900px;margin:1.5rem auto .25rem;padding:0 1rem;font-size:1.15rem}
 ul.articles{list-style:none;margin:0;padding:1rem;display:grid;gap:1rem;max-width:900px;margin-inline:auto}
 .article-card{background:var(--card-bg);border-radius:12px;overflow:hidden}
 .article-card img{display:block;width:100%;height:200px;object-fit:cover}
 .article-card a{display:block;padding:.9rem 1rem;font-weight:700;text-decoration:none}
 p.empty{padding:2rem;color:var(--muted)}
 `;
+
+/** French-locale, so "Étoile" sorts next to "Everton" rather than after "Z" —
+ *  every type/league name on this site is French. */
+const nameCollator = new Intl.Collator('fr');
 
 function viewOf(row: ArticleRow): PublishedArticleView {
   return {
@@ -215,6 +220,35 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
     json_ld: [],
   });
 
+  /** A whole league's published articles, across every season and type —
+   *  `renderCategoryPage`'s listing is scoped to one (league, season, type)
+   *  triple, this is the "everything for this league" entry point. Grouped
+   *  under a heading per type only once there is more than one distinct
+   *  type among the results; a league that only ever runs one content type
+   *  gets the same flat list `listing()` already produces elsewhere, rather
+   *  than a redundant single-section heading. */
+  const leagueListing = (title: string, rows: ArticleRow[]): RenderedPage => {
+    const first = rows[0];
+    const head =
+      first?.cover_image_url == null
+        ? ''
+        : `<meta property="og:image" content="${escape(first.cover_image_url)}"/>`;
+    if (rows.length === 0) {
+      return { html: page(title, head, '<p class="empty">No articles yet</p>'), json_ld: [] };
+    }
+    const types = [...new Set(rows.map((row) => row.type_name))].sort(nameCollator.compare);
+    const body =
+      types.length <= 1
+        ? `<ul class="articles">${rows.map(articleCard).join('')}</ul>`
+        : types
+            .map((type) => {
+              const group = rows.filter((row) => row.type_name === type);
+              return `<h2 class="section-title">${escape(type)}</h2><ul class="articles">${group.map(articleCard).join('')}</ul>`;
+            })
+            .join('');
+    return { html: page(title, head, body), json_ld: [] };
+  };
+
   return {
     async renderHomepage(): Promise<RenderedPage> {
       return listing('Fantasy Coach', await published());
@@ -239,6 +273,24 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
           toSlug(row.type_name) === args.type_slug,
       );
       return listing(`${args.league_slug} / ${args.season_slug} / ${args.type_slug}`, rows);
+    },
+
+    /**
+     * `/articles/{league_slug}` — every published article in the league,
+     * grouped by type when there's more than one. Returns `null` rather
+     * than an empty listing when `league_slug` doesn't match a real league
+     * at all, so the router can fall back to the legacy flat-slug lookup
+     * that also lives at a single path segment under `/articles/` — a
+     * league that's real but currently has zero published articles still
+     * gets its own "No articles yet" page rather than falling through.
+     */
+    async renderLeaguePage(args: { league_slug: string }): Promise<RenderedPage | null> {
+      const leagues = await client.query<{ name: string }>('select name from arsene_leagues');
+      const league = leagues.rows.find((row) => toSlug(row.name) === args.league_slug);
+      if (league === undefined) return null;
+
+      const rows = (await published()).filter((row) => toSlug(row.league_name) === args.league_slug);
+      return leagueListing(league.name, rows);
     },
 
     async renderArticlePage(args: {

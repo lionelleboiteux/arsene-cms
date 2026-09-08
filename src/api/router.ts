@@ -55,7 +55,12 @@ const METRICS_SUMMARY_ROUTE = '/internal/metrics/time-to-publish';
  *  Next.js/ISR app — see `src/site/render.ts`'s own doc comment). Four
  *  shapes, fully anchored and disambiguated by segment count alone, so
  *  match order doesn't matter for correctness:
- *   - `/public/articles/{slug}` — legacy flat form, now a redirect only.
+ *   - `/public/articles/{segment}` — one path segment is ambiguous by
+ *     construction: it's read as a league slug first (every published
+ *     article in that league, grouped by type), and only falls back to the
+ *     legacy flat-slug redirect when `{segment}` doesn't name a real league
+ *     at all (`renderLeagueOrLegacyArticle`'s own doc comment has the full
+ *     story).
  *   - `/public/articles/{league}/{season}/{type}` — a listing page.
  *   - `/public/articles/{league}/{season}/{type}/{slug}` — an article. */
 const PUBLIC_HOME_ROUTE = '/public/';
@@ -767,14 +772,24 @@ async function renderPublicPage(
 }
 
 /**
- * The legacy flat `/articles/{slug}` URL a browser or search index might
- * still hold — redirects to the real nested path rather than 404ing outright,
- * so a link already handed out keeps working.
+ * The one path segment under `/public/articles/{segment}` is genuinely
+ * ambiguous: it could name a league (`/articles/ligue-1`, every published
+ * article in that league) or it could be the legacy flat `/articles/{slug}`
+ * URL a browser or search index might still hold, from before articles
+ * moved to their nested `/articles/{league}/{season}/{type}/{slug}` path.
+ * `matchRoute()` has no database access to tell those apart, so both are
+ * folded into the one `public-article-legacy` operation and disambiguated
+ * here, where a renderer is available: try it as a league first (a league
+ * slug and an article slug can never collide — one names a row in
+ * `arsene_leagues`, the other an `articles.slug`, and nothing enforces or
+ * needs cross-uniqueness between the two), and only fall back to the
+ * legacy-slug redirect when `renderLeaguePage` reports it isn't a real
+ * league at all.
  *
- * Signals the redirect as JSON (`{ redirect: url }`), not a real HTTP 301:
- * confirmed empirically against the real deployed proxy
- * (`public-site/functions/[[path]].ts`) that a genuine 301 from this Edge
- * Function does not survive the proxy's own `fetch()` call intact —
+ * The legacy redirect itself is signalled as JSON (`{ redirect: url }`),
+ * not a real HTTP 301: confirmed empirically against the real deployed
+ * proxy (`public-site/functions/[[path]].ts`) that a genuine 301 from this
+ * Edge Function does not survive the proxy's own `fetch()` call intact —
  * Cloudflare's Workers runtime returns an opaque/unreadable response for a
  * `redirect: 'manual'` fetch of a cross-origin 3xx in at least this
  * configuration, so `page.json()` there throws and the whole thing 502s.
@@ -783,12 +798,18 @@ async function renderPublicPage(
  * behavior at all — the proxy decides, from data it can actually read,
  * whether to emit a real 301 to the browser.
  */
-async function redirectLegacyArticle(
+async function renderLeagueOrLegacyArticle(
   op: Extract<Operation, { kind: 'public-article-legacy' }>,
   ctx: Ctx,
   cors: Record<string, string>,
 ): Promise<Response> {
   const renderer = await getSiteRenderer(ctx);
+
+  const league = await renderer.renderLeaguePage({ league_slug: op.slug });
+  if (league !== null) {
+    return jsonPageResponse(league.html, 200, cors);
+  }
+
   const path = await renderer.resolvePublishedPath({ slug: op.slug });
   if (path === null) {
     return jsonPageResponse((await renderer.renderNotFound()).html, 404, cors);
@@ -1085,7 +1106,7 @@ function dispatch(
     case 'public-article-legacy':
       // `route()` returns a raw HTML or redirect `Response` for these before
       // `dispatch()` is ever called (`renderPublicPage()`/
-      // `redirectLegacyArticle()`) — they carry no JSON envelope for `send()`
+      // `renderLeagueOrLegacyArticle()`) — they carry no JSON envelope for `send()`
       // to wrap. These cases exist only so this switch stays exhaustive over
       // `Operation`.
       throw new Error(`unreachable: '${op.kind}' is handled by route() before dispatch()`);
@@ -1146,7 +1167,7 @@ export async function route(
     return renderPublicPage(op, ctx, cors);
   }
   if (op.kind === 'public-article-legacy') {
-    return redirectLegacyArticle(op, ctx, cors);
+    return renderLeagueOrLegacyArticle(op, ctx, cors);
   }
   // The callback carries a shared secret rather than a writer token (ADR-0004),
   // but it is checked here, from the headers alone, for the same reason the

@@ -727,6 +727,8 @@ export interface SiteRenderModule {
     renderHomepage(): Promise<RenderedPage>;
     renderNotFound(): Promise<RenderedPage>;
     renderCategoryPage(args: { league_slug: string; season_slug: string; type_slug: string }): Promise<RenderedPage>;
+    /** `null` when `league_slug` doesn't match a real league at all. */
+    renderLeaguePage(args: { league_slug: string }): Promise<RenderedPage | null>;
     renderArticlePage(args: {
       league_slug: string;
       season_slug: string;
