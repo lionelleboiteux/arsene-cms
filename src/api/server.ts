@@ -61,6 +61,10 @@ export async function startServer(opts: SpawnedServerOptions): Promise<RunningSe
         ...(opts.dashboardReadSecret !== undefined
           ? { DASHBOARD_READ_SECRET: opts.dashboardReadSecret }
           : {}),
+        ...(opts.supabaseUrl !== undefined ? { SUPABASE_URL: opts.supabaseUrl } : {}),
+        ...(opts.supabaseServiceRoleKey !== undefined
+          ? { SUPABASE_SERVICE_ROLE_KEY: opts.supabaseServiceRoleKey }
+          : {}),
         ...(opts.allowLegacyAuth === true ? { ALLOW_LEGACY_STATIC_AUTH: 'true' } : {}),
       },
     },

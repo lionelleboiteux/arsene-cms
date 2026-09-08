@@ -84,10 +84,17 @@ export async function startTestDatabase(): Promise<TestDatabase> {
 // Seeding — the same tables the editor SPA writes through PostgREST.
 // ---------------------------------------------------------------------------
 
-export async function seedWriter(client: pg.Client, display_name: string): Promise<string> {
+export async function seedWriter(
+  client: pg.Client,
+  display_name: string,
+  opts?: { email?: string; is_admin?: boolean; revoked_at?: string | null },
+): Promise<string> {
+  // `email` is required (0007) and unique — auto-generated per call so the
+  // dozens of existing callers (display_name only) don't all need updating.
+  const email = opts?.email ?? `${crypto.randomUUID()}@writers.test`;
   const res = await client.query(
-    `insert into writers (display_name) values ($1) returning id`,
-    [display_name],
+    `insert into writers (display_name, email, is_admin, revoked_at) values ($1, $2, $3, $4) returning id`,
+    [display_name, email, opts?.is_admin ?? false, opts?.revoked_at ?? null],
   );
   return res.rows[0].id;
 }

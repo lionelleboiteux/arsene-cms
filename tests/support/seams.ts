@@ -932,6 +932,10 @@ export type RouterOptions = {
   corsOrigins?: string[];
   /** The origin `GET /public/articles/:slug`'s canonical link is built against. */
   siteOrigin?: string;
+  /** Supabase's own REST API base + service-role key — needed only by the
+   *  admin writer-invite route to call the Supabase Auth Admin API. */
+  supabaseUrl?: string;
+  supabaseServiceRoleKey?: string;
 };
 
 export interface ApiRouterModule {

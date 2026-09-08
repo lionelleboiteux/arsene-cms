@@ -60,6 +60,30 @@ async function asRole<T>(role: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * `asRole('authenticated', ...)` alone no longer suffices for tables 0008
+ * gated behind `is_active_writer()` — that function reads `auth.uid()`,
+ * which resolves from the `request.jwt.claim.sub` GUC, never set by `asRole`
+ * alone (nothing before 0008 needed it; every policy was `using (true)`).
+ * This sets that GUC to a real writer's id before switching role, so RLS
+ * evaluates the same way it would for that writer's actual PostgREST call.
+ * A plain (session-scoped) `SET`, not `SET LOCAL`: each `client.query()` call
+ * here runs in its own auto-committed transaction, so a transaction-scoped
+ * `LOCAL` setting would revert before `fn()`'s own query ever ran — mirrors
+ * `asRole`'s own `SET ROLE`/`RESET ROLE` pattern for exactly that reason.
+ */
+async function asWriter<T>(writerId: string, fn: () => Promise<T>): Promise<T> {
+  const { client } = db();
+  await client.query(`set request.jwt.claim.sub = '${writerId}'`);
+  await client.query(`set role authenticated`);
+  try {
+    return await fn();
+  } finally {
+    await client.query('reset role');
+    await client.query('reset request.jwt.claim.sub');
+  }
+}
+
 describe('shared asset library', () => {
   it('AC-09: a logo uploaded by one writer is listed for every other writer, with no re-upload', async () => {
     const { client } = db();
@@ -69,7 +93,7 @@ describe('shared asset library', () => {
       [marie, 'Fantasy Coach logo', 'https://cdn.example/site/logo.webp'],
     );
 
-    const visible = await asRole('authenticated', () =>
+    const visible = await asWriter(marie, () =>
       client.query(`select name from site_assets where name = 'Fantasy Coach logo'`),
     );
 
@@ -158,7 +182,7 @@ describe('alt text', () => {
       alt_text: 'PSG face à l’OM au Parc des Princes',
     });
 
-    const updated = await asRole('authenticated', () =>
+    const updated = await asWriter(writer, () =>
       client.query(`update article_images set alt_text = $2 where id = $1 returning alt_text`, [
         image,
         'Ousmane Dembélé célèbre son but au Parc des Princes',
@@ -467,6 +491,132 @@ describe('write protection and disclosure', () => {
       ['articles', 'updated_at', 'NO'],
       ['articles', 'writer_id', 'NO'],
     ]);
+  });
+});
+
+/**
+ * 0008 — `authenticated` alone used to be sufficient for every table below
+ * (every `writers_manage_*` policy from 0001 was `using (true) with check
+ * (true))`, so any Supabase Auth session, provisioned or not, could read
+ * every draft and write any of these tables through direct PostgREST. An
+ * active `writers` row (`is_active_writer()`) is now the actual
+ * authorization decision — this is the change that makes the admin
+ * allow-list (0007's columns, the settings-page invite/revoke routes) mean
+ * anything at all, not just a UI in front of an unchanged database.
+ */
+describe('active-writer RLS (0008)', () => {
+  const GATED_TABLES = [
+    'arsene_leagues',
+    'categories',
+    'articles',
+    'article_images',
+    'pronos_entries',
+    'site_assets',
+  ] as const;
+
+  it('NFR-RLS-WRITER-01: an authenticated session with no writers row at all cannot read any of the six gated tables', async () => {
+    const { client } = db();
+    const stranger = crypto.randomUUID(); // a syntactically valid id, no writers row
+
+    const rows = await asWriter(stranger, async () => {
+      const results: Record<string, number> = {};
+      for (const table of GATED_TABLES) {
+        const res = await client.query(`select 1 from ${table}`);
+        results[table] = res.rowCount ?? 0;
+      }
+      return results;
+    });
+
+    expect(Object.values(rows).every((count) => count === 0)).toBe(true);
+  });
+
+  it('NFR-RLS-WRITER-02: a stranger with no writers row cannot update an existing article either — reading NFR-RLS-WRITER-01 as "empty" is not the same claim as "refused to write"', async () => {
+    const { client } = db();
+    const owner = await seedWriter(client, 'Lionel (rls-writer owner)');
+    const article = await seedArticle(client, {
+      writer_id: owner,
+      title: 'Original',
+      league_name: 'Ligue 1',
+      type_name: 'Pronos',
+    });
+    const stranger = crypto.randomUUID();
+
+    const updated = await asWriter(stranger, () =>
+      client.query(`update articles set title = 'Defaced' where id = $1 returning id`, [article]),
+    );
+
+    expect(updated.rowCount).toBe(0);
+  });
+
+  it('NFR-RLS-WRITER-03: a revoked writer is refused exactly like a stranger, even though their writers row genuinely exists', async () => {
+    const { client } = db();
+    const revoked = await seedWriter(client, 'Lionel (rls-writer revoked)', {
+      revoked_at: new Date().toISOString(),
+    });
+    const owner = await seedWriter(client, 'Lionel (rls-writer revoked-owner)');
+    const article = await seedArticle(client, {
+      writer_id: owner,
+      title: 'Original',
+      league_name: 'Ligue 1',
+      type_name: 'Pronos',
+    });
+
+    const [read, write] = await asWriter(revoked, () =>
+      Promise.all([
+        client.query(`select 1 from articles where id = $1`, [article]),
+        client.query(`update articles set title = 'Defaced' where id = $1 returning id`, [article]),
+      ]),
+    );
+
+    expect({ read_rows: read.rowCount, write_rows: write.rowCount }).toEqual({
+      read_rows: 0,
+      write_rows: 0,
+    });
+  });
+
+  it('NFR-RLS-WRITER-04: an active writer still reads and writes normally — the fix is a refusal for strangers, not a lockout for everyone', async () => {
+    const { client } = db();
+    const active = await seedWriter(client, 'Lionel (rls-writer active)');
+    const article = await seedArticle(client, {
+      writer_id: active,
+      title: 'Original',
+      league_name: 'Ligue 1',
+      type_name: 'Pronos',
+    });
+
+    const updated = await asWriter(active, () =>
+      client.query(`update articles set title = 'Modifié' where id = $1 returning title`, [article]),
+    );
+
+    expect(updated.rows).toEqual([{ title: 'Modifié' }]);
+  });
+
+  it('NFR-RLS-WRITER-05: writers itself is unreadable by anon and by any authenticated session post-0008, since it now carries email', async () => {
+    const { client } = db();
+    await seedWriter(client, 'Lionel (rls-writer readback)');
+
+    // A grant-level revoke (0008), not just an RLS filter: the right outcome
+    // here is a loud 42501, the same "refused, not silently empty" shape
+    // NFR-TAMPER-01 already established for publish-controlled columns.
+    const anonSqlstate = await asRole('anon', () =>
+      captureSqlError(() => client.query(`select 1 from writers`)),
+    );
+    const strangerSqlstate = await asWriter(crypto.randomUUID(), () =>
+      captureSqlError(() => client.query(`select 1 from writers`)),
+    );
+
+    expect({ anon: anonSqlstate, stranger: strangerSqlstate }).toEqual({
+      anon: '42501',
+      stranger: '42501',
+    });
+  });
+
+  it('NFR-RLS-WRITER-06: migration 0008 is idempotent — re-applying it to an already-migrated database is a no-op, not an error', async () => {
+    const sql = readFileSync(path.join(MIGRATIONS_DIR, '0008_require_active_writer_rls.sql'), 'utf8');
+
+    const sqlstate = await captureSqlError(() => db().client.query(sql));
+
+    expect(sqlstate).toBeNull();
   });
 });
 

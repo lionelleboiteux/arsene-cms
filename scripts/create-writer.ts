@@ -19,6 +19,7 @@
  */
 
 import pg from 'pg';
+import { authAdminHeaders, createOrFindAuthUser, generateSignInLink } from '../src/api/authAdmin.ts';
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -26,65 +27,6 @@ function requireEnv(name: string): string {
     throw new Error(`${name} must be set`);
   }
   return value;
-}
-
-type AuthUser = { id: string; email?: string };
-
-async function createOrFindAuthUser(
-  supabaseUrl: string,
-  authHeaders: Record<string, string>,
-  email: string,
-  displayName: string,
-): Promise<string> {
-  const createRes = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
-    method: 'POST',
-    headers: authHeaders,
-    body: JSON.stringify({ email, email_confirm: true, user_metadata: { display_name: displayName } }),
-  });
-
-  if (createRes.ok) {
-    const body = (await createRes.json()) as AuthUser;
-    return body.id;
-  }
-
-  // Not the happy path — only worth inspecting further if it's specifically
-  // "this email is already registered", the one case we recover from.
-  const errorBody = await createRes.text();
-  if (!/already.*registered|email_exists/i.test(errorBody)) {
-    throw new Error(`failed to create auth user (${createRes.status}): ${errorBody}`);
-  }
-
-  for (let page = 1; page <= 50; page++) {
-    const listRes = await fetch(`${supabaseUrl}/auth/v1/admin/users?page=${page}&per_page=200`, {
-      headers: authHeaders,
-    });
-    if (!listRes.ok) {
-      throw new Error(
-        `failed to list users while resolving existing account (${listRes.status}): ${await listRes.text()}`,
-      );
-    }
-    const { users } = (await listRes.json()) as { users: AuthUser[] };
-    if (users.length === 0) break;
-    const match = users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
-    if (match) return match.id;
-  }
-
-  throw new Error(`auth said "${email}" is already registered but it could not be found in the admin user list`);
-}
-
-async function generateSignInLink(
-  supabaseUrl: string,
-  authHeaders: Record<string, string>,
-  email: string,
-): Promise<string | null> {
-  const res = await fetch(`${supabaseUrl}/auth/v1/admin/generate_link`, {
-    method: 'POST',
-    headers: authHeaders,
-    body: JSON.stringify({ type: 'magiclink', email }),
-  });
-  if (!res.ok) return null;
-  const body = (await res.json()) as { action_link?: string };
-  return body.action_link ?? null;
 }
 
 async function main() {
@@ -100,21 +42,20 @@ async function main() {
   const serviceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
   const databaseUrl = requireEnv('DATABASE_URL');
 
-  const authHeaders = {
-    apikey: serviceRoleKey,
-    Authorization: `Bearer ${serviceRoleKey}`,
-    'Content-Type': 'application/json',
-  };
+  const authHeaders = authAdminHeaders(serviceRoleKey);
 
   const writerId = await createOrFindAuthUser(supabaseUrl, authHeaders, email, displayName);
 
   const client = new pg.Client({ connectionString: databaseUrl });
   await client.connect();
   try {
+    // email set here too (0007 made it not-null): re-running this script
+    // for an existing writer keeps their row's email in sync with whatever
+    // was just passed on the command line, same as display_name already did.
     await client.query(
-      `insert into writers (id, display_name) values ($1, $2)
-         on conflict (id) do update set display_name = excluded.display_name`,
-      [writerId, displayName],
+      `insert into writers (id, email, display_name) values ($1, $2, $3)
+         on conflict (id) do update set email = excluded.email, display_name = excluded.display_name`,
+      [writerId, email, displayName],
     );
   } finally {
     await client.end();

@@ -111,6 +111,10 @@ body {
   border-bottom: 1px solid #ddd;
 }
 
+.league-section button + button {
+  margin-left: 0.5rem;
+}
+
 .article-list {
   list-style: none;
   margin: 0.5rem 0 0;
@@ -157,4 +161,64 @@ body {
 
 .refresh-button {
   margin-top: 1rem;
+}
+
+.home-header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.status-admin {
+  background: #e6e6fa;
+  color: #4b0082;
+}
+
+.settings-page {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.settings-header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.settings-section {
+  margin: 1.5rem 0;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #ddd;
+}
+
+.writer-list {
+  list-style: none;
+  margin: 0.5rem 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.writer-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.writer-email {
+  font-weight: 600;
+}
+
+.writer-name {
+  color: #666;
+}
+
+.invite-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  max-width: 24rem;
 }

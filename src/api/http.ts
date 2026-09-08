@@ -16,6 +16,7 @@ export type ErrorCode =
   | 'NOT_FOUND'
   | 'UNAUTHORIZED'
   | 'CONFLICT'
+  | 'LAST_ADMIN_CANNOT_BE_REVOKED'
   | 'INTERNAL_ERROR';
 
 export function errorResponse(

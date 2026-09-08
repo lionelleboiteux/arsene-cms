@@ -29,6 +29,13 @@ import { createTelemetrySink } from '../telemetry/events.ts';
 import { verifySupabaseJwt, verifySharedSecret } from './auth.ts';
 import { handleCreateDraft, handleOpenDraft, type CreateDraftDeps } from './createDraft.ts';
 import { handleDiscardImage, type DiscardImageDeps } from './discardImage.ts';
+import {
+  handleListWriters,
+  handleInviteWriter,
+  handleSetWriterRevoked,
+  type AdminWritersDeps,
+} from './adminWriters.ts';
+import { authAdminHeaders, createOrFindAuthUser, generateSignInLink } from './authAdmin.ts';
 import { bearerToken, errorResponse, type HandlerResponse } from './http.ts';
 import { handleImageStatusCallback } from './imageStatus.ts';
 import { handleMetricsSummary } from './metricsSummary.ts';
@@ -54,6 +61,16 @@ const PUBLIC_HOME_ROUTE = '/public/';
 const PUBLIC_ARTICLE_LEGACY_ROUTE = /^\/public\/articles\/([^/]+)$/;
 const PUBLIC_CATEGORY_ROUTE = /^\/public\/articles\/([^/]+)\/([^/]+)\/([^/]+)$/;
 const PUBLIC_ARTICLE_ROUTE = /^\/public\/articles\/([^/]+)\/([^/]+)\/([^/]+)\/([^/]+)$/;
+
+/** Admin-only writer management (the settings page). Three distinct paths,
+ *  not one path shared across GET/POST: `matchRoute`/`methodOf` here assume
+ *  one method per `Operation` kind everywhere else, and a shared-path
+ *  GET-vs-POST split would make an OPTIONS preflight for the GET advertise
+ *  only the POST case's method — a real cross-origin bug (the SPA and this
+ *  Edge Function are different origins), not just an inconsistency. */
+const ADMIN_WRITERS_ROUTE = '/v1/admin/writers';
+const ADMIN_INVITE_WRITER_ROUTE = '/v1/admin/writers/invite';
+const ADMIN_WRITER_ACTION_ROUTE = /^\/v1\/admin\/writers\/([^/]+)\/(revoke|reinstate)$/;
 
 /**
  * Assets are served through the CDN, never from Supabase Storage (§4). The
@@ -112,6 +129,11 @@ const CreateDraftBody = z.object({
   title: z.string().refine(noNulByte, NO_NUL_MESSAGE).optional(),
   league_name: z.string().refine(noNulByte, NO_NUL_MESSAGE).optional(),
   type_name: z.string().refine(noNulByte, NO_NUL_MESSAGE).optional(),
+});
+
+const InviteWriterBody = z.object({
+  email: z.string().email().refine(noNulByte, NO_NUL_MESSAGE),
+  display_name: z.string().min(1).refine(noNulByte, NO_NUL_MESSAGE),
 });
 
 /**
@@ -321,6 +343,20 @@ function discardDeps(ctx: Ctx): DiscardImageDeps {
   };
 }
 
+function adminWritersDeps(ctx: Ctx): AdminWritersDeps {
+  const supabaseUrl = ctx.opts.supabaseUrl ?? '';
+  const authHeaders = authAdminHeaders(ctx.opts.supabaseServiceRoleKey ?? '');
+  return {
+    auth: { verifyAdmin: async (token) => verifyAdmin(token, ctx) },
+    repo: ctx.repo,
+    authAdmin: {
+      createOrFindAuthUser: (email, displayName) =>
+        createOrFindAuthUser(supabaseUrl, authHeaders, email, displayName),
+      generateSignInLink: (email) => generateSignInLink(supabaseUrl, authHeaders, email),
+    },
+  };
+}
+
 function draftDeps(ctx: Ctx): CreateDraftDeps {
   return {
     now: () => new Date(),
@@ -369,6 +405,20 @@ async function verify(
   return verifySharedSecret(token, opts.writerToken)
     ? { valid: true, writer_id: opts.writerId }
     : { valid: false };
+}
+
+/**
+ * Layers the admin decision on top of `verify()`'s own active-writer check
+ * — an admin is first and always a writer, so a revoked or otherwise
+ * invalid session never reaches `isAdmin()` at all. Refused the same way
+ * `verify()` itself refuses (`{ valid: false }`, answered `401`, never a new
+ * `403` — matching `writerAuthorization.test.ts`'s existing, deliberate
+ * "insufficient permission looks the same as no credential" convention).
+ */
+async function verifyAdmin(token: string | null, ctx: Ctx): Promise<{ valid: boolean; writer_id?: string }> {
+  const base = await verify(token, ctx);
+  if (!base.valid || base.writer_id === undefined) return { valid: false };
+  return (await ctx.repo.isAdmin(base.writer_id)) ? base : { valid: false };
 }
 
 async function publish(
@@ -548,6 +598,42 @@ async function createDraft(
   if (typeof article_id === 'string') await ctx.repo.recordTelemetry(article_id, deps.telemetry.events);
   return response;
 }
+
+const adminListWriters = (request: Request, ctx: Ctx): Promise<HandlerResponse> =>
+  handleListWriters({ authorization: request.headers.get('authorization') }, adminWritersDeps(ctx));
+
+function adminInviteWriter(request: Request, raw: Uint8Array, ctx: Ctx): Promise<HandlerResponse> {
+  const parsed = InviteWriterBody.safeParse(parseJson(raw));
+  if (!parsed.success) {
+    return Promise.resolve(
+      errorResponse(400, 'VALIDATION_FAILED', 'Request failed validation.', {
+        fields: parsed.error.issues.map((issue) => ({
+          field: issue.path.join('.'),
+          message: issue.message,
+        })),
+      }),
+    );
+  }
+  return handleInviteWriter(
+    {
+      authorization: request.headers.get('authorization'),
+      email: parsed.data.email,
+      display_name: parsed.data.display_name,
+    },
+    adminWritersDeps(ctx),
+  );
+}
+
+const adminWriterAction = (
+  request: Request,
+  writer_id: string,
+  action: 'revoke' | 'reinstate',
+  ctx: Ctx,
+): Promise<HandlerResponse> =>
+  handleSetWriterRevoked(
+    { authorization: request.headers.get('authorization'), writer_id, action },
+    adminWritersDeps(ctx),
+  );
 
 /**
  * No longer the authorization mechanism — `verify()` resolves the caller
@@ -747,6 +833,17 @@ export type ServerOptions = {
   /** CORS-01: origins allowed to call this deployment from a browser (e.g. the
    *  editor SPA's own origin). Never a wildcard — this is a bearer-token API. */
   corsOrigins?: string[];
+  /**
+   * Supabase's own REST API base (`https://<ref>.supabase.co`) and its
+   * service-role key — needed only by the admin writer-invite route
+   * (`src/api/adminWriters.ts`) to call the Supabase Auth Admin API. The
+   * same two values `scripts/create-writer.ts` already requires as
+   * `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`, threaded through here so the
+   * Edge Function route can do what that script always did, from a request
+   * instead of a terminal.
+   */
+  supabaseUrl?: string;
+  supabaseServiceRoleKey?: string;
 };
 
 type Shared = {
@@ -836,12 +933,26 @@ type Operation =
   | { kind: 'public-home' }
   | { kind: 'public-article'; league_slug: string; season_slug: string; type_slug: string; slug: string }
   | { kind: 'public-category'; league_slug: string; season_slug: string; type_slug: string }
-  | { kind: 'public-article-legacy'; slug: string };
+  | { kind: 'public-article-legacy'; slug: string }
+  | { kind: 'admin-list-writers' }
+  | { kind: 'admin-invite-writer' }
+  | { kind: 'admin-writer-action'; writer_id: string; action: 'revoke' | 'reinstate' };
 
 function matchRoute(path: string): Operation | null {
   if (path === CREATE_DRAFT_ROUTE) return { kind: 'create-draft' };
   if (path === METRICS_SUMMARY_ROUTE) return { kind: 'metrics-summary' };
   if (path === PUBLIC_HOME_ROUTE) return { kind: 'public-home' };
+  if (path === ADMIN_WRITERS_ROUTE) return { kind: 'admin-list-writers' };
+  if (path === ADMIN_INVITE_WRITER_ROUTE) return { kind: 'admin-invite-writer' };
+
+  const adminWriterAction = ADMIN_WRITER_ACTION_ROUTE.exec(path);
+  if (adminWriterAction?.[1] !== undefined && adminWriterAction[2] !== undefined) {
+    return {
+      kind: 'admin-writer-action',
+      writer_id: adminWriterAction[1],
+      action: adminWriterAction[2] as 'revoke' | 'reinstate',
+    };
+  }
 
   const publicArticle = PUBLIC_ARTICLE_ROUTE.exec(path);
   if (
@@ -897,7 +1008,8 @@ const methodOf = (op: Operation): string => {
     op.kind === 'public-home' ||
     op.kind === 'public-article' ||
     op.kind === 'public-category' ||
-    op.kind === 'public-article-legacy'
+    op.kind === 'public-article-legacy' ||
+    op.kind === 'admin-list-writers'
   ) {
     return 'GET';
   }
@@ -933,6 +1045,12 @@ function dispatch(
       return imageStatus(request, op.image_id, raw, ctx);
     case 'metrics-summary':
       return metricsSummary(request, ctx);
+    case 'admin-list-writers':
+      return adminListWriters(request, ctx);
+    case 'admin-invite-writer':
+      return adminInviteWriter(request, raw, ctx);
+    case 'admin-writer-action':
+      return adminWriterAction(request, op.writer_id, op.action, ctx);
     case 'public-home':
     case 'public-article':
     case 'public-category':
@@ -1022,6 +1140,17 @@ export async function route(
       !verifySharedSecret(request.headers.get('x-arsene-dashboard-secret'), ctx.opts.dashboardReadSecret ?? '')
     ) {
       return send(errorResponse(401, 'UNAUTHORIZED', 'A valid dashboard secret is required.'), cors);
+    }
+  } else if (
+    op.kind === 'admin-list-writers' ||
+    op.kind === 'admin-invite-writer' ||
+    op.kind === 'admin-writer-action'
+  ) {
+    // A writer bearer token alone is not enough here — verifyAdmin() layers
+    // the admin decision on top of verify()'s own active-writer check, so a
+    // non-admin writer's perfectly valid JWT is still refused.
+    if (!(await verifyAdmin(bearerToken(request.headers.get('authorization')), ctx)).valid) {
+      return send(errorResponse(401, 'UNAUTHORIZED', 'A valid admin bearer token is required.'), cors);
     }
   } else if (!(await verify(bearerToken(request.headers.get('authorization')), ctx)).valid) {
     return send(errorResponse(401, 'UNAUTHORIZED', 'A valid Supabase Auth bearer token is required.'), cors);

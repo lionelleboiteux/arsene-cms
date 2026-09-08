@@ -8,22 +8,31 @@ import { CoverImageSlot } from '../compose/CoverImageSlot.tsx';
 import { BodyImageList } from '../compose/BodyImageList.tsx';
 import { PublishPanel } from '../compose/PublishPanel.tsx';
 import { supabase } from '../lib/supabaseClient.ts';
-import { HOME_LEAGUES, TYPE_NAME_PLAYER_PICKS } from '../lib/leagues.ts';
+import { EXTRA_LEAGUE_CATEGORIES, HOME_LEAGUES, TYPE_NAME_PLAYER_PICKS } from '../lib/leagues.ts';
 
 /**
- * The home page's five leagues, each offered as a Player Picks shortcut —
- * everything else still goes through "Autre"'s free-text fields below,
- * unchanged. Not a stored taxonomy table: picking one of these just fills
- * `league_name`/`type_name` with the same strings the old free-text fields
- * would have held, so the existing `useTaxonomy.resolve()` → `saveNow()`
- * pipeline needs no change.
+ * The home page's five leagues, each offered as a Player Picks shortcut,
+ * plus any per-league extra types (`EXTRA_LEAGUE_CATEGORIES`, e.g. Bundesliga
+ * Guides) — everything else still goes through "Autre"'s free-text fields
+ * below, unchanged. Not a stored taxonomy table: picking one of these just
+ * fills `league_name`/`type_name` with the same strings the old free-text
+ * fields would have held, so the existing `useTaxonomy.resolve()` →
+ * `saveNow()` pipeline needs no change.
  */
-const FIXED_CATEGORIES = HOME_LEAGUES.map((l) => ({
-  key: l.key,
-  label: l.dropdown_label,
-  league_name: l.league_name,
-  type_name: TYPE_NAME_PLAYER_PICKS,
-}));
+const FIXED_CATEGORIES = [
+  ...HOME_LEAGUES.map((l) => ({
+    key: l.key,
+    label: l.dropdown_label,
+    league_name: l.league_name,
+    type_name: TYPE_NAME_PLAYER_PICKS,
+  })),
+  ...EXTRA_LEAGUE_CATEGORIES.map((c) => ({
+    key: c.key,
+    label: c.dropdown_label,
+    league_name: c.league_name,
+    type_name: c.type_name,
+  })),
+];
 
 /** Which dropdown option a draft's current league/type reflects — used only
  *  to restore the right selection when reopening an already-tagged draft,

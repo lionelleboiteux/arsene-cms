@@ -13,3 +13,20 @@ export const HOME_LEAGUES = [
 ] as const;
 
 export const TYPE_NAME_PLAYER_PICKS = 'Player Picks';
+export const TYPE_NAME_GUIDES = 'Guides';
+
+/**
+ * Per-league quick-create shortcuts beyond the default Player Picks every
+ * league in `HOME_LEAGUES` already gets. Bundesliga is the only league with
+ * one today (a "Nouveau Guide" button on the home page); a future league
+ * that wants its own extra type adds one entry here, nothing else changes.
+ */
+export const EXTRA_LEAGUE_CATEGORIES = [
+  {
+    key: 'bundesliga-guides',
+    league_name: 'Bundesliga',
+    type_name: TYPE_NAME_GUIDES,
+    dropdown_label: 'Bundesliga Guides',
+    button_label: 'Nouveau Guide',
+  },
+] as const;

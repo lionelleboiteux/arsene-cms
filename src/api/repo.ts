@@ -93,6 +93,15 @@ const SET_IMAGE_STATUS_AS_BODY_SQL = `
 /** Postgres unique-violation: `0005`'s one-ready-cover-per-article index. */
 const UNIQUE_VIOLATION = '23505';
 
+export type WriterRow = {
+  id: string;
+  email: string;
+  display_name: string;
+  is_admin: boolean;
+  created_at: string;
+  revoked_at: string | null;
+};
+
 export type ImageInsert = {
   id: string;
   article_id: string;
@@ -200,11 +209,29 @@ export function createRepo(pool: pg.Pool) {
      * to write. Non-UUID ids are answered `false` rather than handed to
      * Postgres, so a `sub` shaped like anything at all is a decision here and
      * never a database error somewhere downstream.
+     *
+     * `revoked_at is null` (0007/0008): the Edge Function half of the same
+     * closure RLS enforces for direct PostgREST callers — both paths now
+     * agree that a revoked writer's still-valid JWT does not grant access.
      */
     async isWriter(writer_id: string): Promise<boolean> {
       if (!UUID.test(writer_id)) return false;
-      const res = await pool.query(`select 1 from writers where id = $1`, [writer_id]);
+      const res = await pool.query(
+        `select 1 from writers where id = $1 and revoked_at is null`,
+        [writer_id],
+      );
       return res.rowCount === 1;
+    },
+
+    /** Same revoked-excludes-access shape as `isWriter` — a revoked admin is
+     *  not an admin, even before their session would otherwise expire. */
+    async isAdmin(writer_id: string): Promise<boolean> {
+      if (!UUID.test(writer_id)) return false;
+      const res = await pool.query<{ is_admin: boolean }>(
+        `select is_admin from writers where id = $1 and revoked_at is null`,
+        [writer_id],
+      );
+      return res.rows[0]?.is_admin === true;
     },
 
     async getWriterDisplayName(writer_id: string): Promise<string> {
@@ -213,6 +240,98 @@ export function createRepo(pool: pg.Pool) {
         [writer_id],
       );
       return res.rows[0]?.display_name ?? 'Un rédacteur';
+    },
+
+    /** The settings page's writer list — every writer, active or revoked. */
+    async listWriters(): Promise<WriterRow[]> {
+      const res = await pool.query<WriterRow>(
+        `select id, email, display_name, is_admin, created_at, revoked_at
+           from writers
+          order by created_at`,
+      );
+      return res.rows;
+    },
+
+    /**
+     * Same on-conflict shape `scripts/create-writer.ts` already used before
+     * this file existed — reused via `src/api/authAdmin.ts`, not duplicated.
+     * Re-inviting an existing (possibly revoked) email reinstates it
+     * (`revoked_at` reset to null) rather than silently no-op'ing, since a
+     * re-invite is a deliberate "let them back in" action.
+     */
+    async upsertWriter(input: { id: string; email: string; display_name: string }): Promise<WriterRow> {
+      const res = await pool.query<WriterRow>(
+        `insert into writers (id, email, display_name)
+           values ($1, $2, $3)
+         on conflict (id) do update
+           set email = excluded.email, display_name = excluded.display_name, revoked_at = null
+         returning id, email, display_name, is_admin, created_at, revoked_at`,
+        [input.id, input.email, input.display_name],
+      );
+      const writer = res.rows[0];
+      // `insert ... on conflict do update ... returning` always yields
+      // exactly one row for a successful statement — a constraint violation
+      // throws instead of getting here. This is a type-narrowing guard, not
+      // a real runtime path.
+      if (writer === undefined) throw new Error('upsertWriter: insert returned no row');
+      return writer;
+    },
+
+    /**
+     * Revoking is a flag, not a row removal — `articles.writer_id` is
+     * `not null references writers (id)` with default RESTRICT delete, so a
+     * hard delete of a writer with existing articles would fail outright,
+     * and a soft flag preserves authorship history either way.
+     *
+     * The guard is the confirmed decision from planning this feature: the
+     * last active admin can never be revoked, in one transaction with the
+     * revoke itself, so there's no window where a second caller could slip
+     * a revoke of the second-to-last admin through between the check and
+     * the write.
+     */
+    async setWriterRevoked(
+      input: { writer_id: string; revoked: boolean },
+    ): Promise<
+      | { ok: true; writer: WriterRow }
+      | { ok: false; error: 'LAST_ADMIN_CANNOT_BE_REVOKED' | 'WRITER_NOT_FOUND' }
+    > {
+      const client = await pool.connect();
+      try {
+        await client.query('begin');
+        if (input.revoked) {
+          const remaining = await client.query(
+            `select count(*)::int as n from writers
+              where is_admin and revoked_at is null and id != $1`,
+            [input.writer_id],
+          );
+          const target = await client.query<{ is_admin: boolean }>(
+            `select is_admin from writers where id = $1 and revoked_at is null`,
+            [input.writer_id],
+          );
+          if (target.rows[0]?.is_admin === true && remaining.rows[0].n === 0) {
+            await client.query('rollback');
+            return { ok: false, error: 'LAST_ADMIN_CANNOT_BE_REVOKED' };
+          }
+        }
+        const res = await client.query<WriterRow>(
+          `update writers set revoked_at = case when $2 then now() else null end
+             where id = $1
+           returning id, email, display_name, is_admin, created_at, revoked_at`,
+          [input.writer_id, input.revoked],
+        );
+        const writer = res.rows[0];
+        if (writer === undefined) {
+          await client.query('rollback');
+          return { ok: false, error: 'WRITER_NOT_FOUND' };
+        }
+        await client.query('commit');
+        return { ok: true, writer };
+      } catch (err) {
+        await client.query('rollback');
+        throw err;
+      } finally {
+        client.release();
+      }
     },
 
     async markPublished(input: {

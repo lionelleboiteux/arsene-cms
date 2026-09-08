@@ -41,6 +41,12 @@ export type ArseneClient = {
     file: { filename: string; content_type: string; bytes: Uint8Array };
   }): Promise<unknown>;
   discardImage(args: { articleId: string; imageId: string }): Promise<unknown>;
+  /** Admin-only (`router.ts`'s `verifyAdmin`) — the settings page's writer
+   *  allow-list. A non-admin caller gets the same `401 UNAUTHORIZED` shape
+   *  every other refusal in this client already throws as `ArseneApiError`. */
+  listWriters(): Promise<unknown>;
+  inviteWriter(args: { email: string; display_name: string }): Promise<unknown>;
+  setWriterRevoked(args: { writerId: string; action: 'revoke' | 'reinstate' }): Promise<unknown>;
 };
 
 function errorFrom(status: number, payload: unknown): ArseneApiError {
@@ -129,6 +135,37 @@ export function createArseneClient(opts: {
       const response = await fetch(
         `${opts.baseUrl}/v1/articles/${args.articleId}/images/${args.imageId}`,
         { method: 'DELETE', headers: headers({}), signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) },
+      );
+      return parse(response);
+    },
+
+    async listWriters() {
+      const response = await fetch(`${opts.baseUrl}/v1/admin/writers`, {
+        headers: headers({}),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      return parse(response);
+    },
+
+    async inviteWriter(args) {
+      const response = await fetch(`${opts.baseUrl}/v1/admin/writers/invite`, {
+        method: 'POST',
+        headers: headers({ 'content-type': 'application/json' }),
+        body: JSON.stringify({ email: args.email, display_name: args.display_name }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      return parse(response);
+    },
+
+    async setWriterRevoked(args) {
+      const response = await fetch(
+        `${opts.baseUrl}/v1/admin/writers/${args.writerId}/${args.action}`,
+        {
+          method: 'POST',
+          headers: headers({ 'content-type': 'application/json' }),
+          body: '{}',
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        },
       );
       return parse(response);
     },

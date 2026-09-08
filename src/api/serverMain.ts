@@ -61,6 +61,8 @@ const server = await startHttpServer({
   cdnOrigin: process.env.CDN_ORIGIN,
   siteOrigin: process.env.SITE_ORIGIN,
   dashboardReadSecret: process.env.DASHBOARD_READ_SECRET,
+  supabaseUrl: process.env.SUPABASE_URL,
+  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
 });
 
 process.stdout.write(`listening ${server.url}\n`);

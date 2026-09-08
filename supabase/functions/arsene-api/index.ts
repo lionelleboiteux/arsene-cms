@@ -87,6 +87,12 @@ const opts: ServerOptions = {
   cdnOrigin: Deno.env.get('CDN_ORIGIN'),
   siteOrigin: Deno.env.get('SITE_ORIGIN'),
   dashboardReadSecret: Deno.env.get('DASHBOARD_READ_SECRET'),
+  // Both auto-injected by the platform for every Edge Function (same
+  // `SUPABASE_URL` already resolved above for the JWKS URL; the service-role
+  // key is what the admin writer-invite route needs to call the Supabase
+  // Auth Admin API, same credential `scripts/create-writer.ts` requires).
+  supabaseUrl,
+  supabaseServiceRoleKey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
   corsOrigins: parseCorsOrigins(Deno.env.get('CORS_ALLOWED_ORIGINS')),
   readTimeoutMs: (() => {
     const raw = Deno.env.get('READ_TIMEOUT_MS');
