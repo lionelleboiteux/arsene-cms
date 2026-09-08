@@ -77,3 +77,52 @@ export async function generateSignInLink(
   const body = (await res.json()) as { action_link?: string };
   return body.action_link ?? null;
 }
+
+/**
+ * A real, short-lived Supabase Auth access token for `email` — the writer-
+ * facing API (`router.ts`'s `verify()`) only accepts a genuine Supabase-
+ * issued JWT (`role: authenticated`, `sub` = the writer's id), so a script
+ * driving `ArseneClient` needs one of these rather than the service-role
+ * key itself (which carries `role: service_role` and is refused the same
+ * way `NFR-JWT-10` already refuses an `anon`-role token in its place).
+ *
+ * Headless equivalent of clicking a magic link: `generate_link` mints one
+ * without sending any email, then `/auth/v1/verify` redeems it — Supabase
+ * responds to that redemption with a redirect carrying the session in the
+ * `Location` header's URL fragment (`#access_token=...`), which a fragment
+ * being client-side-only doesn't stop a plain `fetch` from reading, since
+ * the fragment is just text in a header value here, never sent to a
+ * browser to execute.
+ */
+export async function mintAccessToken(
+  supabaseUrl: string,
+  authHeaders: Record<string, string>,
+  email: string,
+): Promise<string> {
+  const linkRes = await fetch(`${supabaseUrl}/auth/v1/admin/generate_link`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ type: 'magiclink', email }),
+  });
+  if (!linkRes.ok) {
+    throw new Error(`failed to generate a sign-in link for ${email} (${linkRes.status}): ${await linkRes.text()}`);
+  }
+  const { hashed_token } = (await linkRes.json()) as { hashed_token?: string };
+  if (hashed_token === undefined) {
+    throw new Error(`generate_link response for ${email} carried no hashed_token`);
+  }
+
+  const verifyRes = await fetch(
+    `${supabaseUrl}/auth/v1/verify?token=${encodeURIComponent(hashed_token)}&type=magiclink&redirect_to=${encodeURIComponent(supabaseUrl)}`,
+    { redirect: 'manual', headers: authHeaders },
+  );
+  const location = verifyRes.headers.get('location');
+  if (location === null) {
+    throw new Error(`redeeming the sign-in link for ${email} did not redirect (status ${verifyRes.status})`);
+  }
+  const accessToken = new URLSearchParams(new URL(location).hash.slice(1)).get('access_token');
+  if (accessToken === null) {
+    throw new Error(`redeeming the sign-in link for ${email} redirected with no access_token in the fragment`);
+  }
+  return accessToken;
+}
