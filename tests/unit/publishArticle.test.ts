@@ -233,6 +233,33 @@ describe('publish', () => {
     });
   });
 
+  it('the body editor\'s bold/underline/colour formatting and an inline image on the configured CDN origin all survive publish', async () => {
+    const api = await loadPublishArticle();
+    const bodyHtml =
+      '<p><strong>gras</strong> <u>souligné</u> <span style="color:#ff0000">rouge</span></p>' +
+      '<img src="https://assets.fantasycoach.fr/articles/a1/body.webp" alt="Une photo">';
+    const { deps, published } = buildPublishDeps({
+      now: NOW,
+      article: articleRecord({ body_html: bodyHtml }),
+      images: READY_COVER,
+    });
+
+    await api.handlePublishArticle(publishReq(), deps);
+    const persisted = String(published[0]?.body_html ?? '');
+
+    expect({
+      keeps_bold: persisted.includes('<strong>gras</strong>'),
+      keeps_underline: persisted.includes('<u>souligné</u>'),
+      keeps_colour: persisted.includes('<span style="color:#ff0000">rouge</span>'),
+      keeps_image: persisted.includes('<img src="https://assets.fantasycoach.fr/articles/a1/body.webp" alt="Une photo" />'),
+    }).toEqual({
+      keeps_bold: true,
+      keeps_underline: true,
+      keeps_colour: true,
+      keeps_image: true,
+    });
+  });
+
   it('AC-17: republishing an article that went live 3 days ago refreshes published_at, keeps first_published_at, and is flagged as a republish', async () => {
     const api = await loadPublishArticle();
     const firstPublishedAt = t('2026-08-08T09:03:00Z');

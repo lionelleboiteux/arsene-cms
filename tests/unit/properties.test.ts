@@ -78,13 +78,17 @@ describe('paste sanitization invariants (AC-03)', () => {
     )
     .map((parts) => parts.join(''));
 
-  it('PROP-04: no styling, class or executable node ever survives sanitization, for any clipboard payload', async () => {
+  const CDN_ORIGIN = 'https://assets.fantasycoach.fr';
+
+  it('PROP-04: no styling beyond a plain hex colour, class or executable node ever survives sanitization, for any clipboard payload', async () => {
     const { sanitizePastedHtml } = await loadPaste();
 
     fc.assert(
       fc.property(htmlish, (raw) => {
-        const out = sanitizePastedHtml(raw);
-        expect(/\sstyle=|\sclass=|<font|<script|\son[a-z]+=/i.test(out)).toBe(false);
+        const out = sanitizePastedHtml(raw, { allowedImageOrigin: CDN_ORIGIN });
+        const styleAttrs = out.match(/\sstyle="[^"]*"/gi) ?? [];
+        expect(styleAttrs.every((attr) => /^\sstyle="color:#[0-9a-f]{3,8}"$/i.test(attr))).toBe(true);
+        expect(/\sclass=|<font|<script|\son[a-z]+=/i.test(out)).toBe(false);
       }),
     );
   });
@@ -94,8 +98,8 @@ describe('paste sanitization invariants (AC-03)', () => {
 
     fc.assert(
       fc.property(htmlish, (raw) => {
-        const once = sanitizePastedHtml(raw);
-        expect(sanitizePastedHtml(once)).toBe(once);
+        const once = sanitizePastedHtml(raw, { allowedImageOrigin: CDN_ORIGIN });
+        expect(sanitizePastedHtml(once, { allowedImageOrigin: CDN_ORIGIN })).toBe(once);
       }),
     );
   });

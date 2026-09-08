@@ -132,7 +132,7 @@ export interface PasteModule {
    * Raw clipboard HTML from Word/Google Docs in, article HTML out. Pure:
    * no DOM globals, no network, no DB (02-architecture.v1.md §1).
    */
-  sanitizePastedHtml(rawHtml: string): string;
+  sanitizePastedHtml(rawHtml: string, opts: { allowedImageOrigin: string }): string;
 }
 
 export async function loadPaste(): Promise<PasteModule> {
@@ -441,6 +441,7 @@ export type ObservabilityRecord = {
 
 export type PublishDeps = {
   now(): Date;
+  cdnOrigin: string;
   auth: {
     verifyBearer(
       token: string | null,

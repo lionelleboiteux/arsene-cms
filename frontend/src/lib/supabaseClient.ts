@@ -19,3 +19,8 @@ export const supabase = createClient(
 );
 
 export const ARSENE_API_BASE = requireEnv('VITE_ARSENE_API_BASE');
+
+/** The one origin an inline `<img src>` in the body editor is ever allowed
+ *  to point at (`sanitizePastedHtml`, `src/domain/paste.ts`) — same value
+ *  `router.ts` already resolves server-side from `CDN_ORIGIN`. */
+export const CDN_ORIGIN = requireEnv('VITE_CDN_ORIGIN');

@@ -311,6 +311,7 @@ function publishDeps(ctx: Ctx): PublishDeps {
   const sink = createTelemetrySink();
   return {
     now: () => new Date(),
+    cdnOrigin: ctx.opts.cdnOrigin ?? DEFAULT_CDN_ORIGIN,
     auth: { verifyBearer: async (token) => verify(token, ctx) },
     repo: ctx.repo,
     telemetry: sink,
@@ -700,6 +701,7 @@ function getSiteRenderer(ctx: Ctx): ReturnType<typeof createSiteRenderer> {
     ctx.shared.siteRenderer = createSiteRenderer({
       databaseUrl: ctx.opts.databaseUrl,
       siteOrigin: ctx.opts.siteOrigin ?? DEFAULT_SITE_ORIGIN,
+      cdnOrigin: ctx.opts.cdnOrigin ?? DEFAULT_CDN_ORIGIN,
     });
   }
   return ctx.shared.siteRenderer;

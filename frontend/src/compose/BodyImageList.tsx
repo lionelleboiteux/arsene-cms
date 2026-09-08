@@ -4,15 +4,21 @@ import { useImageSlot } from './useImageSlot.ts';
  * AC-07/08: a body image that fails conversion or is unsupported never
  * permanently blocks publish — discard clears it, upload again to retry.
  *
- * Uploads and lists body images (with editable alt text) but does not embed
- * them into `body_html`: `src/domain/paste.ts`'s `ALLOWED_TAGS` excludes
- * `img`, and the same sanitizer runs again server-side at publish
- * (`publishArticle.ts`), so an inserted `<img>` tag would be silently
- * stripped on publish. Extending the shared, already-tested sanitizer to
- * allow `img` (with a real `src`-origin restriction, not just an
- * allowlisted tag) is a deliberate follow-up, not a rushed one.
+ * Uploads and lists body images (with editable alt text); a ready image can
+ * be inserted into the body at the cursor via `onInsert` (wired by
+ * `ComposePage.tsx` to `BodyEditor`'s imperative `insertImage`). Reuses this
+ * list's own upload/poll/alt-text/discard machinery rather than building a
+ * second, editor-internal upload flow — `sanitizePastedHtml` (`src/domain/
+ * paste.ts`) only ever keeps an `<img>` on the deployment's configured CDN
+ * origin, which `optimized_url` always already is.
  */
-export function BodyImageList({ articleId }: { articleId: string }) {
+export function BodyImageList({
+  articleId,
+  onInsert,
+}: {
+  articleId: string;
+  onInsert: (src: string, alt: string) => void;
+}) {
   const { images, uploading, uploadError, upload, discard, setAltText } = useImageSlot(articleId, 'body');
 
   return (
@@ -62,6 +68,13 @@ export function BodyImageList({ articleId }: { articleId: string }) {
                   onChange={(event) => void setAltText(image.id, event.target.value)}
                 />
               </label>
+              <button
+                type="button"
+                disabled={image.optimized_url === null}
+                onClick={() => image.optimized_url !== null && onInsert(image.optimized_url, image.alt_text ?? '')}
+              >
+                Insérer dans le texte
+              </button>
               <button type="button" onClick={() => void discard(image.id)}>
                 Retirer
               </button>

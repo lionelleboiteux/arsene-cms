@@ -3,7 +3,7 @@ import { useDraft, type DraftFields } from '../compose/useDraft.ts';
 import { useTaxonomy } from '../compose/useTaxonomy.ts';
 import { LockBanner } from '../compose/LockBanner.tsx';
 import { SaveIndicator } from '../compose/SaveIndicator.tsx';
-import { BodyEditor } from '../compose/BodyEditor.tsx';
+import { BodyEditor, type BodyEditorHandle } from '../compose/BodyEditor.tsx';
 import { CoverImageSlot } from '../compose/CoverImageSlot.tsx';
 import { BodyImageList } from '../compose/BodyImageList.tsx';
 import { PublishPanel } from '../compose/PublishPanel.tsx';
@@ -58,6 +58,7 @@ export function ComposePage({ articleId, onBack }: { articleId: string; onBack: 
   // that happens to match a fixed pair would fight the writer's own choice.
   const [categoryChoice, setCategoryChoice] = useState('');
   const hydratedForRef = useRef<string | null>(null);
+  const bodyEditorRef = useRef<BodyEditorHandle>(null);
   useEffect(() => {
     if (state.status !== 'editable' || hydratedForRef.current === state.articleId) return;
     hydratedForRef.current = state.articleId;
@@ -199,12 +200,15 @@ export function ComposePage({ articleId, onBack }: { articleId: string; onBack: 
 
       <div className="field-row">
         <label htmlFor="body">Contenu</label>
-        <BodyEditor value={fields.body_html} onChange={(html) => setField('body_html', html)} />
+        <BodyEditor ref={bodyEditorRef} value={fields.body_html} onChange={(html) => setField('body_html', html)} />
       </div>
 
       <CoverImageSlot articleId={articleId} />
 
-      <BodyImageList articleId={articleId} />
+      <BodyImageList
+        articleId={articleId}
+        onInsert={(src, alt) => bodyEditorRef.current?.insertImage(src, alt)}
+      />
 
       <PublishPanel
         articleId={articleId}

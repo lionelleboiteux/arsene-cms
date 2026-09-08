@@ -66,6 +66,11 @@ export type PublishHttpRequest = {
 
 export type PublishDeps = {
   now(): Date;
+  /** This deployment's configured CDN origin — the one thing an inline
+   *  `<img src>` in `body_html` is allowed to point at (`sanitizePastedHtml`).
+   *  Same value `router.ts` already resolves for the image-status callback's
+   *  own origin check; threaded here rather than re-derived. */
+  cdnOrigin: string;
   auth: {
     verifyBearer(
       token: string | null,
@@ -280,7 +285,7 @@ async function publishNow(
 ): Promise<HandlerResponse> {
   // H1: `body_html` is directly PostgREST-writable by any writer, so the one
   // request that makes it public is the one that must sanitise it.
-  const body_html = sanitizePastedHtml(article.body_html);
+  const body_html = sanitizePastedHtml(article.body_html, { allowedImageOrigin: deps.cdnOrigin });
   const body_text = htmlToText(article.body_html);
   const suggestion = suggestMeta({ ...article, body_text });
   const meta_title = req.body.meta_title ?? article.meta_title ?? suggestion.meta_title;

@@ -11,6 +11,12 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.1",
+    "@tiptap/extension-color": "^3.31.3",
+    "@tiptap/extension-image": "^3.31.3",
+    "@tiptap/extension-text-style": "^3.31.3",
+    "@tiptap/pm": "^3.31.3",
+    "@tiptap/react": "^3.31.3",
+    "@tiptap/starter-kit": "^3.31.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

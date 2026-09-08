@@ -163,7 +163,7 @@ function page(title: string, head: string, body: string): string {
   ].join('');
 }
 
-export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin: string }) {
+export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin: string; cdnOrigin: string }) {
   const client = new pg.Client({ connectionString: opts.databaseUrl });
   await client.connect();
 
@@ -261,7 +261,7 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
       // sanitises again, so a row poisoned another way — a direct PostgREST
       // PATCH, a row written before publish sanitised — still cannot execute in
       // a visitor's browser.
-      const articleBody = `<div class="body">${sanitizePastedHtml(row.body_html)}</div>`;
+      const articleBody = `<div class="body">${sanitizePastedHtml(row.body_html, { allowedImageOrigin: opts.cdnOrigin })}</div>`;
       const body = `<main data-article-title="${escape(row.title)}">${hero}${meta}${articleBody}</main>`;
       return { html: page(row.title, head, body), json_ld: [jsonLd] };
     },

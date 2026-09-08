@@ -89,6 +89,7 @@ export function fakeObservability() {
 
 export type PublishDepsOverrides = {
   now?: Date;
+  cdnOrigin?: string;
   article?: ArticleRecord | null;
   images?: ImageRecord[];
   authValid?: boolean;
@@ -118,6 +119,7 @@ export function buildPublishDeps(o: PublishDepsOverrides = {}): BuiltPublishDeps
 
   const deps: PublishDeps = {
     now: () => now,
+    cdnOrigin: o.cdnOrigin ?? 'https://assets.fantasycoach.fr',
     auth: fakeAuth({
       valid: o.authValid ?? true,
       writer_id: o.writer_id,
