@@ -32,8 +32,19 @@ function requireEnv(name: string): string {
  *  first `-`, since a UUID itself contains hyphens. */
 const KEY_PATTERN = /^originals\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-original-(.+)$/i;
 
+/** S3 event notifications URL-encode the object key (spaces as `+`, per an
+ *  AWS-specific quirk, plus ordinary percent-encoding for everything else),
+ *  so any filename with spaces or other special characters needs decoding
+ *  before it's a real S3 key again — a filename with none of those (most of
+ *  this project's own test fixtures) happens to be identical either way,
+ *  which is why this was never caught until a real "WhatsApp Image ....jpeg"
+ *  upload hit it in production. */
+function decodeS3Key(key: string): string {
+  return decodeURIComponent(key.replace(/\+/g, ' '));
+}
+
 export function parseKey(key: string): { imageId: string; filename: string } {
-  const decoded = decodeURIComponent(key.replace(/\+/g, ' '));
+  const decoded = decodeS3Key(key);
   const match = KEY_PATTERN.exec(decoded);
   if (match === null || match[1] === undefined || match[2] === undefined) {
     throw new Error(`object key "${decoded}" does not match the expected originals/{uuid}-original-{filename} shape`);
@@ -80,11 +91,12 @@ export const handler = async (event: S3Event): Promise<void> => {
 
   for (const record of event.Records) {
     const { imageId, filename } = parseKey(record.s3.object.key);
+    // The real, decoded key — GetObject needs the actual S3 key (real spaces
+    // etc.), not the URL-encoded form the event itself carries in `object.key`.
+    const decodedKey = decodeS3Key(record.s3.object.key);
 
     try {
-      const original = await s3.send(
-        new GetObjectCommand({ Bucket: record.s3.bucket.name, Key: record.s3.object.key }),
-      );
+      const original = await s3.send(new GetObjectCommand({ Bucket: record.s3.bucket.name, Key: decodedKey }));
       if (original.Body === undefined) throw new Error('S3 GetObject returned no body');
       const bytes = await streamToUint8Array(
         original.Body as unknown as { transformToByteArray(): Promise<Uint8Array> },
