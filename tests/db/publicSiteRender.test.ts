@@ -333,6 +333,13 @@ describe('public site', () => {
       expect(currentLeagueOf(page?.html)).toBe('Bundesliga');
     });
 
+    it('Premier League carries "FPL" instead of its own name — fc-shared\'s nav.js renders that league\'s dropdown entry with label "FPL", not "Premier League", so the client-side match has to target the nav\'s actual visible text', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderLeaguePage({ league_slug: 'premier-league' });
+
+      expect(currentLeagueOf(page?.html)).toBe('FPL');
+    });
+
     it('a league/season/category listing carries its league’s name too', async () => {
       const { renderer } = ctx();
       const page = await renderer.renderCategoryPage({

@@ -177,7 +177,7 @@ ul.articles{list-style:none;margin:0;padding:1rem;display:grid;gap:1rem;max-widt
 .article-card-text{flex:1 1 auto;min-width:0}
 .article-card-title{margin:0 0 .3rem;font-size:1rem;font-weight:700;line-height:1.35}
 .article-card-byline{margin:0;color:var(--muted);font-size:.85rem}
-.article-card img{flex:none;width:76px;height:76px;object-fit:cover;border-radius:10px}
+.article-card-cover{flex:none;width:76px;height:76px;object-fit:cover;border-radius:10px}
 p.empty{padding:2rem;color:var(--muted)}
 /* Same specificity fight as the .site-banner bleed fix above: nav.js's own
    injected stylesheet carries ".site-nav a{text-decoration:none;font-weight:600}",
@@ -241,7 +241,7 @@ function articleCard(row: ArticleRow): string {
   const cover =
     row.cover_image_url === null
       ? ''
-      : `<img src="${escape(row.cover_image_url)}" alt="${escape(row.title)}"/>`;
+      : `<img src="${escape(row.cover_image_url)}" alt="${escape(row.title)}" class="article-card-cover"/>`;
   return [
     `<li class="article-card" data-article-title="${escape(row.title)}">`,
     `<a href="${articlePath(viewOf(row))}">`,
@@ -315,8 +315,25 @@ const NAV_CURRENT_LEAGUE_SCRIPT = `<script>(function(){
   }, 100);
 })();</script>`;
 
+/**
+ * `NAV_CURRENT_LEAGUE_SCRIPT` matches by nav.js's own *visible* dropdown
+ * text, not `href` (its own doc comment above has the full reasoning) —
+ * which breaks the moment a league's nav label diverges from
+ * `arsene_leagues.name`. Currently only Premier League does: fc-shared's
+ * `nav.js` renders its dropdown entry as `{ id: 'fpl', label: 'FPL', ... }`,
+ * confirmed live (`cdn.jsdelivr.net/gh/lionelleboiteux/fc-shared@main/nav.js`),
+ * so "Premier League" (what this app calls it everywhere else — SEO, URLs,
+ * bylines) never matched "FPL" and the nav item silently never highlighted.
+ * Translated only here, at the one place `data-current-league` is set, so
+ * every other subsystem keeps using the real league name untouched.
+ */
+const NAV_LABEL_OVERRIDES: Record<string, string> = {
+  'Premier League': 'FPL',
+};
+
 function page(title: string, head: string, body: string, currentLeague?: string): string {
-  const bodyAttrs = currentLeague === undefined ? '' : ` data-current-league="${escape(currentLeague)}"`;
+  const navLabel = currentLeague === undefined ? undefined : (NAV_LABEL_OVERRIDES[currentLeague] ?? currentLeague);
+  const bodyAttrs = navLabel === undefined ? '' : ` data-current-league="${escape(navLabel)}"`;
   return [
     '<!doctype html><html lang="fr"><head>',
     '<meta charset="utf-8"/>',
