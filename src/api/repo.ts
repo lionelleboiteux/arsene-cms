@@ -441,6 +441,25 @@ export function createRepo(pool: pg.Pool) {
       return existing.rowCount === 1 ? 'not_draft' : 'not_found';
     },
 
+    /** Admin-only reversal of an accidental publish. Reuses the plain
+     *  draft/published state machine rather than adding a third status:
+     *  flips back to `draft` and clears `published_at`, but leaves `slug`
+     *  and `first_published_at` untouched so a later re-publish keeps the
+     *  same URL and the historical first-published record survives (mirrors
+     *  `markPublished`'s own `coalesce(first_published_at, ...)`). Once
+     *  unpublished, the article is an ordinary draft — `deleteDraftArticle`
+     *  above already applies to it, no separate delete path needed. */
+    async unpublishArticle(article_id: string): Promise<'unpublished' | 'not_found' | 'not_published'> {
+      if (!UUID.test(article_id)) return 'not_found';
+      const res = await pool.query(
+        `update articles set status = 'draft', published_at = null where id = $1 and status = 'published'`,
+        [article_id],
+      );
+      if (res.rowCount === 1) return 'unpublished';
+      const existing = await pool.query(`select 1 from articles where id = $1`, [article_id]);
+      return existing.rowCount === 1 ? 'not_published' : 'not_found';
+    },
+
     async markPublished(input: {
       article_id: string;
       published_at: Date;

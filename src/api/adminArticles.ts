@@ -19,6 +19,7 @@ export type AdminArticlesDeps = {
   };
   repo: {
     deleteDraftArticle(article_id: string): Promise<'deleted' | 'not_found' | 'not_draft'>;
+    unpublishArticle(article_id: string): Promise<'unpublished' | 'not_found' | 'not_published'>;
   };
 };
 
@@ -50,4 +51,37 @@ export async function handleDeleteArticle(
   }
 
   return { status: 200, body: { article_id: req.article_id, deleted: true } };
+}
+
+export type UnpublishArticleRequest = {
+  authorization: string | null;
+  article_id: string;
+};
+
+/** Reverses an accidental publish — see `repo.unpublishArticle`'s own doc
+ *  comment for why this reuses the plain draft/published state machine
+ *  instead of adding a third status. */
+export async function handleUnpublishArticle(
+  req: UnpublishArticleRequest,
+  deps: AdminArticlesDeps,
+): Promise<HandlerResponse> {
+  const auth = await deps.auth.verifyAdmin(bearerToken(req.authorization));
+  if (!auth.valid) {
+    return errorResponse(401, 'UNAUTHORIZED', 'A valid admin bearer token is required.');
+  }
+
+  const result = await deps.repo.unpublishArticle(req.article_id);
+
+  if (result === 'not_found') {
+    return errorResponse(404, 'NOT_FOUND', 'No article was found matching the given id.', {
+      article_id: req.article_id,
+    });
+  }
+  if (result === 'not_published') {
+    return errorResponse(409, 'CONFLICT', 'Only a published article can be unpublished.', {
+      article_id: req.article_id,
+    });
+  }
+
+  return { status: 200, body: { article_id: req.article_id, unpublished: true } };
 }

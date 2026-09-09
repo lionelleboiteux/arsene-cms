@@ -60,6 +60,11 @@ export type ArseneClient = {
   /** Admin-only, drafts only — the home page's "unneeded drafts and tests"
    *  cleanup action. A published article is refused `409 CONFLICT`. */
   deleteArticle(args: { articleId: string }): Promise<unknown>;
+  /** Admin-only, published only — reverses an accidental publish by
+   *  flipping the article back to a draft (`published_at` cleared, `slug`
+   *  kept so a later re-publish reuses the same URL). A draft is refused
+   *  `409 CONFLICT`; the result can then be cleared with `deleteArticle`. */
+  unpublishArticle(args: { articleId: string }): Promise<unknown>;
 };
 
 function errorFrom(status: number, payload: unknown): ArseneApiError {
@@ -219,6 +224,16 @@ export function createArseneClient(opts: {
       const response = await fetch(`${opts.baseUrl}/v1/admin/articles/${args.articleId}`, {
         method: 'DELETE',
         headers: headers({}),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      return parse(response);
+    },
+
+    async unpublishArticle(args) {
+      const response = await fetch(`${opts.baseUrl}/v1/admin/articles/${args.articleId}/unpublish`, {
+        method: 'POST',
+        headers: headers({ 'content-type': 'application/json' }),
+        body: '{}',
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
       return parse(response);

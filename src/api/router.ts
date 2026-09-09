@@ -35,7 +35,7 @@ import {
   handleSetWriterRevoked,
   type AdminWritersDeps,
 } from './adminWriters.ts';
-import { handleDeleteArticle, type AdminArticlesDeps } from './adminArticles.ts';
+import { handleDeleteArticle, handleUnpublishArticle, type AdminArticlesDeps } from './adminArticles.ts';
 import { authAdminHeaders, createOrFindAuthUser, generateSignInLink } from './authAdmin.ts';
 import { bearerToken, errorResponse, type HandlerResponse } from './http.ts';
 import { handleImageStatusCallback } from './imageStatus.ts';
@@ -96,6 +96,10 @@ const WRITER_AVATAR_ROUTE = '/v1/writers/me/avatar';
  *  exact path, so there's no CORS-preflight-advertising conflict to worry
  *  about (see the comment above on the writers routes). */
 const ADMIN_ARTICLE_ROUTE = /^\/v1\/admin\/articles\/([^/]+)$/;
+/** Reverses an accidental publish (`repo.unpublishArticle`'s own doc
+ *  comment has the reasoning). One action, unlike `ADMIN_WRITER_ACTION_ROUTE`'s
+ *  revoke/reinstate pair, so no alternation is needed. */
+const ADMIN_ARTICLE_UNPUBLISH_ROUTE = /^\/v1\/admin\/articles\/([^/]+)\/unpublish$/;
 
 /**
  * Assets are served through the CDN, never from Supabase Storage (§4). The
@@ -732,6 +736,12 @@ const adminDeleteArticle = (request: Request, article_id: string, ctx: Ctx): Pro
     adminArticlesDeps(ctx),
   );
 
+const adminUnpublishArticle = (request: Request, article_id: string, ctx: Ctx): Promise<HandlerResponse> =>
+  handleUnpublishArticle(
+    { authorization: request.headers.get('authorization'), article_id },
+    adminArticlesDeps(ctx),
+  );
+
 /**
  * No longer the authorization mechanism — `verify()` resolves the caller
  * against `writers` before this is ever reached (H-V3-01). What is left is the
@@ -1054,7 +1064,8 @@ type Operation =
   | { kind: 'upload-avatar' }
   | { kind: 'admin-invite-writer' }
   | { kind: 'admin-writer-action'; writer_id: string; action: 'revoke' | 'reinstate' }
-  | { kind: 'admin-delete-article'; article_id: string };
+  | { kind: 'admin-delete-article'; article_id: string }
+  | { kind: 'admin-unpublish-article'; article_id: string };
 
 function matchRoute(path: string): Operation | null {
   if (path === CREATE_DRAFT_ROUTE) return { kind: 'create-draft' };
@@ -1073,6 +1084,11 @@ function matchRoute(path: string): Operation | null {
       writer_id: adminWriterAction[1],
       action: adminWriterAction[2] as 'revoke' | 'reinstate',
     };
+  }
+
+  const adminUnpublishArticle = ADMIN_ARTICLE_UNPUBLISH_ROUTE.exec(path);
+  if (adminUnpublishArticle?.[1] !== undefined) {
+    return { kind: 'admin-unpublish-article', article_id: adminUnpublishArticle[1] };
   }
 
   const adminDeleteArticle = ADMIN_ARTICLE_ROUTE.exec(path);
@@ -1187,6 +1203,8 @@ function dispatch(
       return adminWriterAction(request, op.writer_id, op.action, ctx);
     case 'admin-delete-article':
       return adminDeleteArticle(request, op.article_id, ctx);
+    case 'admin-unpublish-article':
+      return adminUnpublishArticle(request, op.article_id, ctx);
     case 'public-home':
     case 'public-article':
     case 'public-category':
@@ -1281,7 +1299,8 @@ export async function route(
     op.kind === 'admin-list-writers' ||
     op.kind === 'admin-invite-writer' ||
     op.kind === 'admin-writer-action' ||
-    op.kind === 'admin-delete-article'
+    op.kind === 'admin-delete-article' ||
+    op.kind === 'admin-unpublish-article'
   ) {
     // A writer bearer token alone is not enough here — verifyAdmin() layers
     // the admin decision on top of verify()'s own active-writer check, so a

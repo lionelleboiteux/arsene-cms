@@ -168,6 +168,11 @@ body {
   border-color: #c0392b;
 }
 
+.unpublish-button {
+  color: #e0704d;
+  border-color: #e0704d;
+}
+
 .article-link {
   background: none;
   border: none;

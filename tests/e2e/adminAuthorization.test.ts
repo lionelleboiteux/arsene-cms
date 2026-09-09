@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadApiServer } from '../support/seams.js';
 import { freePort } from '../support/prism.js';
-import { seedWriter, startTestDatabase, type TestDatabase } from '../support/pg.js';
+import { seedArticle, seedWriter, startTestDatabase, type TestDatabase } from '../support/pg.js';
 import { TEST_JWKS_JSON, bearer, mintSupabaseJwt } from '../support/jwt.js';
 
 /**
@@ -101,6 +101,13 @@ const deleteArticle = (token: string, article_id: string) =>
   fetch(`${ctx().server.url}/v1/admin/articles/${article_id}`, {
     method: 'DELETE',
     headers: { authorization: bearer(token) },
+  });
+
+const unpublishArticle = (token: string, article_id: string) =>
+  fetch(`${ctx().server.url}/v1/admin/articles/${article_id}/unpublish`, {
+    method: 'POST',
+    headers: { authorization: bearer(token), 'content-type': 'application/json' },
+    body: '{}',
   });
 
 async function answer(res: Response): Promise<{ status: number; code: string | undefined }> {
@@ -214,6 +221,67 @@ describe('admin delete-article authorization', () => {
     const { adminToken } = ctx();
 
     const res = await deleteArticle(adminToken, '00000000-0000-0000-0000-000000000000');
+
+    expect(await answer(res)).toEqual({ status: 404, code: 'NOT_FOUND' });
+  });
+});
+
+describe('admin unpublish-article authorization', () => {
+  it('ADMIN-UNPUBLISH-AUTHZ-01: a stranger, a revoked writer and an ordinary active writer are all refused 401, not just an admin bearer token', async () => {
+    const { db, strangerToken, revokedToken, writerToken, writerId } = ctx();
+    const article_id = await seedArticle(db.client, {
+      writer_id: writerId,
+      title: 'Unpublish authz refusal fixture',
+      league_name: 'Ligue 1',
+      type_name: 'Pronos',
+      status: 'published',
+      slug: 'unpublish-authz-refusal-fixture',
+      published_at: '2026-08-01T09:00:00Z',
+    });
+
+    expect(await answer(await unpublishArticle(strangerToken, article_id))).toEqual({
+      status: 401,
+      code: 'UNAUTHORIZED',
+    });
+    expect(await answer(await unpublishArticle(revokedToken, article_id))).toEqual({
+      status: 401,
+      code: 'UNAUTHORIZED',
+    });
+    expect(await answer(await unpublishArticle(writerToken, article_id))).toEqual({
+      status: 401,
+      code: 'UNAUTHORIZED',
+    });
+  });
+
+  it('ADMIN-UNPUBLISH-AUTHZ-02: the real admin unpublishes a published article — including one another writer wrote — and it is really a draft again, not just unlisted', async () => {
+    const { db, adminToken, writerId } = ctx();
+    const article_id = await seedArticle(db.client, {
+      writer_id: writerId,
+      title: 'Unpublish authz success fixture',
+      league_name: 'Ligue 1',
+      type_name: 'Pronos',
+      status: 'published',
+      slug: 'unpublish-authz-success-fixture',
+      published_at: '2026-08-02T09:00:00Z',
+    });
+
+    const res = await unpublishArticle(adminToken, article_id);
+    expect(await answer(res)).toEqual({ status: 200, code: undefined });
+
+    const row = await db.client.query<{ status: string; published_at: Date | null }>(
+      `select status, published_at from articles where id = $1`,
+      [article_id],
+    );
+    expect({ status: row.rows[0]?.status, published_at: row.rows[0]?.published_at }).toEqual({
+      status: 'draft',
+      published_at: null,
+    });
+  });
+
+  it('ADMIN-UNPUBLISH-AUTHZ-03: unpublishing an id with no article row at all is 404, not a silent success', async () => {
+    const { adminToken } = ctx();
+
+    const res = await unpublishArticle(adminToken, '00000000-0000-0000-0000-000000000000');
 
     expect(await answer(res)).toEqual({ status: 404, code: 'NOT_FOUND' });
   });

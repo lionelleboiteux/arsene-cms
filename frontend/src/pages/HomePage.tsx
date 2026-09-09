@@ -41,6 +41,8 @@ export function HomePage({
   const [isAdmin, setIsAdmin] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [unpublishingId, setUnpublishingId] = useState<string | null>(null);
+  const [unpublishError, setUnpublishError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -68,6 +70,27 @@ export function HomePage({
       setDeleteError(err instanceof Error ? err.message : String(err));
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  async function handleUnpublish(articleId: string) {
+    if (
+      !window.confirm(
+        'Dépublier cet article ? La page publique disparaît immédiatement ; il redevient un brouillon modifiable.',
+      )
+    ) {
+      return;
+    }
+    setUnpublishError(null);
+    setUnpublishingId(articleId);
+    try {
+      const client = await arseneClient();
+      await client.unpublishArticle({ articleId });
+      await refresh();
+    } catch (err) {
+      setUnpublishError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setUnpublishingId(null);
     }
   }
 
@@ -122,6 +145,11 @@ export function HomePage({
           {deleteError}
         </p>
       )}
+      {unpublishError !== null && (
+        <p role="alert" className="error-text">
+          {unpublishError}
+        </p>
+      )}
 
       {loading ? (
         <p>Chargement…</p>
@@ -150,6 +178,8 @@ export function HomePage({
                 isAdmin={isAdmin}
                 deletingId={deletingId}
                 onDelete={(id) => void handleDelete(id)}
+                unpublishingId={unpublishingId}
+                onUnpublish={(id) => void handleUnpublish(id)}
               />
             );
           })}
@@ -162,6 +192,8 @@ export function HomePage({
               isAdmin={isAdmin}
               deletingId={deletingId}
               onDelete={(id) => void handleDelete(id)}
+              unpublishingId={unpublishingId}
+              onUnpublish={(id) => void handleUnpublish(id)}
             />
           )}
         </>
@@ -182,6 +214,8 @@ function LeagueSection({
   isAdmin,
   deletingId,
   onDelete,
+  unpublishingId,
+  onUnpublish,
 }: {
   title: string;
   articles: ArticleListItem[];
@@ -190,6 +224,8 @@ function LeagueSection({
   isAdmin?: boolean;
   deletingId?: string | null;
   onDelete?: (articleId: string) => void;
+  unpublishingId?: string | null;
+  onUnpublish?: (articleId: string) => void;
 }) {
   return (
     <section className="league-section">
@@ -218,6 +254,16 @@ function LeagueSection({
                     onClick={() => onDelete(article.id)}
                   >
                     {deletingId === article.id ? 'Suppression…' : 'Supprimer'}
+                  </button>
+                )}
+                {isAdmin === true && article.status === 'published' && onUnpublish !== undefined && (
+                  <button
+                    type="button"
+                    className="unpublish-button"
+                    disabled={unpublishingId === article.id}
+                    onClick={() => onUnpublish(article.id)}
+                  >
+                    {unpublishingId === article.id ? 'Dépublication…' : 'Dépublier'}
                   </button>
                 )}
               </div>
