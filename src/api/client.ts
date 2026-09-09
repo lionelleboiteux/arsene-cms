@@ -49,6 +49,12 @@ export type ArseneClient = {
    *  trimmed server-side to `{id, display_name}[]` (unlike `listWriters()`'s
    *  full admin `WriterRow`). */
   listActiveWriters(): Promise<unknown>;
+  /** The caller's own row — `{id, display_name, avatar_url}` — the
+   *  first-login onboarding gate's read (`app.tsx`) and "Ma photo"'s. */
+  getOwnWriter(): Promise<unknown>;
+  /** No `role`, no `Idempotency-Key`, unlike `uploadArticleImage` — a rare
+   *  accidental double-submit just creates one extra `writer_avatars` row. */
+  uploadAvatar(args: { file: { filename: string; content_type: string; bytes: Uint8Array } }): Promise<unknown>;
   inviteWriter(args: { email: string; display_name: string }): Promise<unknown>;
   setWriterRevoked(args: { writerId: string; action: 'revoke' | 'reinstate' }): Promise<unknown>;
   /** Admin-only, drafts only — the home page's "unneeded drafts and tests"
@@ -157,6 +163,30 @@ export function createArseneClient(opts: {
     async listActiveWriters() {
       const response = await fetch(`${opts.baseUrl}/v1/writers`, {
         headers: headers({}),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      return parse(response);
+    },
+
+    async getOwnWriter() {
+      const response = await fetch(`${opts.baseUrl}/v1/writers/me`, {
+        headers: headers({}),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      return parse(response);
+    },
+
+    async uploadAvatar(args) {
+      const form = new FormData();
+      form.set(
+        'file',
+        new Blob([args.file.bytes as unknown as BlobPart], { type: args.file.content_type }),
+        args.file.filename,
+      );
+      const response = await fetch(`${opts.baseUrl}/v1/writers/me/avatar`, {
+        method: 'POST',
+        headers: headers({}),
+        body: form,
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
       return parse(response);

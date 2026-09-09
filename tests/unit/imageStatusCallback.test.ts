@@ -18,10 +18,12 @@ import { ARTICLE_ID, COVER_IMAGE_ID, COVER_OPTIMIZED_URL } from '../support/fixt
  * the handler's own decision-making, so it needs neither.
  */
 
-const processingRow = (overrides: Partial<ImageStatusRow> = {}): ImageStatusRow => ({
+const processingRow = (
+  overrides: Partial<Extract<ImageStatusRow, { owner: 'article' }>> = {},
+): ImageStatusRow => ({
   id: COVER_IMAGE_ID,
+  owner: 'article',
   article_id: ARTICLE_ID,
-  role: 'cover',
   status: 'processing',
   ...overrides,
 });

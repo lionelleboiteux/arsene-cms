@@ -17,6 +17,8 @@ export type WritersDeps = {
   };
   repo: {
     listActiveWriters(): Promise<{ id: string; display_name: string }[]>;
+    getWriterDisplayName(writer_id: string): Promise<string>;
+    getWriterAvatarUrl(writer_id: string): Promise<string | null>;
   };
 };
 
@@ -31,4 +33,29 @@ export async function handleListActiveWriters(
 
   const writers = await deps.repo.listActiveWriters();
   return { status: 200, body: { writers } };
+}
+
+/**
+ * `GET /v1/writers/me` — the caller's own `{id, display_name, avatar_url}`,
+ * resolved from their own token's `writer_id`. The frontend's first-login
+ * onboarding gate (`app.tsx`) is the reason this exists: `writers` itself
+ * has no self-read RLS policy at all (0008, deliberate), so there is no
+ * direct-PostgREST way for a writer to learn whether they have an avatar
+ * yet — this is that read, server-mediated like every other `writers`
+ * access since 0008.
+ */
+export async function handleGetOwnWriter(
+  req: { authorization: string | null },
+  deps: WritersDeps,
+): Promise<HandlerResponse> {
+  const auth = await deps.auth.verifyBearer(bearerToken(req.authorization));
+  if (!auth.valid || auth.writer_id === undefined) {
+    return errorResponse(401, 'UNAUTHORIZED', 'A valid Supabase Auth bearer token is required.');
+  }
+
+  const [display_name, avatar_url] = await Promise.all([
+    deps.repo.getWriterDisplayName(auth.writer_id),
+    deps.repo.getWriterAvatarUrl(auth.writer_id),
+  ]);
+  return { status: 200, body: { id: auth.writer_id, display_name, avatar_url } };
 }

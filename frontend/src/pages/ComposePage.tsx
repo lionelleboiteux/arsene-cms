@@ -46,7 +46,15 @@ function categoryChoiceFor(fields: Pick<DraftFields, 'league_name' | 'type_name'
   return fields.league_name !== '' || fields.type_name !== '' ? 'autre' : '';
 }
 
-export function ComposePage({ articleId, onBack }: { articleId: string; onBack: () => void }) {
+export function ComposePage({
+  articleId,
+  onBack,
+  onOpenAvatar,
+}: {
+  articleId: string;
+  onBack: () => void;
+  onOpenAvatar: () => void;
+}) {
   const { state, setField, saveNow } = useDraft(articleId);
   const taxonomy = useTaxonomy();
   const [taxonomyError, setTaxonomyError] = useState<string | null>(null);
@@ -113,6 +121,9 @@ export function ComposePage({ articleId, onBack }: { articleId: string; onBack: 
           ← Accueil
         </button>
         <SaveIndicator indicator={state.savedIndicator} />
+        <button type="button" onClick={onOpenAvatar}>
+          Ma photo
+        </button>
         <button type="button" onClick={() => void supabase.auth.signOut()}>
           Se déconnecter
         </button>

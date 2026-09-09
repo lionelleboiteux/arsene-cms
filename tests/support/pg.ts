@@ -209,6 +209,30 @@ export async function seedImage(
   return res.rows[0].id;
 }
 
+export async function seedAvatar(
+  client: pg.Client,
+  o: {
+    writer_id: string;
+    status?: 'processing' | 'ready' | 'failed';
+    optimized_url?: string;
+  },
+): Promise<string> {
+  const res = await client.query(
+    `insert into writer_avatars
+       (writer_id, status, original_filename, original_url, optimized_url)
+     values ($1, $2, $3, $4, $5)
+     returning id`,
+    [
+      o.writer_id,
+      o.status ?? 'ready',
+      'avatar.jpg',
+      `https://projectref.supabase.co/storage/v1/object/avatars/${o.writer_id}-original.jpg`,
+      o.optimized_url ?? `https://cdn.example/${o.writer_id}/avatar-optimized.webp`,
+    ],
+  );
+  return res.rows[0].id;
+}
+
 export async function insertTelemetry(
   client: pg.Client,
   o: {

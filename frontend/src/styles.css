@@ -290,3 +290,18 @@ body {
   margin-top: 1rem;
   max-width: 24rem;
 }
+
+.avatar-page {
+  max-width: 24rem;
+  margin: 4rem auto;
+  padding: 0 1rem;
+}
+
+.avatar-preview {
+  width: 6rem;
+  height: 6rem;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  margin-bottom: 0.75rem;
+}

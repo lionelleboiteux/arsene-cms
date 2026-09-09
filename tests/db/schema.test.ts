@@ -7,6 +7,7 @@ import {
   insertTelemetry,
   readMigrationFiles,
   seedArticle,
+  seedAvatar,
   seedCategory,
   seedImage,
   seedWriter,
@@ -723,6 +724,97 @@ describe('article_authors — co-authored bylines (0009)', () => {
 
   it('NFR-AUTHORS-05: migration 0009 is idempotent — re-applying it to an already-migrated database is a no-op, not an error', async () => {
     const sql = readFileSync(path.join(MIGRATIONS_DIR, '0009_article_authors.sql'), 'utf8');
+
+    const sqlstate = await captureSqlError(() => db().client.query(sql));
+
+    expect(sqlstate).toBeNull();
+  });
+});
+
+/**
+ * `writer_avatars` (0010) — the writer's own onboarding photo. RLS is
+ * self-scoped (`writer_id = auth.uid()`), unlike `article_authors`' "any
+ * active writer" model, so a stranger AND another active writer are both
+ * refused read/write here — only the owning writer and `service_role` can
+ * touch a row.
+ */
+describe('writer_avatars — onboarding photo (0010)', () => {
+  it('NFR-AVATAR-01: an active writer can read back their own avatar row', async () => {
+    const { client } = db();
+    const writer = await seedWriter(client, 'Lionel (avatar-self)');
+    const avatar = await seedAvatar(client, { writer_id: writer, status: 'ready' });
+
+    const read = await asWriter(writer, () =>
+      client.query(`select id, status from writer_avatars where id = $1`, [avatar]),
+    );
+
+    expect(read.rows).toEqual([{ id: avatar, status: 'ready' }]);
+  });
+
+  it('NFR-AVATAR-02: another active writer cannot read a writer_avatars row that is not their own — self-scoped, unlike article_authors', async () => {
+    const { client } = db();
+    const owner = await seedWriter(client, 'Lionel (avatar-owner)');
+    const other = await seedWriter(client, 'Marie (avatar-other)');
+    const avatar = await seedAvatar(client, { writer_id: owner, status: 'ready' });
+
+    const read = await asWriter(other, () =>
+      client.query(`select 1 from writer_avatars where id = $1`, [avatar]),
+    );
+
+    expect(read.rowCount).toBe(0);
+  });
+
+  it('NFR-AVATAR-03: a stranger with no writers row cannot read or write writer_avatars, same as every other gated table', async () => {
+    const { client } = db();
+    const owner = await seedWriter(client, 'Lionel (avatar-stranger-owner)');
+    const avatar = await seedAvatar(client, { writer_id: owner, status: 'ready' });
+    const stranger = crypto.randomUUID();
+
+    const [read, write] = await asWriter(stranger, () =>
+      Promise.all([
+        client.query(`select 1 from writer_avatars where id = $1`, [avatar]),
+        client
+          .query(
+            `insert into writer_avatars (writer_id, status, original_filename) values ($1, 'processing', 'x.jpg') returning id`,
+            [stranger],
+          )
+          .catch(() => ({ rowCount: 0 })),
+      ]),
+    );
+
+    expect({ read_rows: read.rowCount, write_rows: write.rowCount }).toEqual({ read_rows: 0, write_rows: 0 });
+  });
+
+  it('NFR-AVATAR-04: a revoked writer cannot read their own former avatar row', async () => {
+    const { client } = db();
+    const revoked = await seedWriter(client, 'Lionel (avatar-revoked)', {
+      revoked_at: '2026-01-01T00:00:00Z',
+    });
+    const avatar = await seedAvatar(client, { writer_id: revoked, status: 'ready' });
+
+    const read = await asWriter(revoked, () =>
+      client.query(`select 1 from writer_avatars where id = $1`, [avatar]),
+    );
+
+    expect(read.rowCount).toBe(0);
+  });
+
+  it('NFR-AVATAR-05: service_role can write writer_avatars directly — the same grant uploadAvatar.ts (src/api/repo.ts) relies on to record a new upload', async () => {
+    const { client } = db();
+    const writer = await seedWriter(client, 'Lionel (avatar-service-role)');
+
+    const written = await asRole('service_role', () =>
+      client.query(
+        `insert into writer_avatars (writer_id, status, original_filename) values ($1, 'processing', 'photo.jpg') returning writer_id`,
+        [writer],
+      ),
+    );
+
+    expect(written.rows).toEqual([{ writer_id: writer }]);
+  });
+
+  it('NFR-AVATAR-06: migration 0010 is idempotent — re-applying it to an already-migrated database is a no-op, not an error', async () => {
+    const sql = readFileSync(path.join(MIGRATIONS_DIR, '0010_writer_avatars.sql'), 'utf8');
 
     const sqlstate = await captureSqlError(() => db().client.query(sql));
 

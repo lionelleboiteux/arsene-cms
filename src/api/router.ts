@@ -44,7 +44,8 @@ import { handlePublishArticle, type PublishDeps } from './publishArticle.ts';
 import { createRateLimiter, PUBLISH_RATE_LIMIT_PER_MINUTE } from './rateLimit.ts';
 import { createRepo, type Repo } from './repo.ts';
 import { handleUploadImage, type UploadDeps } from './uploadImage.ts';
-import { handleListActiveWriters, type WritersDeps } from './writers.ts';
+import { handleUploadAvatar, type UploadAvatarDeps } from './uploadAvatar.ts';
+import { handleListActiveWriters, handleGetOwnWriter, type WritersDeps } from './writers.ts';
 import { createSiteRenderer } from '../site/render.ts';
 
 const ARTICLE_ROUTE = /^\/v1\/articles\/([^/]+)\/(publish|images|open)$/;
@@ -84,6 +85,13 @@ const ADMIN_WRITER_ACTION_ROUTE = /^\/v1\/admin\/writers\/([^/]+)\/(revoke|reins
  *  plain `verify()` rather than `verifyAdmin()` (`route()`'s auth chain
  *  falls through to that default for any kind not explicitly listed there). */
 const WRITERS_ROUTE = '/v1/writers';
+/** The caller's own row — the first-login avatar-onboarding gate's read
+ *  (`app.tsx`), same plain `verify()` gate as `WRITERS_ROUTE` above. */
+const WRITER_ME_ROUTE = '/v1/writers/me';
+/** The caller's own avatar upload — same plain `verify()` gate, no
+ *  `Idempotency-Key` requirement (`uploadAvatar.ts`'s own doc comment has
+ *  the reasoning). */
+const WRITER_AVATAR_ROUTE = '/v1/writers/me/avatar';
 /** DELETE-only, like `ARTICLE_IMAGE_ROUTE` — no other verb ever shares this
  *  exact path, so there's no CORS-preflight-advertising conflict to worry
  *  about (see the comment above on the writers routes). */
@@ -382,6 +390,15 @@ function writersDeps(ctx: Ctx): WritersDeps {
   };
 }
 
+function avatarDeps(ctx: Ctx): UploadAvatarDeps {
+  return {
+    auth: { verifyBearer: async (token) => verify(token, ctx) },
+    repo: ctx.repo,
+    storage: ctx.shared.storage,
+    observability,
+  };
+}
+
 function adminArticlesDeps(ctx: Ctx): AdminArticlesDeps {
   return {
     auth: { verifyAdmin: async (token) => verifyAdmin(token, ctx) },
@@ -636,6 +653,45 @@ const adminListWriters = (request: Request, ctx: Ctx): Promise<HandlerResponse> 
 
 const listWriters = (request: Request, ctx: Ctx): Promise<HandlerResponse> =>
   handleListActiveWriters({ authorization: request.headers.get('authorization') }, writersDeps(ctx));
+
+const getOwnWriter = (request: Request, ctx: Ctx): Promise<HandlerResponse> =>
+  handleGetOwnWriter({ authorization: request.headers.get('authorization') }, writersDeps(ctx));
+
+/** Mirrors `upload()` below almost exactly (the Fetch API's own multipart
+ *  parser, the dev/test Lambda shim on a `processing` result) — just a
+ *  plain `file` field, no `role`, no `Idempotency-Key`. */
+async function avatarUpload(request: Request, raw: Uint8Array, ctx: Ctx): Promise<HandlerResponse> {
+  const form = await new Response(raw as BodyInit, {
+    headers: { 'content-type': request.headers.get('content-type') ?? '' },
+  })
+    .formData()
+    .catch(() => null);
+
+  const file = form?.get('file');
+  if (!(file instanceof File)) {
+    return errorResponse(400, 'VALIDATION_FAILED', 'Request failed validation.', {
+      fields: [{ field: 'file', message: 'a multipart file is required' }],
+    });
+  }
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const response = await handleUploadAvatar(
+    {
+      authorization: request.headers.get('authorization'),
+      file: { filename: file.name, content_type: file.type, bytes },
+    },
+    avatarDeps(ctx),
+  );
+
+  if (response.body.status === 'processing') {
+    ctx.shared.processUpload?.(String(response.body.id), {
+      filename: file.name,
+      content_type: file.type,
+      bytes,
+    });
+  }
+  return response;
+}
 
 function adminInviteWriter(request: Request, raw: Uint8Array, ctx: Ctx): Promise<HandlerResponse> {
   const parsed = InviteWriterBody.safeParse(parseJson(raw));
@@ -994,6 +1050,8 @@ type Operation =
   | { kind: 'public-article-legacy'; slug: string }
   | { kind: 'admin-list-writers' }
   | { kind: 'list-writers' }
+  | { kind: 'get-own-writer' }
+  | { kind: 'upload-avatar' }
   | { kind: 'admin-invite-writer' }
   | { kind: 'admin-writer-action'; writer_id: string; action: 'revoke' | 'reinstate' }
   | { kind: 'admin-delete-article'; article_id: string };
@@ -1003,6 +1061,8 @@ function matchRoute(path: string): Operation | null {
   if (path === METRICS_SUMMARY_ROUTE) return { kind: 'metrics-summary' };
   if (path === PUBLIC_HOME_ROUTE) return { kind: 'public-home' };
   if (path === ADMIN_WRITERS_ROUTE) return { kind: 'admin-list-writers' };
+  if (path === WRITER_AVATAR_ROUTE) return { kind: 'upload-avatar' };
+  if (path === WRITER_ME_ROUTE) return { kind: 'get-own-writer' };
   if (path === WRITERS_ROUTE) return { kind: 'list-writers' };
   if (path === ADMIN_INVITE_WRITER_ROUTE) return { kind: 'admin-invite-writer' };
 
@@ -1076,7 +1136,8 @@ const methodOf = (op: Operation): string => {
     op.kind === 'public-category' ||
     op.kind === 'public-article-legacy' ||
     op.kind === 'admin-list-writers' ||
-    op.kind === 'list-writers'
+    op.kind === 'list-writers' ||
+    op.kind === 'get-own-writer'
   ) {
     return 'GET';
   }
@@ -1116,6 +1177,10 @@ function dispatch(
       return adminListWriters(request, ctx);
     case 'list-writers':
       return listWriters(request, ctx);
+    case 'get-own-writer':
+      return getOwnWriter(request, ctx);
+    case 'upload-avatar':
+      return avatarUpload(request, raw, ctx);
     case 'admin-invite-writer':
       return adminInviteWriter(request, raw, ctx);
     case 'admin-writer-action':

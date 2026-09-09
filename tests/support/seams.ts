@@ -837,12 +837,11 @@ export async function loadImageLambda(): Promise<ImageLambdaModule> {
 // src/api/imageStatus.ts — ADR-0004's Lambda -> Arsène status callback
 // ---------------------------------------------------------------------------
 
-export type ImageStatusRow = {
-  id: string;
-  article_id: string;
-  role: ImageRole;
-  status: ImageStatus;
-};
+/** Either owner shares this one callback route and id space — an article
+ *  image or a writer avatar (0010), told apart by `owner`. */
+export type ImageStatusRow =
+  | { id: string; owner: 'article'; article_id: string; status: ImageStatus }
+  | { id: string; owner: 'avatar'; writer_id: WriterId; status: ImageStatus };
 
 export type ImageStatusCallbackRequest = {
   image_id: string;

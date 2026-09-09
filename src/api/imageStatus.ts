@@ -12,12 +12,12 @@
 import { verifySharedSecret } from './auth.ts';
 import { errorResponse, type HandlerResponse } from './http.ts';
 
-export type ImageStatusRow = {
-  id: string;
-  article_id: string;
-  role: 'cover' | 'body';
-  status: 'processing' | 'ready' | 'failed';
-};
+/** Either owner shares this one callback route (`/internal/images/{id}/
+ *  status`) and the same globally-unique `id` space — an article image or
+ *  a writer avatar, never both, told apart by which field is present. */
+export type ImageStatusRow =
+  | { id: string; owner: 'article'; article_id: string; status: 'processing' | 'ready' | 'failed' }
+  | { id: string; owner: 'avatar'; writer_id: string; status: 'processing' | 'ready' | 'failed' };
 
 export type ImageFailure = { code: string; message: string };
 
@@ -84,7 +84,10 @@ export async function handleImageStatusCallback(
   deps.observability.record({
     event: 'image_optimization',
     outcome: req.body.status === 'ready' ? 'success' : 'failure',
-    details: { image_id: req.image_id, article_id: row.article_id },
+    details:
+      row.owner === 'article'
+        ? { image_id: req.image_id, article_id: row.article_id }
+        : { image_id: req.image_id, writer_id: row.writer_id },
   });
   return {
     status: 200,

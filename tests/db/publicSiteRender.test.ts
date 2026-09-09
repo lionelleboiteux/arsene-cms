@@ -365,6 +365,30 @@ describe('public site', () => {
   });
 
   describe('co-authored bylines (article_authors, 0009)', () => {
+    // The byline now nests an avatar (an <img>, or an initial-letter
+    // placeholder span — src/site/render.ts's authorsHtml/authorAvatarHtml)
+    // inside each author's own <span class="author-name">, so the outer
+    // <span class="author">...</span> no longer has plain-text content
+    // alone. Captured up to the sep span that always immediately follows
+    // it (renderArticlePage's own meta array has no whitespace between
+    // elements), then stripped of any inner tags to get back to just the
+    // readable name(s) — this file's assertions are about *whose names
+    // appear, in what order*, not about the avatar markup itself (that's
+    // tests/db/writerAvatars.test.ts's job).
+    // The no-avatar-yet placeholder renders its own initial letter as real
+    // text content (authorAvatarHtml), not just a tag — stripped as one
+    // unit before the remaining tags, or a stray "A" from "Alban"'s own
+    // placeholder would leak into the extracted name text.
+    const stripTags = (html: string): string =>
+      html
+        .replace(/<span class="author-avatar author-avatar-placeholder">[^<]*<\/span>/g, '')
+        .replace(/<[^>]+>/g, '')
+        .trim();
+    const articleByline = (html: string): string | undefined => {
+      const match = /<span class="author">([\s\S]*?)<\/span><span class="sep">/.exec(html);
+      return match?.[1] === undefined ? undefined : stripTags(match[1]);
+    };
+
     it('a single-author article shows just that name, and its JSON-LD author is a single object, not an array', async () => {
       const { renderer } = ctx();
       const page = await renderer.renderArticlePage({
@@ -375,7 +399,7 @@ describe('public site', () => {
       });
 
       expect({
-        byline: page.html.match(/<span class="author">([^<]+)<\/span>/)?.[1],
+        byline: articleByline(page.html),
         json_ld_author: page.json_ld[0]?.author,
       }).toEqual({
         byline: 'Lionel Le Boiteux',
@@ -407,8 +431,10 @@ describe('public site', () => {
       });
 
       expect({
-        card_byline: home.html.match(/Co-écrit à deux[\s\S]*?article-card-byline">([^·]+)·/)?.[1]?.trim(),
-        article_byline: page.html.match(/<span class="author">([^<]+)<\/span>/)?.[1],
+        card_byline: stripTags(
+          home.html.match(/Co-écrit à deux[\s\S]*?article-card-byline">([^·]+)·/)?.[1] ?? '',
+        ),
+        article_byline: articleByline(page.html),
         json_ld_author: page.json_ld[0]?.author,
       }).toEqual({
         card_byline: 'Alban Petit et Marie Dupont',
@@ -443,9 +469,7 @@ describe('public site', () => {
         slug: 'co-ecrit-a-trois',
       });
 
-      expect(page.html.match(/<span class="author">([^<]+)<\/span>/)?.[1]).toBe(
-        'Auteur Un, Auteur Deux et Auteur Trois',
-      );
+      expect(articleByline(page.html)).toBe('Auteur Un, Auteur Deux et Auteur Trois');
     });
   });
 });

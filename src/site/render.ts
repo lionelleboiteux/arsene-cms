@@ -30,11 +30,12 @@ type ArticleRow = {
   body_html: string;
   league_name: string;
   type_name: string;
-  /** Ordinal order from `article_authors` — always at least one name
-   *  (`insertDraft` credits the creator, and this migration backfilled
+  /** Ordinal order from `article_authors` — always at least one entry
+   *  (`insertDraft` credits the creator, and migration 0009 backfilled
    *  every pre-existing article; `src/api/repo.ts`'s own comment has the
-   *  full story). */
-  author_names: string[];
+   *  full story). `avatar_url` is each author's most recent *ready*
+   *  `writer_avatars` row (0010), or `null` if they never set one. */
+  authors: { name: string; avatar_url: string | null }[];
   cover_image_url: string | null;
   published_at: Date;
   first_published_at: Date;
@@ -62,12 +63,19 @@ const PUBLISHED_ARTICLES_SQL = `
   select a.id, a.title, a.slug, a.body_html,
          l.name as league_name, c.name as type_name,
          coalesce(
-           (select array_agg(w.display_name order by aa.ordinal)
+           (select json_agg(json_build_object(
+                     'name', w.display_name,
+                     'avatar_url', (select wa.optimized_url
+                                      from writer_avatars wa
+                                     where wa.writer_id = w.id and wa.status = 'ready'
+                                     order by wa.created_at desc
+                                     limit 1)
+                   ) order by aa.ordinal)
               from article_authors aa
               join writers w on w.id = aa.writer_id
              where aa.article_id = a.id),
-           array[]::text[]
-         ) as author_names,
+           '[]'::json
+         ) as authors,
          coalesce(
            (select i.optimized_url
               from article_images i
@@ -156,6 +164,10 @@ h1.title-only{padding:2rem 1.25rem 0;font-size:clamp(1.5rem,4vw,2.25rem);font-we
 .meta{padding:1rem 1.25rem 0;margin:0;color:var(--muted);font-size:.95rem}
 .meta .author{color:var(--fg);font-weight:600}
 .meta .sep{margin:0 .4em}
+.author-name{display:inline-flex;align-items:center}
+.author-avatar{width:1.4em;height:1.4em;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:.35em}
+.author-avatar-placeholder{display:inline-flex;align-items:center;justify-content:center;
+  background:var(--card-bg);color:var(--muted);font-size:.75em;font-weight:700}
 .body{padding:1.25rem 1.25rem 3rem;font-size:1.08rem}
 .body img{max-width:100%;height:auto;border-radius:8px;margin:.5rem 0}
 h2.section-title{max-width:900px;margin:1.5rem auto .25rem;padding:0 1rem;font-size:1.15rem}
@@ -181,12 +193,28 @@ fc-nav .fc-nav-current-league>a{text-decoration:underline;text-underline-offset:
  *  every type/league name on this site is French. */
 const nameCollator = new Intl.Collator('fr');
 
+/** A small round avatar next to a name — the writer's most recent *ready*
+ *  upload (0010), or a plain initial-letter circle when they never set
+ *  one. Never a broken `<img>`: a `null` avatar_url renders no `<img>` at
+ *  all. */
+function authorAvatarHtml(author: { name: string; avatar_url: string | null }): string {
+  if (author.avatar_url === null) {
+    const initial = author.name.trim().charAt(0).toUpperCase() || '?';
+    return `<span class="author-avatar author-avatar-placeholder">${escape(initial)}</span>`;
+  }
+  return `<img class="author-avatar" src="${escape(author.avatar_url)}" alt=""/>`;
+}
+
 /** "Alice", "Alice et Bob", "Alice, Bob et Charlie" — a French-style list
  *  join for a byline, in `article_authors`' own ordinal order (already the
- *  order `PUBLISHED_ARTICLES_SQL`'s `array_agg` produced it in). */
-function formatByline(names: string[]): string {
-  if (names.length <= 1) return names[0] ?? '';
-  return `${names.slice(0, -1).join(', ')} et ${names[names.length - 1]}`;
+ *  order `PUBLISHED_ARTICLES_SQL`'s `json_agg` produced it in), each name
+ *  preceded by its own avatar. */
+function authorsHtml(authors: { name: string; avatar_url: string | null }[]): string {
+  const parts = authors.map(
+    (author) => `<span class="author-name">${authorAvatarHtml(author)}${escape(author.name)}</span>`,
+  );
+  if (parts.length <= 1) return parts[0] ?? '';
+  return `${parts.slice(0, -1).join(', ')} et ${parts[parts.length - 1]}`;
 }
 
 function viewOf(row: ArticleRow): PublishedArticleView {
@@ -196,7 +224,9 @@ function viewOf(row: ArticleRow): PublishedArticleView {
     slug: row.slug,
     league_name: row.league_name,
     type_name: row.type_name,
-    author_names: row.author_names,
+    // JSON-LD stays name-only (schema.org's Person.image is explicitly
+    // deferred — the user asked for the byline, not structured data).
+    author_names: row.authors.map((author) => author.name),
     cover_image_url: row.cover_image_url ?? '',
     published_at: row.published_at.toISOString(),
     first_published_at: row.first_published_at.toISOString(),
@@ -217,7 +247,7 @@ function articleCard(row: ArticleRow): string {
     `<a href="${articlePath(viewOf(row))}">`,
     '<div class="article-card-text">',
     `<h3 class="article-card-title">${escape(row.title)}</h3>`,
-    `<p class="article-card-byline">${escape(formatByline(row.author_names))} · ${relativeTime(row.published_at.toISOString())}</p>`,
+    `<p class="article-card-byline">${authorsHtml(row.authors)} · ${relativeTime(row.published_at.toISOString())}</p>`,
     '</div>',
     cover,
     '</a>',
@@ -445,7 +475,7 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
           : ` <span class="sep">·</span> Mis à jour le ${formatDateTime(view.published_at)}`;
       const meta = [
         '<p class="meta">',
-        `<span class="author">${escape(formatByline(row.author_names))}</span>`,
+        `<span class="author">${authorsHtml(row.authors)}</span>`,
         '<span class="sep">·</span>',
         `Publié le ${formatDateTime(view.first_published_at)}`,
         updated,

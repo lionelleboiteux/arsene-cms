@@ -20,9 +20,11 @@ const STATUS_LABEL: Record<ArticleListItem['status'], string> = {
 export function HomePage({
   onOpenArticle,
   onOpenSettings,
+  onOpenAvatar,
 }: {
   onOpenArticle: (articleId: string) => void;
   onOpenSettings: () => void;
+  onOpenAvatar: () => void;
 }) {
   const { articles, loading, refresh } = useArticleList();
   const taxonomy = useTaxonomy();
@@ -98,6 +100,9 @@ export function HomePage({
       <header className="home-header">
         <h1>Arsène</h1>
         <div className="home-header-actions">
+          <button type="button" onClick={onOpenAvatar}>
+            Ma photo
+          </button>
           <button type="button" onClick={onOpenSettings}>
             Réglages
           </button>

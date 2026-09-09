@@ -90,6 +90,19 @@ const SET_IMAGE_STATUS_AS_BODY_SQL = `
   returning id
 `;
 
+/** The `writer_avatars` sibling of `SET_IMAGE_STATUS_SQL` above — same
+ *  compare-and-swap, no cover-uniqueness fallback needed (0010: no such
+ *  constraint on this table at all). */
+const SET_AVATAR_STATUS_SQL = `
+  update writer_avatars
+     set status = $2,
+         optimized_url = $3,
+         failure_code = $4,
+         failure_message = $5
+   where id = $1 and status = 'processing'
+  returning id
+`;
+
 /** Postgres unique-violation: `0005`'s one-ready-cover-per-article index. */
 const UNIQUE_VIOLATION = '23505';
 
@@ -159,15 +172,43 @@ export function createRepo(pool: pg.Pool) {
       return res.rowCount === 1;
     },
 
+    /** Checks `article_images` first, then `writer_avatars` — the two
+     *  tables the one `/internal/images/{id}/status` callback route can
+     *  ever be about, told apart by globally-unique ids (no collision risk
+     *  between the two `gen_random_uuid()`-keyed tables). */
     async getImage(image_id: string): Promise<ImageStatusRow | null> {
       if (!UUID.test(image_id)) return null;
-      const res = await pool.query<ImageStatusRow>(
-        `select id, article_id, role, status from article_images where id = $1`,
+      const article = await pool.query<{ id: string; article_id: string; status: string }>(
+        `select id, article_id, status from article_images where id = $1`,
         [image_id],
       );
-      return res.rows[0] ?? null;
+      const articleRow = article.rows[0];
+      if (articleRow !== undefined) {
+        return {
+          id: articleRow.id,
+          owner: 'article',
+          article_id: articleRow.article_id,
+          status: articleRow.status as 'processing' | 'ready' | 'failed',
+        };
+      }
+      const avatar = await pool.query<{ id: string; writer_id: string; status: string }>(
+        `select id, writer_id, status from writer_avatars where id = $1`,
+        [image_id],
+      );
+      const avatarRow = avatar.rows[0];
+      if (avatarRow === undefined) return null;
+      return {
+        id: avatarRow.id,
+        owner: 'avatar',
+        writer_id: avatarRow.writer_id,
+        status: avatarRow.status as 'processing' | 'ready' | 'failed',
+      };
     },
 
+    /** Same table-guessing shape as `getImage` above: tries `article_images`
+     *  first (with its existing cover-uniqueness fallback, unchanged), and
+     *  only tries `writer_avatars` — no fallback logic needed there, an
+     *  avatar has no "role" to demote into — when that affected no row. */
     async setImageStatus(input: {
       image_id: string;
       status: 'ready' | 'failed';
@@ -184,7 +225,9 @@ export function createRepo(pool: pg.Pool) {
       ];
       try {
         const res = await pool.query(SET_IMAGE_STATUS_SQL, params);
-        return res.rowCount === 1;
+        if (res.rowCount === 1) return true;
+        const avatarRes = await pool.query(SET_AVATAR_STATUS_SQL, params);
+        return avatarRes.rowCount === 1;
       } catch (err) {
         if ((err as { code?: string }).code !== UNIQUE_VIOLATION) throw err;
         // The article already holds a `ready` cover (`0005`): a concurrent
@@ -482,6 +525,52 @@ export function createRepo(pool: pg.Pool) {
         ],
       );
       return { id: res.rows[0]?.id ?? input.id, created_at: res.rows[0]?.created_at ?? new Date() };
+    },
+
+    /** `writer_avatars`' own insert — far fewer fields than `insertImage`:
+     *  no `role`, no `alt_text`, no `replaced_cover_image_id`, none of
+     *  which apply to a one-per-writer avatar. */
+    async insertAvatar(input: {
+      id: string;
+      writer_id: string;
+      status: 'processing' | 'failed';
+      original_filename: string;
+      original_url: string | null;
+      failure: { code: string; message: string } | null;
+    }): Promise<{ id: string; created_at: Date }> {
+      const res = await pool.query<{ id: string; created_at: Date }>(
+        `insert into writer_avatars
+           (id, writer_id, status, original_filename, original_url, failure_code, failure_message)
+         values ($1, $2, $3, $4, $5, $6, $7)
+         returning id, created_at`,
+        [
+          input.id,
+          input.writer_id,
+          input.status,
+          input.original_filename,
+          input.original_url,
+          input.failure?.code ?? null,
+          input.failure?.message ?? null,
+        ],
+      );
+      return { id: res.rows[0]?.id ?? input.id, created_at: res.rows[0]?.created_at ?? new Date() };
+    },
+
+    /** The most recent `ready` avatar for a writer, or `null` — used by
+     *  `GET /v1/writers/me` (`src/api/writers.ts`) to report the caller's
+     *  own current avatar. The public byline (`src/site/render.ts`) reads
+     *  the same "most recent ready" shape directly, over its own
+     *  connection, rather than through this method. */
+    async getWriterAvatarUrl(writer_id: string): Promise<string | null> {
+      if (!UUID.test(writer_id)) return null;
+      const res = await pool.query<{ optimized_url: string | null }>(
+        `select optimized_url from writer_avatars
+          where writer_id = $1 and status = 'ready'
+          order by created_at desc
+          limit 1`,
+        [writer_id],
+      );
+      return res.rows[0]?.optimized_url ?? null;
     },
 
     /**
