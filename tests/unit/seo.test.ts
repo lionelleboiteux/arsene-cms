@@ -27,7 +27,7 @@ const PUBLISHED: PublishedArticleView = {
   slug: 'pronos-ligue-1-journee-12',
   league_name: 'Ligue 1',
   type_name: 'Pronos',
-  writer_display_name: 'Lionel Le Boiteux',
+  author_names: ['Lionel Le Boiteux'],
   cover_image_url: 'https://cdn.fantasycoach.example/articles/a1a1a1a1/cover-optimized.webp',
   published_at: '2026-08-11T10:47:12Z',
   first_published_at: '2026-08-11T10:47:12Z',

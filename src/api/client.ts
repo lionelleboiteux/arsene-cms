@@ -45,6 +45,10 @@ export type ArseneClient = {
    *  allow-list. A non-admin caller gets the same `401 UNAUTHORIZED` shape
    *  every other refusal in this client already throws as `ArseneApiError`. */
   listWriters(): Promise<unknown>;
+  /** Any active writer, not admin-only — the co-author picker's own list,
+   *  trimmed server-side to `{id, display_name}[]` (unlike `listWriters()`'s
+   *  full admin `WriterRow`). */
+  listActiveWriters(): Promise<unknown>;
   inviteWriter(args: { email: string; display_name: string }): Promise<unknown>;
   setWriterRevoked(args: { writerId: string; action: 'revoke' | 'reinstate' }): Promise<unknown>;
   /** Admin-only, drafts only — the home page's "unneeded drafts and tests"
@@ -144,6 +148,14 @@ export function createArseneClient(opts: {
 
     async listWriters() {
       const response = await fetch(`${opts.baseUrl}/v1/admin/writers`, {
+        headers: headers({}),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      return parse(response);
+    },
+
+    async listActiveWriters() {
+      const response = await fetch(`${opts.baseUrl}/v1/writers`, {
         headers: headers({}),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });

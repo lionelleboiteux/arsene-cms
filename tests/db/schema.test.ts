@@ -328,7 +328,7 @@ describe('write protection and disclosure', () => {
       `select c.relname, c.relrowsecurity
          from pg_class c join pg_namespace n on n.oid = c.relnamespace
         where n.nspname = 'public'
-          and c.relname in ('articles', 'article_images', 'categories', 'arsene_leagues',
+          and c.relname in ('articles', 'article_images', 'article_authors', 'categories', 'arsene_leagues',
                             'pronos_entries', 'site_assets', 'arsene_telemetry_events', 'writers')
         order by c.relname`,
     );
@@ -613,6 +613,116 @@ describe('active-writer RLS (0008)', () => {
 
   it('NFR-RLS-WRITER-06: migration 0008 is idempotent — re-applying it to an already-migrated database is a no-op, not an error', async () => {
     const sql = readFileSync(path.join(MIGRATIONS_DIR, '0008_require_active_writer_rls.sql'), 'utf8');
+
+    const sqlstate = await captureSqlError(() => db().client.query(sql));
+
+    expect(sqlstate).toBeNull();
+  });
+});
+
+/**
+ * `article_authors` (0009) — the co-authored byline. RLS mirrors `articles`'
+ * own `is_active_writer()` policy exactly (same "no role hierarchy" model),
+ * so this reuses `active-writer RLS (0008)`'s own `asWriter`/`asRole`
+ * pattern rather than inventing a new one.
+ */
+describe('article_authors — co-authored bylines (0009)', () => {
+  it('NFR-AUTHORS-01: an active writer can credit a second writer as a co-author, and read the credit back', async () => {
+    const { client } = db();
+    const active = await seedWriter(client, 'Lionel (authors-active)');
+    const coAuthor = await seedWriter(client, 'Marie (authors-co)');
+    const article = await seedArticle(client, {
+      writer_id: active,
+      title: 'Co-écrit',
+      league_name: 'Ligue 1',
+      type_name: 'Pronos',
+    });
+
+    const inserted = await asWriter(active, () =>
+      client.query(
+        `insert into article_authors (article_id, writer_id, ordinal) values ($1, $2, 2) returning writer_id`,
+        [article, coAuthor],
+      ),
+    );
+    const read = await asWriter(active, () =>
+      client.query(`select writer_id from article_authors where article_id = $1 order by ordinal`, [article]),
+    );
+
+    expect({
+      inserted_writer: inserted.rows[0]?.writer_id,
+      credited_in_order: read.rows.map((r) => r.writer_id),
+    }).toEqual({ inserted_writer: coAuthor, credited_in_order: [active, coAuthor] });
+  });
+
+  it('NFR-AUTHORS-02: an active writer can remove a co-author credit', async () => {
+    const { client } = db();
+    const active = await seedWriter(client, 'Lionel (authors-remove)');
+    const coAuthor = await seedWriter(client, 'Marie (authors-remove-co)');
+    const article = await seedArticle(client, {
+      writer_id: active,
+      title: 'Retrait de co-auteur',
+      league_name: 'Ligue 1',
+      type_name: 'Pronos',
+      author_writer_ids: [active, coAuthor],
+    });
+
+    const deleted = await asWriter(active, () =>
+      client.query(`delete from article_authors where article_id = $1 and writer_id = $2 returning writer_id`, [
+        article,
+        coAuthor,
+      ]),
+    );
+
+    expect(deleted.rowCount).toBe(1);
+  });
+
+  it('NFR-AUTHORS-03: a stranger with no writers row cannot read or write article_authors, same as every other gated table', async () => {
+    const { client } = db();
+    const active = await seedWriter(client, 'Lionel (authors-stranger-owner)');
+    const article = await seedArticle(client, {
+      writer_id: active,
+      title: 'Protégé',
+      league_name: 'Ligue 1',
+      type_name: 'Pronos',
+    });
+    const stranger = crypto.randomUUID();
+
+    const [read, write] = await asWriter(stranger, () =>
+      Promise.all([
+        client.query(`select 1 from article_authors where article_id = $1`, [article]),
+        client.query(
+          `insert into article_authors (article_id, writer_id, ordinal) values ($1, $2, 2) returning writer_id`,
+          [article, stranger],
+        ).catch(() => ({ rowCount: 0 })),
+      ]),
+    );
+
+    expect({ read_rows: read.rowCount, write_rows: write.rowCount }).toEqual({ read_rows: 0, write_rows: 0 });
+  });
+
+  it('NFR-AUTHORS-04: service_role can write article_authors directly — the same grant insertDraft (src/api/repo.ts) relies on to credit a new draft\'s creator', async () => {
+    const { client } = db();
+    const writer = await seedWriter(client, 'Lionel (authors-service-role)');
+    const article = await seedArticle(client, {
+      writer_id: writer,
+      title: 'Service role',
+      league_name: 'Ligue 1',
+      type_name: 'Pronos',
+      author_writer_ids: [],
+    });
+
+    const written = await asRole('service_role', () =>
+      client.query(
+        `insert into article_authors (article_id, writer_id, ordinal) values ($1, $2, 1) returning writer_id`,
+        [article, writer],
+      ),
+    );
+
+    expect(written.rows).toEqual([{ writer_id: writer }]);
+  });
+
+  it('NFR-AUTHORS-05: migration 0009 is idempotent — re-applying it to an already-migrated database is a no-op, not an error', async () => {
+    const sql = readFileSync(path.join(MIGRATIONS_DIR, '0009_article_authors.sql'), 'utf8');
 
     const sqlstate = await captureSqlError(() => db().client.query(sql));
 

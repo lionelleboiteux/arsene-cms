@@ -321,4 +321,131 @@ describe('public site', () => {
       expect(page).toBeNull();
     });
   });
+
+  describe('data-current-league — what the client-side nav-highlight script reads', () => {
+    const currentLeagueOf = (html: string | undefined): string | null =>
+      html?.match(/<body data-current-league="([^"]*)"/)?.[1] ?? null;
+
+    it('a league page carries its own name, exactly as arsene_leagues stores it', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderLeaguePage({ league_slug: 'bundesliga' });
+
+      expect(currentLeagueOf(page?.html)).toBe('Bundesliga');
+    });
+
+    it('a league/season/category listing carries its league’s name too', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderCategoryPage({
+        league_slug: 'ligue-1',
+        season_slug: '26-27',
+        type_slug: 'pronos',
+      });
+
+      expect(currentLeagueOf(page.html)).toBe('Ligue 1');
+    });
+
+    it('an article page carries the league it was published under', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderArticlePage({
+        league_slug: 'ligue-1',
+        season_slug: '26-27',
+        type_slug: 'pronos',
+        slug: 'pronos-ligue-1-journee-12',
+      });
+
+      expect(currentLeagueOf(page.html)).toBe('Ligue 1');
+    });
+
+    it('the homepage carries no current league at all — nothing to highlight there', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderHomepage();
+
+      expect(currentLeagueOf(page.html)).toBeNull();
+    });
+  });
+
+  describe('co-authored bylines (article_authors, 0009)', () => {
+    it('a single-author article shows just that name, and its JSON-LD author is a single object, not an array', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderArticlePage({
+        league_slug: 'ligue-1',
+        season_slug: '26-27',
+        type_slug: 'pronos',
+        slug: 'pronos-ligue-1-journee-12',
+      });
+
+      expect({
+        byline: page.html.match(/<span class="author">([^<]+)<\/span>/)?.[1],
+        json_ld_author: page.json_ld[0]?.author,
+      }).toEqual({
+        byline: 'Lionel Le Boiteux',
+        json_ld_author: { '@type': 'Person', name: 'Lionel Le Boiteux' },
+      });
+    });
+
+    it('a two-author article joins the names with "et", in ordinal order, both on the card byline and the article page, and its JSON-LD author is an array of both', async () => {
+      const { renderer, db } = ctx();
+      const secondWriter = await seedWriter(db.client, 'Marie Dupont');
+      const firstWriter = await seedWriter(db.client, 'Alban Petit');
+      await seedArticle(db.client, {
+        writer_id: firstWriter,
+        title: 'Co-écrit à deux',
+        league_name: 'Ligue 1',
+        type_name: 'Pronos',
+        status: 'published',
+        slug: 'co-ecrit-a-deux',
+        published_at: '2026-08-12T09:00:00Z',
+        author_writer_ids: [firstWriter, secondWriter],
+      });
+
+      const home = await renderer.renderHomepage();
+      const page = await renderer.renderArticlePage({
+        league_slug: 'ligue-1',
+        season_slug: '26-27',
+        type_slug: 'pronos',
+        slug: 'co-ecrit-a-deux',
+      });
+
+      expect({
+        card_byline: home.html.match(/Co-écrit à deux[\s\S]*?article-card-byline">([^·]+)·/)?.[1]?.trim(),
+        article_byline: page.html.match(/<span class="author">([^<]+)<\/span>/)?.[1],
+        json_ld_author: page.json_ld[0]?.author,
+      }).toEqual({
+        card_byline: 'Alban Petit et Marie Dupont',
+        article_byline: 'Alban Petit et Marie Dupont',
+        json_ld_author: [
+          { '@type': 'Person', name: 'Alban Petit' },
+          { '@type': 'Person', name: 'Marie Dupont' },
+        ],
+      });
+    });
+
+    it('a three-author article uses commas before the final "et"', async () => {
+      const { renderer, db } = ctx();
+      const a = await seedWriter(db.client, 'Auteur Un');
+      const b = await seedWriter(db.client, 'Auteur Deux');
+      const c = await seedWriter(db.client, 'Auteur Trois');
+      await seedArticle(db.client, {
+        writer_id: a,
+        title: 'Co-écrit à trois',
+        league_name: 'Ligue 1',
+        type_name: 'Pronos',
+        status: 'published',
+        slug: 'co-ecrit-a-trois',
+        published_at: '2026-08-13T09:00:00Z',
+        author_writer_ids: [a, b, c],
+      });
+
+      const page = await renderer.renderArticlePage({
+        league_slug: 'ligue-1',
+        season_slug: '26-27',
+        type_slug: 'pronos',
+        slug: 'co-ecrit-a-trois',
+      });
+
+      expect(page.html.match(/<span class="author">([^<]+)<\/span>/)?.[1]).toBe(
+        'Auteur Un, Auteur Deux et Auteur Trois',
+      );
+    });
+  });
 });

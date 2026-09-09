@@ -117,13 +117,35 @@ export type ImageInsert = {
 
 export function createRepo(pool: pg.Pool) {
   return {
-    /** AC-01: the one insert that also carries the `draft_started` metric. */
+    /**
+     * AC-01: the one insert that also carries the `draft_started` metric.
+     * Also credits the creating writer as the article's first author
+     * (`article_authors`, ordinal 1) in the same transaction, so a brand-new
+     * article always has at least one credited author from the moment it
+     * exists — the public byline (`src/site/render.ts`) never has to
+     * special-case an empty author list.
+     */
     async insertDraft(input: { writer_id: string; title: string }): Promise<{ id: string }> {
-      const res = await pool.query<{ id: string }>(
-        `insert into articles (writer_id, title) values ($1, $2) returning id`,
-        [input.writer_id, input.title],
-      );
-      return { id: res.rows[0]?.id ?? '' };
+      const client = await pool.connect();
+      try {
+        await client.query('begin');
+        const res = await client.query<{ id: string }>(
+          `insert into articles (writer_id, title) values ($1, $2) returning id`,
+          [input.writer_id, input.title],
+        );
+        const id = res.rows[0]?.id ?? '';
+        await client.query(
+          `insert into article_authors (article_id, writer_id, ordinal) values ($1, $2, 1)`,
+          [id, input.writer_id],
+        );
+        await client.query('commit');
+        return { id };
+      } catch (err) {
+        await client.query('rollback');
+        throw err;
+      } finally {
+        client.release();
+      }
     },
 
     /** AC-05: free, mine, or stale-by-more-than-90s all take it; nothing else. */
@@ -242,12 +264,40 @@ export function createRepo(pool: pg.Pool) {
       return res.rows[0]?.display_name ?? 'Un rédacteur';
     },
 
+    /** Ordinal order — the byline `publishArticle.ts` bakes into
+     *  `structured_data` at publish time, same source `src/site/render.ts`'s
+     *  own `PUBLISHED_ARTICLES_SQL` aggregates from live. */
+    async getArticleAuthorNames(article_id: string): Promise<string[]> {
+      if (!UUID.test(article_id)) return [];
+      const res = await pool.query<{ display_name: string }>(
+        `select w.display_name
+           from article_authors aa
+           join writers w on w.id = aa.writer_id
+          where aa.article_id = $1
+          order by aa.ordinal`,
+        [article_id],
+      );
+      return res.rows.map((row) => row.display_name);
+    },
+
     /** The settings page's writer list — every writer, active or revoked. */
     async listWriters(): Promise<WriterRow[]> {
       const res = await pool.query<WriterRow>(
         `select id, email, display_name, is_admin, created_at, revoked_at
            from writers
           order by created_at`,
+      );
+      return res.rows;
+    },
+
+    /** The co-author picker's writer list — deliberately trimmed to
+     *  `{id, display_name}`, unlike `listWriters()`'s admin-only
+     *  `WriterRow` (no email/is_admin/revoked_at), and revoked writers
+     *  excluded outright rather than shown greyed-out: a revoked writer
+     *  cannot hold a session to accept the credit anyway. */
+    async listActiveWriters(): Promise<{ id: string; display_name: string }[]> {
+      const res = await pool.query<{ id: string; display_name: string }>(
+        `select id, display_name from writers where revoked_at is null order by display_name`,
       );
       return res.rows;
     },

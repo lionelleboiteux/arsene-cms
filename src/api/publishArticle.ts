@@ -90,6 +90,11 @@ export type PublishDeps = {
       structured_data: Record<string, unknown>;
     }): Promise<{ first_published_at: Date }>;
     getWriterDisplayName(writer_id: string): Promise<string>;
+    /** Ordinal order, from `article_authors` — the byline this publish
+     *  bakes into `structured_data` (`buildStructuredData`'s `author`
+     *  field), distinct from `getWriterDisplayName` above (that one names
+     *  a single writer for the lock-holder message, not the byline). */
+    getArticleAuthorNames(article_id: string): Promise<string[]>;
     /** The slugs already taken that `base_slug` would have to avoid (AC-14). */
     takenSlugs(base_slug: string): Promise<string[]>;
   };
@@ -299,7 +304,7 @@ async function publishNow(
     slug: article.slug ?? (await uniqueSlug(article.title, deps)),
     league_name: article.league_name,
     type_name: article.type_name,
-    writer_display_name: await deps.repo.getWriterDisplayName(article.writer_id),
+    author_names: await deps.repo.getArticleAuthorNames(article.id),
     // §6.4: the URL the cover was actually stored under, never one built from
     // the article id — this value is persisted into `structured_data`.
     // M-V4-01/H-V6-01: `role === 'cover'` alone is not enough to identify the

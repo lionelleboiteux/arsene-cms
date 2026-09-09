@@ -30,7 +30,11 @@ type ArticleRow = {
   body_html: string;
   league_name: string;
   type_name: string;
-  writer_display_name: string;
+  /** Ordinal order from `article_authors` — always at least one name
+   *  (`insertDraft` credits the creator, and this migration backfilled
+   *  every pre-existing article; `src/api/repo.ts`'s own comment has the
+   *  full story). */
+  author_names: string[];
   cover_image_url: string | null;
   published_at: Date;
   first_published_at: Date;
@@ -57,7 +61,13 @@ type ArticleRow = {
 const PUBLISHED_ARTICLES_SQL = `
   select a.id, a.title, a.slug, a.body_html,
          l.name as league_name, c.name as type_name,
-         w.display_name as writer_display_name,
+         coalesce(
+           (select array_agg(w.display_name order by aa.ordinal)
+              from article_authors aa
+              join writers w on w.id = aa.writer_id
+             where aa.article_id = a.id),
+           array[]::text[]
+         ) as author_names,
          coalesce(
            (select i.optimized_url
               from article_images i
@@ -70,7 +80,6 @@ const PUBLISHED_ARTICLES_SQL = `
     from articles a
     join arsene_leagues l on l.id = a.league_id
     join categories c on c.id = a.category_id
-    join writers w on w.id = a.writer_id
    where a.status = 'published' and a.slug is not null
    order by a.published_at desc
 `;
@@ -86,6 +95,32 @@ const dateFormatter = new Intl.DateTimeFormat('fr-FR', {
   minute: '2-digit',
 });
 const formatDateTime = (iso: string): string => dateFormatter.format(new Date(iso));
+
+/** "il y a 2 heures" / "hier" / "la semaine dernière" — for listing cards'
+ *  byline row, where the full timestamp (`formatDateTime`, still used on the
+ *  article page itself) would be too long to sit next to a title. Computed
+ *  at render time against `now`, same as everything else on this page —
+ *  there's no static caching layer in front of it (`no-store` end to end,
+ *  `public-site/functions/[[path]].ts`'s own doc comment has the history of
+ *  why that's load-bearing, not incidental). */
+const relativeTimeFormatter = new Intl.RelativeTimeFormat('fr', { numeric: 'auto' });
+const RELATIVE_TIME_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ['year', 31_536_000],
+  ['month', 2_592_000],
+  ['week', 604_800],
+  ['day', 86_400],
+  ['hour', 3_600],
+  ['minute', 60],
+];
+function relativeTime(iso: string, now: Date = new Date()): string {
+  const diffSeconds = Math.round((now.getTime() - new Date(iso).getTime()) / 1000);
+  for (const [unit, secondsPerUnit] of RELATIVE_TIME_UNITS) {
+    if (Math.abs(diffSeconds) >= secondsPerUnit) {
+      return relativeTimeFormatter.format(-Math.round(diffSeconds / secondsPerUnit), unit);
+    }
+  }
+  return relativeTimeFormatter.format(-diffSeconds, 'second');
+}
 
 /**
  * Inlined rather than a separate stylesheet route: everything this site
@@ -126,14 +161,33 @@ h1.title-only{padding:2rem 1.25rem 0;font-size:clamp(1.5rem,4vw,2.25rem);font-we
 h2.section-title{max-width:900px;margin:1.5rem auto .25rem;padding:0 1rem;font-size:1.15rem}
 ul.articles{list-style:none;margin:0;padding:1rem;display:grid;gap:1rem;max-width:900px;margin-inline:auto}
 .article-card{background:var(--card-bg);border-radius:12px;overflow:hidden}
-.article-card img{display:block;width:100%;height:200px;object-fit:cover}
-.article-card a{display:block;padding:.9rem 1rem;font-weight:700;text-decoration:none}
+.article-card a{display:flex;align-items:center;gap:.9rem;padding:.85rem 1rem;text-decoration:none}
+.article-card-text{flex:1 1 auto;min-width:0}
+.article-card-title{margin:0 0 .3rem;font-size:1rem;font-weight:700;line-height:1.35}
+.article-card-byline{margin:0;color:var(--muted);font-size:.85rem}
+.article-card img{flex:none;width:76px;height:76px;object-fit:cover;border-radius:10px}
 p.empty{padding:2rem;color:var(--muted)}
+/* Same specificity fight as the .site-banner bleed fix above: nav.js's own
+   injected stylesheet carries ".site-nav a{text-decoration:none;font-weight:600}",
+   equal specificity to a single-class selector here and loaded after this
+   page's own <style>, so a tied selector loses on source order. Confirmed
+   directly against the live page (2026-09-08): the class was landing
+   correctly, but the underline/bold never rendered until this selector
+   carried one more element than nav.js's own. */
+fc-nav .fc-nav-current-league>a{text-decoration:underline;text-underline-offset:.25em;font-weight:800}
 `;
 
 /** French-locale, so "Étoile" sorts next to "Everton" rather than after "Z" —
  *  every type/league name on this site is French. */
 const nameCollator = new Intl.Collator('fr');
+
+/** "Alice", "Alice et Bob", "Alice, Bob et Charlie" — a French-style list
+ *  join for a byline, in `article_authors`' own ordinal order (already the
+ *  order `PUBLISHED_ARTICLES_SQL`'s `array_agg` produced it in). */
+function formatByline(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? '';
+  return `${names.slice(0, -1).join(', ')} et ${names[names.length - 1]}`;
+}
 
 function viewOf(row: ArticleRow): PublishedArticleView {
   return {
@@ -142,14 +196,17 @@ function viewOf(row: ArticleRow): PublishedArticleView {
     slug: row.slug,
     league_name: row.league_name,
     type_name: row.type_name,
-    writer_display_name: row.writer_display_name,
+    author_names: row.author_names,
     cover_image_url: row.cover_image_url ?? '',
     published_at: row.published_at.toISOString(),
     first_published_at: row.first_published_at.toISOString(),
   };
 }
 
-/** AC-06: listings show the cover image and never a body image. */
+/** AC-06: listings show the cover image and never a body image. Compact
+ *  row layout — title and byline on the left, a small square thumbnail on
+ *  the right — rather than a full-width hero per card, so a listing of many
+ *  articles (a whole league, across every type) stays scannable. */
 function articleCard(row: ArticleRow): string {
   const cover =
     row.cover_image_url === null
@@ -157,8 +214,13 @@ function articleCard(row: ArticleRow): string {
       : `<img src="${escape(row.cover_image_url)}" alt="${escape(row.title)}"/>`;
   return [
     `<li class="article-card" data-article-title="${escape(row.title)}">`,
+    `<a href="${articlePath(viewOf(row))}">`,
+    '<div class="article-card-text">',
+    `<h3 class="article-card-title">${escape(row.title)}</h3>`,
+    `<p class="article-card-byline">${escape(formatByline(row.author_names))} · ${relativeTime(row.published_at.toISOString())}</p>`,
+    '</div>',
     cover,
-    `<a href="${articlePath(viewOf(row))}">${escape(row.title)}</a>`,
+    '</a>',
     '</li>',
   ].join('');
 }
@@ -179,7 +241,52 @@ const FC_SHARED_HEAD = [
   '<script src="https://cdn.jsdelivr.net/gh/lionelleboiteux/fc-shared@main/ads.js" async></script>',
 ].join('');
 
-function page(title: string, head: string, body: string): string {
+/**
+ * `<fc-nav>`'s own `current` attribute only names which *site* in the
+ * fantasy-coach.fr family is active (`current="arsene"`, above) — it has no
+ * concept of which league's dropdown item should read as active, and
+ * `fc-shared` is a separate repo this project doesn't own, so that can't be
+ * added at the source. `nav.js` also builds its dropdown markup
+ * asynchronously after the custom element upgrades (confirmed empirically:
+ * it's not there on `DOMContentLoaded`), so this can't just run once and
+ * give up — it polls briefly for `<fc-nav>` to have populated, then matches
+ * a dropdown link by its own visible text against `data-current-league`
+ * (set below, in French, exactly as `arsene_leagues.name` stores it —
+ * that's also exactly what `nav.js` renders as each link's text), not by
+ * `href`: the dropdown's hrefs still point at the pre-Arsène fantasy-coach.fr
+ * paths (`/ligue1`, not `/articles/ligue-1`), so matching on those would
+ * silently break the moment fc-shared's own URLs change, for a purely
+ * cosmetic feature that has no business depending on them at all.
+ */
+const NAV_CURRENT_LEAGUE_SCRIPT = `<script>(function(){
+  var league = document.body.dataset.currentLeague;
+  if (!league) return;
+  var norm = function(s){ return s.normalize('NFKD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().trim(); };
+  var target = norm(league);
+  var mark = function(){
+    var nav = document.querySelector('fc-nav');
+    if (!nav) return false;
+    var links = nav.querySelectorAll('.nav-item > a');
+    var found = false;
+    links.forEach(function(a){
+      if (norm(a.textContent) === target) {
+        var item = a.closest('.nav-item');
+        if (item) item.classList.add('fc-nav-current-league');
+        found = true;
+      }
+    });
+    return found;
+  };
+  if (mark()) return;
+  var attempts = 0;
+  var poll = setInterval(function(){
+    attempts += 1;
+    if (mark() || attempts > 30) clearInterval(poll);
+  }, 100);
+})();</script>`;
+
+function page(title: string, head: string, body: string, currentLeague?: string): string {
+  const bodyAttrs = currentLeague === undefined ? '' : ` data-current-league="${escape(currentLeague)}"`;
   return [
     '<!doctype html><html lang="fr"><head>',
     '<meta charset="utf-8"/>',
@@ -188,9 +295,11 @@ function page(title: string, head: string, body: string): string {
     `<style>${SITE_CSS}</style>`,
     FC_SHARED_HEAD,
     head,
-    '</head><body>',
+    '</head>',
+    `<body${bodyAttrs}>`,
     '<fc-nav current="arsene"></fc-nav>',
     body,
+    NAV_CURRENT_LEAGUE_SCRIPT,
     '</body></html>',
   ].join('');
 }
@@ -202,7 +311,7 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
   const published = async (): Promise<ArticleRow[]> =>
     (await client.query<ArticleRow>(PUBLISHED_ARTICLES_SQL)).rows;
 
-  const listing = (title: string, rows: ArticleRow[]): RenderedPage => {
+  const listing = (title: string, rows: ArticleRow[], currentLeague?: string): RenderedPage => {
     const first = rows[0];
     const head =
       first?.cover_image_url == null
@@ -212,7 +321,7 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
       rows.length === 0
         ? '<p class="empty">No articles yet</p>'
         : `<ul class="articles">${rows.map(articleCard).join('')}</ul>`;
-    return { html: page(title, head, body), json_ld: [] };
+    return { html: page(title, head, body, currentLeague), json_ld: [] };
   };
 
   const notFound = (): RenderedPage => ({
@@ -234,7 +343,7 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
         ? ''
         : `<meta property="og:image" content="${escape(first.cover_image_url)}"/>`;
     if (rows.length === 0) {
-      return { html: page(title, head, '<p class="empty">No articles yet</p>'), json_ld: [] };
+      return { html: page(title, head, '<p class="empty">No articles yet</p>', title), json_ld: [] };
     }
     const types = [...new Set(rows.map((row) => row.type_name))].sort(nameCollator.compare);
     const body =
@@ -246,7 +355,10 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
               return `<h2 class="section-title">${escape(type)}</h2><ul class="articles">${group.map(articleCard).join('')}</ul>`;
             })
             .join('');
-    return { html: page(title, head, body), json_ld: [] };
+    // `title` is always the league's own display name here (`renderLeaguePage`
+    // passes `league.name` straight through), so it doubles as the value the
+    // nav-highlight script (`NAV_CURRENT_LEAGUE_SCRIPT`) matches against.
+    return { html: page(title, head, body, title), json_ld: [] };
   };
 
   return {
@@ -272,7 +384,11 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
           seasonSlug(row.first_published_at) === args.season_slug &&
           toSlug(row.type_name) === args.type_slug,
       );
-      return listing(`${args.league_slug} / ${args.season_slug} / ${args.type_slug}`, rows);
+      return listing(
+        `${args.league_slug} / ${args.season_slug} / ${args.type_slug}`,
+        rows,
+        rows[0]?.league_name,
+      );
     },
 
     /**
@@ -329,7 +445,7 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
           : ` <span class="sep">·</span> Mis à jour le ${formatDateTime(view.published_at)}`;
       const meta = [
         '<p class="meta">',
-        `<span class="author">${escape(row.writer_display_name)}</span>`,
+        `<span class="author">${escape(formatByline(row.author_names))}</span>`,
         '<span class="sep">·</span>',
         `Publié le ${formatDateTime(view.first_published_at)}`,
         updated,
@@ -342,7 +458,7 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
       // a visitor's browser.
       const articleBody = `<div class="body">${sanitizePastedHtml(row.body_html, { allowedImageOrigin: opts.cdnOrigin })}</div>`;
       const body = `<main data-article-title="${escape(row.title)}">${hero}${meta}${articleBody}</main>`;
-      return { html: page(row.title, head, body), json_ld: [jsonLd] };
+      return { html: page(row.title, head, body, row.league_name), json_ld: [jsonLd] };
     },
 
     /**

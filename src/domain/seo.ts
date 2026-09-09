@@ -18,7 +18,9 @@ export type PublishedArticleView = {
   slug: string;
   league_name: string;
   type_name: string;
-  writer_display_name: string;
+  /** Ordinal order, always at least one name — see `article_authors`
+   *  (`db/migrations/0009_article_authors.sql`). */
+  author_names: string[];
   cover_image_url: string;
   published_at: string;
   first_published_at: string;
@@ -145,7 +147,15 @@ export function buildStructuredData(
     image: [article.cover_image_url],
     datePublished: article.first_published_at,
     dateModified: article.published_at,
-    author: { '@type': 'Person', name: article.writer_display_name },
+    // schema.org's `author` accepts either shape — a single object for one
+    // credited writer (every existing published article, and the common
+    // case going forward) or an array once there's more than one, rather
+    // than always wrapping in an array and changing every existing
+    // article's JSON-LD shape for no reason.
+    author:
+      article.author_names.length <= 1
+        ? { '@type': 'Person', name: article.author_names[0] ?? '' }
+        : article.author_names.map((name) => ({ '@type': 'Person', name })),
     mainEntityOfPage: canonicalUrl(article, origin),
   };
 }

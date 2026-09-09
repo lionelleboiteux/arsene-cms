@@ -159,7 +159,7 @@ export type PublishedArticleView = {
   slug: string;
   league_name: string;
   type_name: string;
-  writer_display_name: string;
+  author_names: string[];
   cover_image_url: string;
   published_at: string;
   first_published_at: string;
@@ -460,6 +460,9 @@ export type PublishDeps = {
       structured_data: Record<string, unknown>;
     }): Promise<{ first_published_at: Date }>;
     getWriterDisplayName(writer_id: WriterId): Promise<string>;
+    /** Ordinal order — the byline baked into `structured_data` at publish
+     *  time (`article_authors`, `db/migrations/0009_article_authors.sql`). */
+    getArticleAuthorNames(article_id: string): Promise<string[]>;
     /**
      * M-V5-05 (`05-verification.v5.md` §5), sixth remediation pass: AC-14's
      * collision-free slug needs the slugs already taken, which only the

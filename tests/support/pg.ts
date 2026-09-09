@@ -135,6 +135,10 @@ export type SeedArticleOpts = {
   published_at?: string | null;
   first_published_at?: string | null;
   body_html?: string;
+  /** Credited authors, ordinal order (`article_authors`). Defaults to just
+   *  `writer_id` — the single-author case every existing caller wants;
+   *  pass more to seed a co-authored fixture directly. */
+  author_writer_ids?: string[];
 };
 
 export async function seedArticle(client: pg.Client, o: SeedArticleOpts): Promise<string> {
@@ -159,7 +163,20 @@ export async function seedArticle(client: pg.Client, o: SeedArticleOpts): Promis
       o.first_published_at ?? o.published_at ?? null,
     ],
   );
-  return res.rows[0].id;
+  const article_id: string = res.rows[0].id;
+
+  // Mirrors what `insertDraft` (src/api/repo.ts) does for real — a seeded
+  // article is never left without a credited author, the same invariant the
+  // production insert path guarantees.
+  const authors = o.author_writer_ids ?? [o.writer_id];
+  for (const [index, author_writer_id] of authors.entries()) {
+    await client.query(
+      `insert into article_authors (article_id, writer_id, ordinal) values ($1, $2, $3)`,
+      [article_id, author_writer_id, index + 1],
+    );
+  }
+
+  return article_id;
 }
 
 export async function seedImage(

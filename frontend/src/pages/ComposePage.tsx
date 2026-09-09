@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDraft, type DraftFields } from '../compose/useDraft.ts';
 import { useTaxonomy } from '../compose/useTaxonomy.ts';
+import { useCoAuthors } from '../compose/useCoAuthors.ts';
 import { LockBanner } from '../compose/LockBanner.tsx';
 import { SaveIndicator } from '../compose/SaveIndicator.tsx';
 import { BodyEditor, type BodyEditorHandle } from '../compose/BodyEditor.tsx';
@@ -49,6 +50,8 @@ export function ComposePage({ articleId, onBack }: { articleId: string; onBack: 
   const { state, setField, saveNow } = useDraft(articleId);
   const taxonomy = useTaxonomy();
   const [taxonomyError, setTaxonomyError] = useState<string | null>(null);
+  const coAuthors = useCoAuthors(articleId);
+  const [coAuthorError, setCoAuthorError] = useState<string | null>(null);
 
   // No pre-selection logic for a brand-new draft (empty fields → the
   // placeholder option) — only reflects what an already-tagged draft
@@ -194,6 +197,58 @@ export function ComposePage({ articleId, onBack }: { articleId: string; onBack: 
         {taxonomyError !== null && (
           <p role="alert" className="error-text">
             {taxonomyError}
+          </p>
+        )}
+      </div>
+
+      <div className="field-row">
+        <label htmlFor="co-author-add">Co-auteurs</label>
+        <ul className="co-authors-list">
+          {coAuthors.currentAuthors.map((author) => (
+            <li key={author.id} className="co-author-chip">
+              {author.display_name}
+              <button
+                type="button"
+                aria-label={`Retirer ${author.display_name} des co-auteurs`}
+                disabled={coAuthors.currentAuthors.length <= 1}
+                onClick={() => {
+                  setCoAuthorError(null);
+                  void coAuthors.removeAuthor(author.id).catch((err: unknown) => {
+                    setCoAuthorError(err instanceof Error ? err.message : String(err));
+                  });
+                }}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+        {coAuthors.availableToAdd.length > 0 && (
+          <select
+            id="co-author-add"
+            value=""
+            onChange={(event) => {
+              const writerId = event.target.value;
+              if (writerId === '') return;
+              setCoAuthorError(null);
+              void coAuthors.addAuthor(writerId).catch((err: unknown) => {
+                setCoAuthorError(err instanceof Error ? err.message : String(err));
+              });
+            }}
+          >
+            <option value="" disabled>
+              Ajouter un co-auteur…
+            </option>
+            {coAuthors.availableToAdd.map((writer) => (
+              <option key={writer.id} value={writer.id}>
+                {writer.display_name}
+              </option>
+            ))}
+          </select>
+        )}
+        {coAuthorError !== null && (
+          <p role="alert" className="error-text">
+            {coAuthorError}
           </p>
         )}
       </div>

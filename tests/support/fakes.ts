@@ -95,6 +95,10 @@ export type PublishDepsOverrides = {
   authValid?: boolean;
   writer_id?: WriterId;
   display_name?: string;
+  /** The byline `buildStructuredData` bakes into `structured_data`. Defaults
+   *  to `[display_name]` — same single-author shape every pre-existing test
+   *  already expected. */
+  author_names?: string[];
   rateLimit?: number;
   revalidation?: RevalidationOutcome;
   sink?: TelemetrySink;
@@ -137,6 +141,7 @@ export function buildPublishDeps(o: PublishDepsOverrides = {}): BuiltPublishDeps
         };
       },
       getWriterDisplayName: async () => o.display_name ?? WRITER_B_NAME,
+      getArticleAuthorNames: async () => o.author_names ?? [o.display_name ?? WRITER_B_NAME],
       // Additive, for M-V5-05: publishing has to know which slugs are already
       // taken before it can honour AC-14's "collision-free, with no writer
       // action". Nothing is taken in these fakes, so every pre-existing

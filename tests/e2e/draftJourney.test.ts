@@ -188,3 +188,30 @@ describe('draft creation over its real route (verify finding #4)', () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe('co-author picker\'s writer list (GET /v1/writers, 0009)', () => {
+  it('WRITERS-ROUTE-01: any active writer\'s own token lists every active writer, trimmed to id/display_name — no admin token required, unlike GET /v1/admin/writers', async () => {
+    const { server, tokenA, writerA, writerB } = ctx();
+
+    const res = await fetch(`${server.url}/v1/writers`, { headers: { authorization: bearer(tokenA) } });
+    const body = (await res.json()) as { writers?: { id: string; display_name: string }[] };
+
+    expect({
+      status: res.status,
+      writer_ids: body.writers?.map((w) => w.id).sort(),
+      only_id_and_display_name: body.writers?.every((w) => Object.keys(w).sort().join(',') === 'display_name,id'),
+    }).toEqual({
+      status: 200,
+      writer_ids: [writerA, writerB].sort(),
+      only_id_and_display_name: true,
+    });
+  });
+
+  it('WRITERS-ROUTE-02: no bearer token at all is refused 401, the same as every other writer-facing route', async () => {
+    const { server } = ctx();
+
+    const res = await fetch(`${server.url}/v1/writers`);
+
+    expect(res.status).toBe(401);
+  });
+});

@@ -44,6 +44,7 @@ import { handlePublishArticle, type PublishDeps } from './publishArticle.ts';
 import { createRateLimiter, PUBLISH_RATE_LIMIT_PER_MINUTE } from './rateLimit.ts';
 import { createRepo, type Repo } from './repo.ts';
 import { handleUploadImage, type UploadDeps } from './uploadImage.ts';
+import { handleListActiveWriters, type WritersDeps } from './writers.ts';
 import { createSiteRenderer } from '../site/render.ts';
 
 const ARTICLE_ROUTE = /^\/v1\/articles\/([^/]+)\/(publish|images|open)$/;
@@ -77,6 +78,12 @@ const PUBLIC_ARTICLE_ROUTE = /^\/public\/articles\/([^/]+)\/([^/]+)\/([^/]+)\/([
 const ADMIN_WRITERS_ROUTE = '/v1/admin/writers';
 const ADMIN_INVITE_WRITER_ROUTE = '/v1/admin/writers/invite';
 const ADMIN_WRITER_ACTION_ROUTE = /^\/v1\/admin\/writers\/([^/]+)\/(revoke|reinstate)$/;
+
+/** Any active writer's own co-author picker — distinct from
+ *  `ADMIN_WRITERS_ROUTE` above (admin-only, full `WriterRow`), and gated by
+ *  plain `verify()` rather than `verifyAdmin()` (`route()`'s auth chain
+ *  falls through to that default for any kind not explicitly listed there). */
+const WRITERS_ROUTE = '/v1/writers';
 /** DELETE-only, like `ARTICLE_IMAGE_ROUTE` — no other verb ever shares this
  *  exact path, so there's no CORS-preflight-advertising conflict to worry
  *  about (see the comment above on the writers routes). */
@@ -368,6 +375,13 @@ function adminWritersDeps(ctx: Ctx): AdminWritersDeps {
   };
 }
 
+function writersDeps(ctx: Ctx): WritersDeps {
+  return {
+    auth: { verifyBearer: async (token) => verify(token, ctx) },
+    repo: ctx.repo,
+  };
+}
+
 function adminArticlesDeps(ctx: Ctx): AdminArticlesDeps {
   return {
     auth: { verifyAdmin: async (token) => verifyAdmin(token, ctx) },
@@ -619,6 +633,9 @@ async function createDraft(
 
 const adminListWriters = (request: Request, ctx: Ctx): Promise<HandlerResponse> =>
   handleListWriters({ authorization: request.headers.get('authorization') }, adminWritersDeps(ctx));
+
+const listWriters = (request: Request, ctx: Ctx): Promise<HandlerResponse> =>
+  handleListActiveWriters({ authorization: request.headers.get('authorization') }, writersDeps(ctx));
 
 function adminInviteWriter(request: Request, raw: Uint8Array, ctx: Ctx): Promise<HandlerResponse> {
   const parsed = InviteWriterBody.safeParse(parseJson(raw));
@@ -976,6 +993,7 @@ type Operation =
   | { kind: 'public-category'; league_slug: string; season_slug: string; type_slug: string }
   | { kind: 'public-article-legacy'; slug: string }
   | { kind: 'admin-list-writers' }
+  | { kind: 'list-writers' }
   | { kind: 'admin-invite-writer' }
   | { kind: 'admin-writer-action'; writer_id: string; action: 'revoke' | 'reinstate' }
   | { kind: 'admin-delete-article'; article_id: string };
@@ -985,6 +1003,7 @@ function matchRoute(path: string): Operation | null {
   if (path === METRICS_SUMMARY_ROUTE) return { kind: 'metrics-summary' };
   if (path === PUBLIC_HOME_ROUTE) return { kind: 'public-home' };
   if (path === ADMIN_WRITERS_ROUTE) return { kind: 'admin-list-writers' };
+  if (path === WRITERS_ROUTE) return { kind: 'list-writers' };
   if (path === ADMIN_INVITE_WRITER_ROUTE) return { kind: 'admin-invite-writer' };
 
   const adminWriterAction = ADMIN_WRITER_ACTION_ROUTE.exec(path);
@@ -1056,7 +1075,8 @@ const methodOf = (op: Operation): string => {
     op.kind === 'public-article' ||
     op.kind === 'public-category' ||
     op.kind === 'public-article-legacy' ||
-    op.kind === 'admin-list-writers'
+    op.kind === 'admin-list-writers' ||
+    op.kind === 'list-writers'
   ) {
     return 'GET';
   }
@@ -1094,6 +1114,8 @@ function dispatch(
       return metricsSummary(request, ctx);
     case 'admin-list-writers':
       return adminListWriters(request, ctx);
+    case 'list-writers':
+      return listWriters(request, ctx);
     case 'admin-invite-writer':
       return adminInviteWriter(request, raw, ctx);
     case 'admin-writer-action':
