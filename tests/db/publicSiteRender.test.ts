@@ -479,4 +479,68 @@ describe('public site', () => {
       expect(articleByline(page.html)).toBe('Auteur Un, Auteur Deux et Auteur Trois');
     });
   });
+
+  describe('resolveWixPostPath — old Wix bookmarks (leaving Wix)', () => {
+    it('resolves an exact slug match with no normalization needed', async () => {
+      const { renderer } = ctx();
+
+      const path = await renderer.resolveWixPostPath({ slug: 'pronos-ligue-1-journee-12' });
+
+      expect(path).toBe('/articles/ligue-1/26-27/pronos/pronos-ligue-1-journee-12');
+    });
+
+    it("strips Wix's own trailing dedup suffix (e.g. \"-4\") when the bare slug has no match", async () => {
+      const { renderer } = ctx();
+
+      const path = await renderer.resolveWixPostPath({ slug: 'pronos-ligue-1-journee-12-4' });
+
+      expect(path).toBe('/articles/ligue-1/26-27/pronos/pronos-ligue-1-journee-12');
+    });
+
+    it('collapses Wix\'s embedded season infix (e.g. "-26-27-") when the bare slug has no match', async () => {
+      const { renderer, db } = ctx();
+      const writer = await seedWriter(db.client, 'Wix Infix Fixture');
+      await seedArticle(db.client, {
+        writer_id: writer,
+        title: 'Player Picks Premier League J1',
+        league_name: 'Premier League',
+        type_name: 'Pronos',
+        status: 'published',
+        slug: 'player-picks-premier-league-j1-wix-infix',
+        published_at: '2026-08-20T21:37:47Z',
+      });
+
+      const path = await renderer.resolveWixPostPath({
+        slug: 'player-picks-26-27-premier-league-j1-wix-infix',
+      });
+
+      expect(path).toBe('/articles/premier-league/26-27/pronos/player-picks-premier-league-j1-wix-infix');
+    });
+
+    it('resolves a slug carrying both the season infix and the dedup suffix at once', async () => {
+      const { renderer, db } = ctx();
+      const writer = await seedWriter(db.client, 'Wix Both Fixture');
+      await seedArticle(db.client, {
+        writer_id: writer,
+        title: 'Player Picks Ligue 1 J1 Both',
+        league_name: 'Ligue 1',
+        type_name: 'Pronos',
+        status: 'published',
+        slug: 'player-picks-ligue-1-j1-both',
+        published_at: '2026-08-20T17:13:28Z',
+      });
+
+      const path = await renderer.resolveWixPostPath({ slug: 'player-picks-26-27-ligue-1-j1-both-4' });
+
+      expect(path).toBe('/articles/ligue-1/26-27/pronos/player-picks-ligue-1-j1-both');
+    });
+
+    it('returns null for a Wix post that was never migrated to Arsène, rather than guessing', async () => {
+      const { renderer } = ctx();
+
+      const path = await renderer.resolveWixPostPath({ slug: 'round-14-allsvenskan-2026' });
+
+      expect(path).toBeNull();
+    });
+  });
 });

@@ -67,6 +67,12 @@ const METRICS_SUMMARY_ROUTE = '/internal/metrics/time-to-publish';
  *   - `/public/articles/{league}/{season}/{type}/{slug}` — an article. */
 const PUBLIC_HOME_ROUTE = '/public/';
 const PUBLIC_ARTICLE_LEGACY_ROUTE = /^\/public\/articles\/([^/]+)$/;
+/** Wix's own post-permalink shape (`https://www.fantasy-coach.fr/post/{slug}`)
+ *  — matched one-to-one so an old bookmark needs no rewriting. Unlike
+ *  `PUBLIC_ARTICLE_LEGACY_ROUTE`, `{slug}` here is never ambiguous with a
+ *  league (Wix never put a league listing at `/post/*`), so
+ *  `renderWixPostRedirect` skips that disambiguation step entirely. */
+const PUBLIC_POST_ROUTE = /^\/public\/post\/([^/]+)$/;
 const PUBLIC_CATEGORY_ROUTE = /^\/public\/articles\/([^/]+)\/([^/]+)\/([^/]+)$/;
 const PUBLIC_ARTICLE_ROUTE = /^\/public\/articles\/([^/]+)\/([^/]+)\/([^/]+)\/([^/]+)$/;
 
@@ -903,6 +909,34 @@ async function renderLeagueOrLegacyArticle(
   });
 }
 
+/**
+ * `/public/post/{slug}` — an old Wix bookmark. Unambiguous, unlike
+ * `renderLeagueOrLegacyArticle`'s own `/public/articles/{slug}`: Wix never
+ * put a league listing at this path, so there's no "try it as a league
+ * first" step here. `resolveWixPostPath` (`src/site/render.ts`) already
+ * absorbs the handful of systematic ways a Wix slug differs from Arsène's
+ * own; a slug that still resolves to nothing (the vast majority of Wix's
+ * own archive, never migrated) is a real 404, not a homepage bounce — the
+ * same "no match, no guess" shape `renderLeagueOrLegacyArticle` already
+ * uses for its own not-found case.
+ */
+async function renderWixPostRedirect(
+  op: Extract<Operation, { kind: 'public-post-legacy' }>,
+  ctx: Ctx,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const renderer = await getSiteRenderer(ctx);
+
+  const path = await renderer.resolveWixPostPath({ slug: op.slug });
+  if (path === null) {
+    return jsonPageResponse((await renderer.renderNotFound()).html, 404, cors);
+  }
+  return new Response(JSON.stringify({ redirect: `${ctx.opts.siteOrigin ?? DEFAULT_SITE_ORIGIN}${path}` }), {
+    status: 200,
+    headers: { 'content-type': 'application/json', ...cors },
+  });
+}
+
 export type ServerOptions = {
   port: number;
   databaseUrl: string;
@@ -1058,6 +1092,7 @@ type Operation =
   | { kind: 'public-article'; league_slug: string; season_slug: string; type_slug: string; slug: string }
   | { kind: 'public-category'; league_slug: string; season_slug: string; type_slug: string }
   | { kind: 'public-article-legacy'; slug: string }
+  | { kind: 'public-post-legacy'; slug: string }
   | { kind: 'admin-list-writers' }
   | { kind: 'list-writers' }
   | { kind: 'get-own-writer' }
@@ -1127,6 +1162,11 @@ function matchRoute(path: string): Operation | null {
     return { kind: 'public-article-legacy', slug: publicArticleLegacy[1] };
   }
 
+  const publicPost = PUBLIC_POST_ROUTE.exec(path);
+  if (publicPost?.[1] !== undefined) {
+    return { kind: 'public-post-legacy', slug: publicPost[1] };
+  }
+
   const article = ARTICLE_ROUTE.exec(path);
   if (article?.[1] !== undefined) {
     return { kind: article[2] as 'publish' | 'images' | 'open', article_id: article[1] };
@@ -1151,6 +1191,7 @@ const methodOf = (op: Operation): string => {
     op.kind === 'public-article' ||
     op.kind === 'public-category' ||
     op.kind === 'public-article-legacy' ||
+    op.kind === 'public-post-legacy' ||
     op.kind === 'admin-list-writers' ||
     op.kind === 'list-writers' ||
     op.kind === 'get-own-writer'
@@ -1209,11 +1250,12 @@ function dispatch(
     case 'public-article':
     case 'public-category':
     case 'public-article-legacy':
+    case 'public-post-legacy':
       // `route()` returns a raw HTML or redirect `Response` for these before
       // `dispatch()` is ever called (`renderPublicPage()`/
-      // `renderLeagueOrLegacyArticle()`) — they carry no JSON envelope for `send()`
-      // to wrap. These cases exist only so this switch stays exhaustive over
-      // `Operation`.
+      // `renderLeagueOrLegacyArticle()`/`renderWixPostRedirect()`) — they
+      // carry no JSON envelope for `send()` to wrap. These cases exist only
+      // so this switch stays exhaustive over `Operation`.
       throw new Error(`unreachable: '${op.kind}' is handled by route() before dispatch()`);
   }
 }
@@ -1273,6 +1315,9 @@ export async function route(
   }
   if (op.kind === 'public-article-legacy') {
     return renderLeagueOrLegacyArticle(op, ctx, cors);
+  }
+  if (op.kind === 'public-post-legacy') {
+    return renderWixPostRedirect(op, ctx, cors);
   }
   // The callback carries a shared secret rather than a writer token (ADR-0004),
   // but it is checked here, from the headers alone, for the same reason the

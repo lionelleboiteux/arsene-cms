@@ -740,6 +740,9 @@ export interface SiteRenderModule {
     }): Promise<RenderedPage>;
     /** Bare-slug lookup for the legacy-URL redirect — no prefix to check. */
     resolvePublishedPath(args: { slug: string }): Promise<string | null>;
+    /** Bare-slug lookup for an old Wix bookmark — tries a few systematic
+     *  slug normalizations before giving up. */
+    resolveWixPostPath(args: { slug: string }): Promise<string | null>;
     renderSitemap(): Promise<string>;
     close(): Promise<void>;
   }>;

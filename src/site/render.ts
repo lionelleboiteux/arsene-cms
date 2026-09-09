@@ -193,6 +193,26 @@ fc-nav .fc-nav-current-league>a{text-decoration:underline;text-underline-offset:
  *  every type/league name on this site is French. */
 const nameCollator = new Intl.Collator('fr');
 
+/**
+ * The two systematic ways a Wix post's own slug differs from the slug it
+ * was imported into Arsène under (`.claude/skills/import-wix-articles/`) —
+ * not random, so a short ordered list of transforms resolves an old
+ * bookmark without a hand-maintained per-post mapping table:
+ *  - a dedup suffix Wix appends (`player-picks-ligue-1-j1-4` → Arsène's
+ *    `player-picks-ligue-1-j1`)
+ *  - a season infix Wix inserts (`player-picks-26-27-premier-league-j1` →
+ *    Arsène's `player-picks-premier-league-j1`)
+ * `resolveWixPostPath` tries the bare slug first, then each of these in
+ * order; a slug still unresolved after all of them is real Wix archive
+ * that was never migrated (most of it — see that skill's own numbers), and
+ * gets a real 404 rather than a guess.
+ */
+const WIX_SLUG_NORMALIZATIONS: ((slug: string) => string)[] = [
+  (slug) => slug.replace(/-\d+$/, ''),
+  (slug) => slug.replace(/-\d\d-\d\d-/, '-'),
+  (slug) => slug.replace(/-\d+$/, '').replace(/-\d\d-\d\d-/, '-'),
+];
+
 /** A small round avatar next to a name — the writer's most recent *ready*
  *  upload (0010), or a plain initial-letter circle when they never set
  *  one. Never a broken `<img>`: a `null` avatar_url renders no `<img>` at
@@ -517,6 +537,21 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
     async resolvePublishedPath(args: { slug: string }): Promise<string | null> {
       const row = (await published()).find((candidate) => candidate.slug === args.slug);
       return row === undefined ? null : articlePath(viewOf(row));
+    },
+
+    /** Backs `/public/post/{slug}` — an old Wix bookmark. `WIX_SLUG_NORMALIZATIONS`'
+     *  own doc comment has the full reasoning; this just tries the bare slug,
+     *  then each normalization in order, against one fetch of the published
+     *  rows (not `resolvePublishedPath` per attempt — no reason to re-query
+     *  for what's usually going to be a miss anyway). */
+    async resolveWixPostPath(args: { slug: string }): Promise<string | null> {
+      const rows = await published();
+      const candidates = [args.slug, ...WIX_SLUG_NORMALIZATIONS.map((normalize) => normalize(args.slug))];
+      for (const candidate of candidates) {
+        const row = rows.find((r) => r.slug === candidate);
+        if (row !== undefined) return articlePath(viewOf(row));
+      }
+      return null;
     },
 
     /** AC-14: every published article, and nothing that is still a draft. */

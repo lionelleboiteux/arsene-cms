@@ -139,6 +139,32 @@ describe('the real public site routes', () => {
     expect(res.status).toBe(404);
   });
 
+  it('PUBLIC-ROUTE-10: an old Wix bookmark (/public/post/{slug}) whose slug matches exactly signals a redirect to the real nested path as JSON, not a real 3xx', async () => {
+    const { server } = ctx();
+    const res = await fetch(`${server.url}/public/post/pp-test`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    const body = (await res.json()) as { redirect?: string };
+    expect(body.redirect).toBe(`${SITE_ORIGIN}/articles/ligue-1/26-27/pronos/pp-test`);
+  });
+
+  it('PUBLIC-ROUTE-11: an old Wix bookmark whose slug only differs by Wix\'s own dedup suffix still resolves', async () => {
+    const { server } = ctx();
+    const res = await fetch(`${server.url}/public/post/pp-test-4`);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { redirect?: string };
+    expect(body.redirect).toBe(`${SITE_ORIGIN}/articles/ligue-1/26-27/pronos/pp-test`);
+  });
+
+  it('PUBLIC-ROUTE-12: an old Wix bookmark for a post never migrated to Arsène is a real 404, not a homepage bounce', async () => {
+    const { server } = ctx();
+    const res = await fetch(`${server.url}/public/post/never-migrated-from-wix`);
+
+    expect(res.status).toBe(404);
+  });
+
   it('PUBLIC-ROUTE-09: /public/articles/{league_slug} requires no credential and lists every published article in that league', async () => {
     const { server } = ctx();
     const res = await fetch(`${server.url}/public/articles/ligue-1`);
