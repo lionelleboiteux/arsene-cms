@@ -451,14 +451,15 @@ describe('public site', () => {
       expect(order).toHaveLength(3);
     });
 
-    it('the Premier League and Bundesliga shortcut cards link to their own league pages', async () => {
+    it('the sidebar has no low-value filler cards — just the Pronos CTA (MPG/Premier League/Bundesliga shortcut cards were removed, judged not to add anything)', async () => {
       const { renderer } = ctx();
       const page = await renderer.renderHomepage();
 
       expect({
-        premier_league: page.html.includes('<a class="home-card home-shortcut" href="/articles/premier-league">'),
-        bundesliga: page.html.includes('<a class="home-card home-shortcut" href="/articles/bundesliga">'),
-      }).toEqual({ premier_league: true, bundesliga: true });
+        has_pronos_cta: page.html.includes('<div class="home-card-title home-cta-title">🎯 Pronos</div>'),
+        has_mpg_filler: page.html.includes('dernier bilan'),
+        has_shortcut_cards: page.html.includes('home-shortcut'),
+      }).toEqual({ has_pronos_cta: true, has_mpg_filler: false, has_shortcut_cards: false });
     });
   });
 

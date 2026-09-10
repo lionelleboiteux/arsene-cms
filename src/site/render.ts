@@ -286,8 +286,6 @@ const HOME_PAGE_CSS = `
 .home-cta{background:var(--h-red-500)}
 .home-cta-title{color:var(--h-white)}
 .home-cta-sub{font-size:13px;margin-top:4px;color:var(--h-white)}
-.home-muted-text{font-size:13px;color:var(--h-gray-600)}
-.home-shortcut{font-size:13px;color:var(--h-blue-900);font-weight:700}
 `;
 
 /** French-locale, so "Étoile" sorts next to "Everton" rather than after "Z" —
@@ -677,9 +675,6 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
       '<div class="home-cta-sub">5 ligues couvertes — joue vite</div>',
       '<span class="home-btn home-btn-ghost">Jouer</span>',
       '</a>',
-      '<div class="home-card"><div class="home-muted-text">MPG — dernier bilan (peu fréquent)</div></div>',
-      `<a class="home-card home-shortcut" href="/articles/${toSlug('Premier League')}">Raccourci Premier League →</a>`,
-      `<a class="home-card home-shortcut" href="/articles/${toSlug('Bundesliga')}">Raccourci Bundesliga →</a>`,
       '</div>',
       '</div>',
       '</div>',
