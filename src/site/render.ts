@@ -220,37 +220,48 @@ const HOME_PAGE_CSS = `
   --h-radius-md:6px;--h-radius-pill:20px;--h-shadow-card:0 1px 4px rgba(15,23,32,.1);
   background:var(--h-gray-100);font-family:var(--h-font-body);color:var(--h-blue-900);
 }
+/* Mobile-first: everything in the header stacks as centered rows — the
+   brand block, the wrapped league pills, and the socials row all centered
+   as a unit, not left-aligned from the padding edge. Desktop (below)
+   switches to a 3-column grid instead. */
 .home-header-top{background:linear-gradient(180deg,var(--h-blue-300),var(--h-blue-500));
-  padding:16px 28px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+  padding:16px 28px;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;flex-wrap:wrap;gap:12px;text-align:center}
 .home-brand{display:flex;align-items:center;gap:14px}
 .home-logo{height:52px;display:block}
 .home-tagline{color:var(--h-blue-100,#eaf3ff);font-family:var(--h-font-body);font-size:14px}
-.home-pills{display:flex;gap:10px;flex-wrap:wrap}
-.home-socials{display:flex;gap:.6rem;align-items:center}
+.home-pills{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.home-socials{display:flex;gap:.6rem;align-items:center;justify-content:center}
 .home-socials img{width:22px;height:22px;display:block}
-/* Desktop only (per the request this was scoped to): three true columns so
-   the league pills sit centered on the row as a whole, not just centered in
-   whatever space is left after the brand — a plain flex row can't do that,
-   since "space left after a left-aligned block" isn't the same as "the row's
-   own center" unless the trailing block (socials) happens to match the
-   brand's width exactly. Below this width, stays the original single-row
-   flex-wrap (brand, pills, socials stack/wrap in DOM order). */
-@media (min-width:860px){
-  .home-header-top{display:grid;grid-template-columns:1fr auto 1fr}
-  .home-header-top .home-brand{justify-self:start}
-  .home-header-top .home-pills{justify-self:center}
-  .home-header-top .home-socials{justify-self:end}
-}
 .home-pill{display:inline-flex;align-items:center;font-family:var(--h-font-display);font-weight:700;
   border-radius:var(--h-radius-pill);text-decoration:none;padding:6px 14px;font-size:13px;
   background:transparent;color:var(--h-white)}
 .home-pill.active{background:var(--h-white);color:var(--h-blue-700)}
 .home-header-sub{background:var(--h-blue-600);padding:8px 28px;display:flex;gap:8px;
-  border-bottom:3px solid var(--h-red-500);flex-wrap:wrap}
+  border-bottom:3px solid var(--h-red-500);flex-wrap:wrap;justify-content:center}
 .home-pill-sm{display:inline-flex;align-items:center;font-family:var(--h-font-display);font-weight:700;
   border-radius:var(--h-radius-pill);text-decoration:none;padding:4px 12px;font-size:12px;
   background:transparent;color:var(--h-white)}
 .home-pill-sm.active{background:var(--h-red-500);color:var(--h-white)}
+/* Desktop only (per the request this was scoped to): three true columns so
+   the league pills sit centered on the row as a whole, not just centered in
+   whatever space is left after the brand — a plain flex row can't do that,
+   since "space left after a left-aligned block" isn't the same as "the row's
+   own center" unless the trailing block (socials) happens to match the
+   brand's width exactly. Below this width, the header is the centered
+   mobile stack above (brand, pills, socials each centered on their own
+   row). Placed after every rule it overrides, not just written with higher
+   specificity — a media-scoped rule earlier in the cascade than an
+   equal-specificity unconditional one loses to it once both apply, which is
+   exactly what put .home-header-sub's desktop override in this same spot
+   originally. */
+@media (min-width:860px){
+  .home-header-top{display:grid;grid-template-columns:1fr auto 1fr;text-align:left}
+  .home-header-top .home-brand{justify-self:start}
+  .home-header-top .home-pills{justify-self:center}
+  .home-header-top .home-socials{justify-self:end}
+  .home-header-sub{justify-content:flex-start}
+}
 .home-body{display:flex;padding:24px;gap:24px;flex-wrap:wrap;max-width:1100px;margin:0 auto}
 .home-col-main{flex:2 1 420px;display:flex;flex-direction:column;gap:16px}
 .home-col-side{flex:1 1 260px;display:flex;flex-direction:column;gap:12px}
