@@ -461,6 +461,14 @@ describe('public site', () => {
         has_shortcut_cards: page.html.includes('home-shortcut'),
       }).toEqual({ has_pronos_cta: true, has_mpg_filler: false, has_shortcut_cards: false });
     });
+
+    it('has a footer with the current-year copyright line', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderHomepage();
+
+      const currentYear = new Date().getFullYear();
+      expect(page.html).toContain(`<footer class="home-footer">© Fantasy Coach ${currentYear}</footer>`);
+    });
   });
 
   describe('data-current-league — what the client-side nav-highlight script reads', () => {

@@ -286,6 +286,10 @@ const HOME_PAGE_CSS = `
 .home-cta{background:var(--h-red-500)}
 .home-cta-title{color:var(--h-white)}
 .home-cta-sub{font-size:13px;margin-top:4px;color:var(--h-white)}
+/* Same gradient as .home-header-top, so the page bookends itself in the
+   same brand colours it opened with. */
+.home-footer{background:linear-gradient(180deg,var(--h-blue-300),var(--h-blue-500));
+  color:var(--h-white);text-align:center;padding:16px 28px;font-family:var(--h-font-body);font-size:13px}
 `;
 
 /** French-locale, so "Étoile" sorts next to "Everton" rather than after "Z" —
@@ -677,6 +681,7 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
       '</a>',
       '</div>',
       '</div>',
+      `<footer class="home-footer">© Fantasy Coach ${new Date().getFullYear()}</footer>`,
       '</div>',
     ].join('');
 
