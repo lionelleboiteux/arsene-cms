@@ -37,8 +37,7 @@ beforeAll(async () => {
     const writer = await seedWriter(db.client, 'Lionel Le Boiteux');
 
     // Three leagues, published at different times — originally AC-12's exact
-    // setup; now also exercises the home page portal's hero-article pick
-    // (the newest one wins) and the league-shortcut/pill links below.
+    // setup; now also exercises the league-shortcut/pill links below.
     const ligue1 = await seedArticle(db.client, {
       writer_id: writer,
       title: 'Pronos Ligue 1 - Journée 12',
@@ -47,6 +46,20 @@ beforeAll(async () => {
       status: 'published',
       slug: 'pronos-ligue-1-journee-12',
       published_at: '2026-08-11T10:47:12Z',
+    });
+    // The home page portal's hero is always Ligue 1's most recent Player
+    // Picks (LCDE) article specifically, not just whatever published most
+    // recently overall — this is the only Ligue 1 / Player Picks article
+    // until `renderLeaguePage`'s own "groups by type" test adds a second,
+    // later one below, so it's the hero for every test that runs before that.
+    await seedArticle(db.client, {
+      writer_id: writer,
+      title: 'Player Picks, Ligue 1, J5',
+      league_name: 'Ligue 1',
+      type_name: 'Player Picks',
+      status: 'published',
+      slug: 'player-picks-ligue-1-j5',
+      published_at: '2026-08-12T09:00:00Z',
     });
     await seedArticle(db.client, {
       writer_id: writer,
@@ -104,7 +117,7 @@ afterAll(async () => {
 });
 
 describe('public site', () => {
-  it('the home page portal features the single most recently published article as its hero — supersedes AC-12\'s old "full reverse-chronological listing" requirement (pdlc/arsene-cms/traceability.md); a deliberate, confirmed redesign, not a regression', async () => {
+  it('the home page portal features Ligue 1\'s most recent Player Picks article as its hero, not just whatever published most recently — supersedes AC-12\'s old "full reverse-chronological listing" requirement (pdlc/arsene-cms/traceability.md); a deliberate, confirmed redesign, not a regression', async () => {
     const { renderer } = ctx();
 
     const page = await renderer.renderHomepage();
@@ -112,10 +125,11 @@ describe('public site', () => {
     expect({
       hero_title: page.html.match(/<h1 class="home-headline">([^<]+)<\/h1>/)?.[1],
       mentions_other_articles:
+        page.html.includes('Pronos Ligue 1 - Journée 12') ||
         page.html.includes('Premier League : les paris du week-end') ||
         page.html.includes('Mercato Bundesliga - Août'),
     }).toEqual({
-      hero_title: 'Pronos Ligue 1 - Journée 12',
+      hero_title: 'Player Picks, Ligue 1, J5',
       mentions_other_articles: false,
     });
   });
@@ -387,7 +401,26 @@ describe('public site', () => {
       const { renderer } = ctx();
       const page = await renderer.renderHomepage();
 
-      expect(page.html).toContain('<a class="home-pill" href="/articles/ligue-1">Ligue 1</a>');
+      expect(page.html).toContain('href="/articles/ligue-1">Ligue 1</a>');
+    });
+
+    it('the Ligue 1 league pill and the LCDE format pill are both highlighted active, since the hero is always a Ligue 1 Player Picks (LCDE) article', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderHomepage();
+
+      expect({
+        ligue1_active: page.html.includes('<a class="home-pill active" href="/articles/ligue-1">Ligue 1</a>'),
+        premier_league_not_active: page.html.includes(
+          '<a class="home-pill" href="/articles/premier-league">Premier League</a>',
+        ),
+        lcde_active: page.html.includes('<a class="home-pill-sm active" href="/articles/ligue-1/26-27/lcde">LCDE</a>'),
+        mpg_not_active: page.html.includes('<a class="home-pill-sm" href="/articles/ligue-1/26-27/mpg">MPG</a>'),
+      }).toEqual({
+        ligue1_active: true,
+        premier_league_not_active: true,
+        lcde_active: true,
+        mpg_not_active: true,
+      });
     });
 
     it('LCDE and MPG format pills link into Ligue 1\'s current season for that format', async () => {

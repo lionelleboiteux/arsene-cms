@@ -68,7 +68,7 @@ afterAll(async () => {
 });
 
 describe('the real public site routes', () => {
-  it('PUBLIC-ROUTE-01: the homepage requires no credential and features the published article as its hero, as JSON-wrapped HTML', async () => {
+  it('PUBLIC-ROUTE-01: the homepage requires no credential and renders the portal, as JSON-wrapped HTML', async () => {
     const { server } = ctx();
     const res = await fetch(`${server.url}/public/`);
 
@@ -80,11 +80,14 @@ describe('the real public site routes', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('application/json');
     const { html } = (await res.json()) as { html: string };
-    // The home page portal (`homePage()`, `src/site/render.ts`) shows the
-    // most recently published article as its hero card, not a listing —
-    // `<h1 class="home-headline">`, not `data-article-title` (that's
-    // `articleCard()`'s own markup, used by the league/category listings).
-    expect(html).toContain('<h1 class="home-headline">PP test</h1>');
+    // The home page portal (`homePage()`, `src/site/render.ts`) only ever
+    // features a Ligue 1 *Player Picks* article as its hero — this file's
+    // fixture is Ligue 1 / Pronos (its real job is exercising the nested
+    // article/category/legacy-redirect routes below, at that exact path),
+    // so no hero renders here. That content match belongs to
+    // `tests/db/publicSiteRender.test.ts`; this just proves the route is
+    // reachable, credential-free, and answers the real portal chrome.
+    expect(html).toContain('<div class="home-page">');
   });
 
   it('PUBLIC-ROUTE-02: the nested article page requires no credential and renders the published article, as JSON-wrapped HTML', async () => {

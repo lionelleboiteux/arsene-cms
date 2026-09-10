@@ -120,7 +120,11 @@ beforeAll(async () => {
       writer_id: writer,
       title: 'Pronos Ligue 1 - Journée 14',
       league_name: 'Ligue 1',
-      type_name: 'Pronos',
+      // Player Picks, not Pronos: `homePage()` (`src/site/render.ts`) only
+      // ever features a Ligue 1 Player Picks article as its hero, and this
+      // fixture needs to land there to exercise the homepage-card half of
+      // `coverAsPublicallyServed()`.
+      type_name: 'Player Picks',
       status: 'published',
       slug: SLUG,
       published_at: PUBLISHED_AT,
@@ -145,7 +149,7 @@ beforeAll(async () => {
         datePublished: PUBLISHED_AT,
         dateModified: PUBLISHED_AT,
         author: { '@type': 'Person', name: 'Lionel Le Boiteux' },
-        mainEntityOfPage: `${SITE_ORIGIN}/articles/ligue-1/26-27/pronos/${SLUG}`,
+        mainEntityOfPage: `${SITE_ORIGIN}/articles/ligue-1/26-27/player-picks/${SLUG}`,
       }),
     ]);
 
@@ -171,7 +175,7 @@ async function coverAsPublicallyServed(c: Ctx) {
   const page = await c.renderer.renderArticlePage({
     league_slug: 'ligue-1',
     season_slug: '26-27',
-    type_slug: 'pronos',
+    type_slug: 'player-picks',
     slug: SLUG,
   });
   const home = await c.renderer.renderHomepage();

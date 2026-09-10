@@ -229,11 +229,13 @@ const HOME_PAGE_CSS = `
 .home-pill{display:inline-flex;align-items:center;font-family:var(--h-font-display);font-weight:700;
   border-radius:var(--h-radius-pill);text-decoration:none;padding:6px 14px;font-size:13px;
   background:transparent;color:var(--h-white)}
+.home-pill.active{background:var(--h-white);color:var(--h-blue-700)}
 .home-header-sub{background:var(--h-blue-600);padding:8px 28px;display:flex;gap:8px;
   border-bottom:3px solid var(--h-red-500);flex-wrap:wrap}
 .home-pill-sm{display:inline-flex;align-items:center;font-family:var(--h-font-display);font-weight:700;
   border-radius:var(--h-radius-pill);text-decoration:none;padding:4px 12px;font-size:12px;
   background:transparent;color:var(--h-white)}
+.home-pill-sm.active{background:var(--h-red-500);color:var(--h-white)}
 .home-body{display:flex;padding:24px;gap:24px;flex-wrap:wrap;max-width:1100px;margin:0 auto}
 .home-col-main{flex:2 1 420px;display:flex;flex-direction:column;gap:16px}
 .home-col-side{flex:1 1 260px;display:flex;flex-direction:column;gap:12px}
@@ -558,11 +560,22 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
       `<style>${HOME_PAGE_CSS}</style>`,
     ].join('');
 
+    // The header's active pills track the hero, not a hardcoded default:
+    // today the hero is always Ligue 1 Player Picks (see `renderHomepage()`),
+    // which is the LCDE weekly format under the hood (`readme.md`'s own
+    // "LCDE ... weekly articles" description is exactly the Player Picks
+    // type), so both read off `hero` rather than being pinned in markup.
     const leaguePills = leagues
-      .map((league) => `<a class="home-pill" href="/articles/${toSlug(league.name)}">${escape(league.name)}</a>`)
+      .map((league) => {
+        const active = hero !== undefined && league.name === hero.league_name;
+        return `<a class="home-pill${active ? ' active' : ''}" href="/articles/${toSlug(league.name)}">${escape(league.name)}</a>`;
+      })
       .join('');
     const formatPills = HOME_FORMAT_PILLS()
-      .map((format) => `<a class="home-pill-sm" href="${format.href}">${escape(format.label)}</a>`)
+      .map((format) => {
+        const active = format.label === 'LCDE' && hero !== undefined && hero.type_name === 'Player Picks';
+        return `<a class="home-pill-sm${active ? ' active' : ''}" href="${format.href}">${escape(format.label)}</a>`;
+      })
       .join('');
 
     const heroCard =
@@ -629,7 +642,12 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
         client.query<{ name: string }>('select name from arsene_leagues'),
       ]);
       const leagues = [...leaguesResult.rows].sort(homeLeagueSort);
-      return homePage(rows[0], leagues);
+      // The hero is always Ligue 1's most recent Player Picks (LCDE) piece —
+      // the site's flagship weekly content, not just whatever published most
+      // recently across every league/type. `rows` is already `published_at
+      // desc` (`PUBLISHED_ARTICLES_SQL`), so the first match is the newest.
+      const hero = rows.find((row) => row.league_name === 'Ligue 1' && row.type_name === 'Player Picks');
+      return homePage(hero, leagues);
     },
 
     /** Shared not-found page — used by `renderArticlePage`'s own miss and by
