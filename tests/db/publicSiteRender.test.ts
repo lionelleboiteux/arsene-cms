@@ -390,11 +390,32 @@ describe('public site', () => {
       expect(page.html).toContain('<a class="home-pill" href="/articles/ligue-1">Ligue 1</a>');
     });
 
-    it('format pills link into Ligue 1\'s current season for that format', async () => {
+    it('LCDE and MPG format pills link into Ligue 1\'s current season for that format', async () => {
       const { renderer } = ctx();
       const page = await renderer.renderHomepage();
 
-      expect(page.html).toContain('href="/articles/ligue-1/26-27/pronos"');
+      expect({
+        lcde: page.html.includes('href="/articles/ligue-1/26-27/lcde"'),
+        mpg: page.html.includes('href="/articles/ligue-1/26-27/mpg"'),
+      }).toEqual({ lcde: true, mpg: true });
+    });
+
+    it('the Pronos format pill links to the separate pronos.fantasy-coach.fr site, not an Arsène route — Pronos isn\'t Arsène content', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderHomepage();
+
+      expect(page.html).toContain('<a class="home-pill-sm" href="https://pronos.fantasy-coach.fr">Pronos</a>');
+    });
+
+    it('league pills follow the fixed business-priority order, not alphabetical: Ligue 1, Premier League, Bundesliga', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderHomepage();
+
+      const order = ['Ligue 1', 'Premier League', 'Bundesliga']
+        .map((name) => page.html.indexOf(`>${name}</a>`))
+        .filter((index) => index !== -1);
+      expect(order).toEqual([...order].sort((a, b) => a - b));
+      expect(order).toHaveLength(3);
     });
 
     it('the Premier League and Bundesliga shortcut cards link to their own league pages', async () => {

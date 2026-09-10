@@ -449,6 +449,7 @@ function page(
     '<meta charset="utf-8"/>',
     '<meta name="viewport" content="width=device-width, initial-scale=1"/>',
     `<title>${escape(title)}</title>`,
+    '<link rel="icon" type="image/png" href="/assets/logo.png"/>',
     `<style>${SITE_CSS}</style>`,
     FC_SHARED_HEAD,
     head,
@@ -518,11 +519,33 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
     return { html: page(title, head, body, title), json_ld: [] };
   };
 
-  /** The three game formats the sub-nav row links into — always scoped to
-   *  Ligue 1's current season, since the home page has no other
-   *  league/season context to anchor a format shortcut to, and Ligue 1 is
-   *  ~70% of this site's traffic (the design project's own readme). */
-  const HOME_FORMAT_PILLS = ['LCDE', 'MPG', 'Pronos'];
+  /** The game-format sub-nav row. LCDE/MPG link into Ligue 1's current
+   *  season — the home page has no other league/season context to anchor a
+   *  format shortcut to, and Ligue 1 is ~70% of this site's traffic (the
+   *  design project's own readme). Pronos isn't an Arsène content type at
+   *  all — it's the separate pronos.fantasy-coach.fr site — so it links
+   *  there directly instead of into a `/articles/...` route. */
+  const currentLigue1Season = (): string => `/articles/ligue-1/${seasonSlug(new Date())}`;
+  const HOME_FORMAT_PILLS = (): { label: string; href: string }[] => [
+    { label: 'LCDE', href: `${currentLigue1Season()}/lcde` },
+    { label: 'MPG', href: `${currentLigue1Season()}/mpg` },
+    { label: 'Pronos', href: 'https://pronos.fantasy-coach.fr' },
+  ];
+
+  /** League pills follow a fixed priority order (business call, not
+   *  alphabetical) — the leagues this site actually covers, biggest
+   *  audience first, per the design project's own readme. Any league not
+   *  in this list (there shouldn't be any today) falls back to the end,
+   *  alphabetically among themselves, rather than being dropped. */
+  const HOME_LEAGUE_ORDER = ['Ligue 1', 'Premier League', 'Bundesliga', 'Eliteserien', 'Allsvenskan'];
+  const homeLeagueSort = (a: { name: string }, b: { name: string }): number => {
+    const ai = HOME_LEAGUE_ORDER.indexOf(a.name);
+    const bi = HOME_LEAGUE_ORDER.indexOf(b.name);
+    if (ai === -1 && bi === -1) return nameCollator.compare(a.name, b.name);
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  };
 
   /** The portal home page (Claude Design project `563f076f-…`, wireframe
    *  `3a` / `ui_kits/website/Home.jsx`) — one hero article, not a listing.
@@ -538,11 +561,9 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
     const leaguePills = leagues
       .map((league) => `<a class="home-pill" href="/articles/${toSlug(league.name)}">${escape(league.name)}</a>`)
       .join('');
-    const currentSeason = seasonSlug(new Date());
-    const formatPills = HOME_FORMAT_PILLS.map(
-      (format) =>
-        `<a class="home-pill-sm" href="/articles/ligue-1/${currentSeason}/${toSlug(format)}">${escape(format)}</a>`,
-    ).join('');
+    const formatPills = HOME_FORMAT_PILLS()
+      .map((format) => `<a class="home-pill-sm" href="${format.href}">${escape(format.label)}</a>`)
+      .join('');
 
     const heroCard =
       hero === undefined
@@ -607,7 +628,7 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
         published(),
         client.query<{ name: string }>('select name from arsene_leagues'),
       ]);
-      const leagues = [...leaguesResult.rows].sort((a, b) => nameCollator.compare(a.name, b.name));
+      const leagues = [...leaguesResult.rows].sort(homeLeagueSort);
       return homePage(rows[0], leagues);
     },
 
