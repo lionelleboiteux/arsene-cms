@@ -36,7 +36,9 @@ beforeAll(async () => {
 
     const writer = await seedWriter(db.client, 'Lionel Le Boiteux');
 
-    // Three leagues, published at different times — AC-12's exact setup.
+    // Three leagues, published at different times — originally AC-12's exact
+    // setup; now also exercises the home page portal's hero-article pick
+    // (the newest one wins) and the league-shortcut/pill links below.
     const ligue1 = await seedArticle(db.client, {
       writer_id: writer,
       title: 'Pronos Ligue 1 - Journée 12',
@@ -102,17 +104,20 @@ afterAll(async () => {
 });
 
 describe('public site', () => {
-  it('AC-12: the homepage lists every league’s articles newest first, regardless of league', async () => {
+  it('the home page portal features the single most recently published article as its hero — supersedes AC-12\'s old "full reverse-chronological listing" requirement (pdlc/arsene-cms/traceability.md); a deliberate, confirmed redesign, not a regression', async () => {
     const { renderer } = ctx();
 
     const page = await renderer.renderHomepage();
-    const titles = [...page.html.matchAll(/data-article-title="([^"]+)"/g)].map((m) => m[1]);
 
-    expect(titles).toEqual([
-      'Pronos Ligue 1 - Journée 12',
-      'Premier League : les paris du week-end',
-      'Mercato Bundesliga - Août',
-    ]);
+    expect({
+      hero_title: page.html.match(/<h1 class="home-headline">([^<]+)<\/h1>/)?.[1],
+      mentions_other_articles:
+        page.html.includes('Premier League : les paris du week-end') ||
+        page.html.includes('Mercato Bundesliga - Août'),
+    }).toEqual({
+      hero_title: 'Pronos Ligue 1 - Journée 12',
+      mentions_other_articles: false,
+    });
   });
 
   it('AC-11: a category with no published article shows "No articles yet" rather than an error or a blank page', async () => {
@@ -370,6 +375,39 @@ describe('public site', () => {
     });
   });
 
+  describe('home page portal (Claude Design rebuild — the two-tier header stands in for site nav there)', () => {
+    it('has no shared <fc-nav> banner — its own header replaces it, so the two don\'t stack', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderHomepage();
+
+      expect(page.html).not.toContain('<fc-nav');
+    });
+
+    it('league pills link to the real per-league listing route', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderHomepage();
+
+      expect(page.html).toContain('<a class="home-pill" href="/articles/ligue-1">Ligue 1</a>');
+    });
+
+    it('format pills link into Ligue 1\'s current season for that format', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderHomepage();
+
+      expect(page.html).toContain('href="/articles/ligue-1/26-27/pronos"');
+    });
+
+    it('the Premier League and Bundesliga shortcut cards link to their own league pages', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderHomepage();
+
+      expect({
+        premier_league: page.html.includes('<a class="home-card home-shortcut" href="/articles/premier-league">'),
+        bundesliga: page.html.includes('<a class="home-card home-shortcut" href="/articles/bundesliga">'),
+      }).toEqual({ premier_league: true, bundesliga: true });
+    });
+  });
+
   describe('data-current-league — what the client-side nav-highlight script reads', () => {
     const currentLeagueOf = (html: string | undefined): string | null =>
       html?.match(/<body data-current-league="([^"]*)"/)?.[1] ?? null;
@@ -477,7 +515,13 @@ describe('public site', () => {
         author_writer_ids: [firstWriter, secondWriter],
       });
 
-      const home = await renderer.renderHomepage();
+      // The home page portal shows only its single hero article, not a
+      // listing (see the redesign note above), so the "does a co-authored
+      // byline render correctly on an `article-card`" half of this check
+      // now reads a league listing instead — same `articleCard()` markup,
+      // still real listing behaviour, just no longer reachable from the
+      // homepage itself.
+      const leaguePage = await renderer.renderLeaguePage({ league_slug: 'ligue-1' });
       const page = await renderer.renderArticlePage({
         league_slug: 'ligue-1',
         season_slug: '26-27',
@@ -487,7 +531,7 @@ describe('public site', () => {
 
       expect({
         card_byline: stripTags(
-          home.html.match(/Co-écrit à deux[\s\S]*?article-card-byline">([^·]+)·/)?.[1] ?? '',
+          (leaguePage?.html ?? '').match(/Co-écrit à deux[\s\S]*?article-card-byline">([^·]+)·/)?.[1] ?? '',
         ),
         article_byline: articleByline(page.html),
         json_ld_author: page.json_ld[0]?.author,

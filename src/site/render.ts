@@ -1,5 +1,10 @@
 /**
- * The public site's render pass (AC-06, AC-11, AC-12, AC-14).
+ * The public site's render pass (AC-06, AC-11, AC-14). AC-12 ("homepage:
+ * reverse chronological across leagues") is superseded by `homePage()` —
+ * the home page is now a curated portal with one hero article, a
+ * deliberate, user-confirmed redesign (see `pdlc/arsene-cms/traceability.md`
+ * for AC-12's original text; that matrix wasn't amended as part of this
+ * change, since it's a separately gated PDLC artifact).
  *
  * Reads published content straight from Postgres and returns the HTML/JSON-LD
  * an ISR page would serve, so the whole surface is assertable without a
@@ -193,6 +198,68 @@ p.empty{padding:2rem;color:var(--muted)}
 fc-nav .fc-nav-current-league>a{text-decoration:underline;text-underline-offset:.25em;font-weight:800}
 `;
 
+/**
+ * The home page's bespoke portal layout (Claude Design project
+ * `563f076f-5b3e-4079-a568-20ff812fa41d`, wireframe `3a` / `ui_kits/website/Home.jsx`) —
+ * a one-off, deliberately not merged into `SITE_CSS`. Every custom property
+ * is scoped under `.home-page` rather than `:root`, and every rule is
+ * prefixed `.home-page`, so this can't collide with or leak into the
+ * listing/article templates above, which keep their current look untouched.
+ * Values are the design tokens (`tokens/{colors,typography,spacing}.css`)
+ * copied straight across — `Header`/`Card`/`Button`/`Pill`'s own inline
+ * styles translated one-to-one into classes, since this file has no
+ * JSX/React runtime to run those components directly.
+ */
+const HOME_PAGE_CSS = `
+.home-page{
+  --h-blue-100:#eaf3ff;--h-blue-300:#5da8e8;--h-blue-500:#3d84c9;--h-blue-600:#2f6fb0;
+  --h-blue-700:#1f5fa8;--h-blue-900:#173a5e;--h-red-500:#e2362e;--h-gray-100:#f4f7fb;
+  --h-gray-300:#e0e6ec;--h-gray-500:#8a97a6;--h-gray-600:#5b6b80;--h-white:#fff;
+  --h-font-display:'Baloo 2','Poppins',system-ui,sans-serif;
+  --h-font-body:'Inter',system-ui,-apple-system,sans-serif;
+  --h-radius-md:6px;--h-radius-pill:20px;--h-shadow-card:0 1px 4px rgba(15,23,32,.1);
+  background:var(--h-gray-100);font-family:var(--h-font-body);color:var(--h-blue-900);
+}
+.home-header-top{background:linear-gradient(180deg,var(--h-blue-300),var(--h-blue-500));
+  padding:16px 28px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+.home-brand{display:flex;align-items:center;gap:14px}
+.home-logo{height:52px;display:block}
+.home-tagline{color:var(--h-blue-100,#eaf3ff);font-family:var(--h-font-body);font-size:14px}
+.home-pills{display:flex;gap:10px;flex-wrap:wrap}
+.home-pill{display:inline-flex;align-items:center;font-family:var(--h-font-display);font-weight:700;
+  border-radius:var(--h-radius-pill);text-decoration:none;padding:6px 14px;font-size:13px;
+  background:transparent;color:var(--h-white)}
+.home-header-sub{background:var(--h-blue-600);padding:8px 28px;display:flex;gap:8px;
+  border-bottom:3px solid var(--h-red-500);flex-wrap:wrap}
+.home-pill-sm{display:inline-flex;align-items:center;font-family:var(--h-font-display);font-weight:700;
+  border-radius:var(--h-radius-pill);text-decoration:none;padding:4px 12px;font-size:12px;
+  background:transparent;color:var(--h-white)}
+.home-body{display:flex;padding:24px;gap:24px;flex-wrap:wrap;max-width:1100px;margin:0 auto}
+.home-col-main{flex:2 1 420px;display:flex;flex-direction:column;gap:16px}
+.home-col-side{flex:1 1 260px;display:flex;flex-direction:column;gap:12px}
+.home-card{background:var(--h-white);border-radius:var(--h-radius-md);box-shadow:var(--h-shadow-card);
+  padding:16px;display:block;text-decoration:none;color:inherit}
+.home-hero{display:flex;gap:16px;flex-wrap:wrap}
+.home-hero-img{width:180px;height:120px;flex:none;border-radius:4px;object-fit:cover;
+  background:repeating-linear-gradient(45deg,#e7eef7,#e7eef7 6px,#d3e0f0 6px,#d3e0f0 12px)}
+.home-eyebrow{font-size:12px;color:var(--h-red-500);font-weight:700;text-transform:uppercase}
+.home-headline{font-family:var(--h-font-display);font-size:24px;font-weight:700;color:var(--h-blue-900);margin:4px 0}
+.home-subtitle{font-size:14px;color:var(--h-gray-600);margin:0}
+.home-btn{display:inline-block;margin-top:10px;font-family:var(--h-font-display);font-weight:700;
+  border:none;border-radius:var(--h-radius-pill);padding:6px 14px;font-size:13px;
+  background:var(--h-red-500);color:var(--h-white)}
+.home-btn-ghost{background:var(--h-blue-700)}
+.home-card-title{font-family:var(--h-font-display);font-weight:700;color:var(--h-blue-900);font-size:16px}
+.home-tool-slots{display:flex;gap:8px;margin-top:10px}
+.home-tool-slot{flex:1;height:44px;background:var(--h-gray-100);border-radius:4px;
+  display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--h-gray-600)}
+.home-cta{background:var(--h-red-500)}
+.home-cta-title{color:var(--h-white)}
+.home-cta-sub{font-size:13px;margin-top:4px;color:var(--h-white)}
+.home-muted-text{font-size:13px;color:var(--h-gray-600)}
+.home-shortcut{font-size:13px;color:var(--h-blue-900);font-weight:700}
+`;
+
 /** French-locale, so "Étoile" sorts next to "Everton" rather than after "Z" —
  *  every type/league name on this site is French. */
 const nameCollator = new Intl.Collator('fr');
@@ -358,8 +425,21 @@ const NAV_LABEL_OVERRIDES: Record<string, string> = {
 /** `forceLight` defaults on: every listing page (`listing()`, `leagueListing()`,
  *  `notFound()`) matches pronos's always-light background. Only
  *  `renderArticlePage` opts out, so reading an article still follows the
- *  visitor's own device preference. */
-function page(title: string, head: string, body: string, currentLeague?: string, forceLight = true): string {
+ *  visitor's own device preference.
+ *
+ *  `showFcNav` defaults on too. The home page (`homePage()`) is the one
+ *  exception: its own two-tier header stands in for site navigation there,
+ *  so stacking the shared `fc-shared` banner on top of it would just double
+ *  up navigation on the one page that has its own. `NAV_CURRENT_LEAGUE_SCRIPT`
+ *  is a safe no-op either way — the home page never sets `data-current-league`. */
+function page(
+  title: string,
+  head: string,
+  body: string,
+  currentLeague?: string,
+  forceLight = true,
+  showFcNav = true,
+): string {
   const navLabel = currentLeague === undefined ? undefined : (NAV_LABEL_OVERRIDES[currentLeague] ?? currentLeague);
   const bodyAttrs =
     (navLabel === undefined ? '' : ` data-current-league="${escape(navLabel)}"`) +
@@ -374,7 +454,7 @@ function page(title: string, head: string, body: string, currentLeague?: string,
     head,
     '</head>',
     `<body${bodyAttrs}>`,
-    '<fc-nav current="arsene"></fc-nav>',
+    showFcNav ? '<fc-nav current="arsene"></fc-nav>' : '',
     body,
     NAV_CURRENT_LEAGUE_SCRIPT,
     '</body></html>',
@@ -438,9 +518,97 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
     return { html: page(title, head, body, title), json_ld: [] };
   };
 
+  /** The three game formats the sub-nav row links into — always scoped to
+   *  Ligue 1's current season, since the home page has no other
+   *  league/season context to anchor a format shortcut to, and Ligue 1 is
+   *  ~70% of this site's traffic (the design project's own readme). */
+  const HOME_FORMAT_PILLS = ['LCDE', 'MPG', 'Pronos'];
+
+  /** The portal home page (Claude Design project `563f076f-…`, wireframe
+   *  `3a` / `ui_kits/website/Home.jsx`) — one hero article, not a listing.
+   *  `hero` is `undefined` only when nothing has ever been published yet;
+   *  the rest of the portal (header, tool teaser, sidebar) still renders. */
+  const homePage = (hero: ArticleRow | undefined, leagues: { name: string }[]): RenderedPage => {
+    const head = [
+      '<link rel="preconnect" href="https://fonts.googleapis.com">',
+      '<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;700;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">',
+      `<style>${HOME_PAGE_CSS}</style>`,
+    ].join('');
+
+    const leaguePills = leagues
+      .map((league) => `<a class="home-pill" href="/articles/${toSlug(league.name)}">${escape(league.name)}</a>`)
+      .join('');
+    const currentSeason = seasonSlug(new Date());
+    const formatPills = HOME_FORMAT_PILLS.map(
+      (format) =>
+        `<a class="home-pill-sm" href="/articles/ligue-1/${currentSeason}/${toSlug(format)}">${escape(format)}</a>`,
+    ).join('');
+
+    const heroCard =
+      hero === undefined
+        ? ''
+        : [
+            `<a class="home-card home-hero" href="${articlePath(viewOf(hero))}">`,
+            hero.cover_image_url === null
+              ? '<div class="home-hero-img"></div>'
+              : `<img class="home-hero-img" src="${escape(hero.cover_image_url)}" alt="${escape(hero.title)}"/>`,
+            '<div>',
+            `<div class="home-eyebrow">${escape(`${hero.league_name} · ${hero.type_name}`)}</div>`,
+            `<h1 class="home-headline">${escape(hero.title)}</h1>`,
+            '<p class="home-subtitle">Article hebdo — mis à jour chaque semaine</p>',
+            '<span class="home-btn">Lire l’article</span>',
+            '</div>',
+            '</a>',
+          ].join('');
+
+    const body = [
+      '<div class="home-page">',
+      '<header class="home-header">',
+      '<div class="home-header-top">',
+      '<div class="home-brand">',
+      '<img class="home-logo" src="/assets/logo.png" alt="Fantasy Coach"/>',
+      '<span class="home-tagline">La référence Fantasy Foot</span>',
+      '</div>',
+      `<nav class="home-pills">${leaguePills}</nav>`,
+      '</div>',
+      `<div class="home-header-sub"><nav class="home-pills">${formatPills}</nav></div>`,
+      '</header>',
+      '<div class="home-body">',
+      '<div class="home-col-main">',
+      heroCard,
+      '<div class="home-card home-tool">',
+      '<div class="home-card-title">🛠 Outil — Absents &amp; compos probables L1</div>',
+      '<div class="home-tool-slots">',
+      '<div class="home-tool-slot">équipe A</div>',
+      '<div class="home-tool-slot">équipe B</div>',
+      '</div>',
+      '</div>',
+      '</div>',
+      '<div class="home-col-side">',
+      '<a class="home-card home-cta" href="https://pronos.fantasy-coach.fr">',
+      '<div class="home-card-title home-cta-title">🎯 Pronos</div>',
+      '<div class="home-cta-sub">5 ligues couvertes — joue vite</div>',
+      '<span class="home-btn home-btn-ghost">Jouer</span>',
+      '</a>',
+      '<div class="home-card"><div class="home-muted-text">MPG — dernier bilan (peu fréquent)</div></div>',
+      `<a class="home-card home-shortcut" href="/articles/${toSlug('Premier League')}">Raccourci Premier League →</a>`,
+      `<a class="home-card home-shortcut" href="/articles/${toSlug('Bundesliga')}">Raccourci Bundesliga →</a>`,
+      '</div>',
+      '</div>',
+      '</div>',
+    ].join('');
+
+    return { html: page('Fantasy Coach', head, body, undefined, true, false), json_ld: [] };
+  };
+
   return {
     async renderHomepage(): Promise<RenderedPage> {
-      return listing('Fantasy Coach', await published());
+      const [rows, leaguesResult] = await Promise.all([
+        published(),
+        client.query<{ name: string }>('select name from arsene_leagues'),
+      ]);
+      const leagues = [...leaguesResult.rows].sort((a, b) => nameCollator.compare(a.name, b.name));
+      return homePage(rows[0], leagues);
     },
 
     /** Shared not-found page — used by `renderArticlePage`'s own miss and by

@@ -179,7 +179,13 @@ async function coverAsPublicallyServed(c: Ctx) {
   return {
     og_image: page.html.match(/property="og:image"\s+content="([^"]*)"/)?.[1] ?? null,
     json_ld_image: Array.isArray(jsonLdImage) ? (jsonLdImage[0] ?? null) : null,
-    homepage_card_img: home.html.match(/<img src="([^"]*)"/)?.[1] ?? null,
+    // The home page portal (`homePage()`, `src/site/render.ts`) shows this
+    // article as its hero card — it's the only published article this
+    // fixture seeds — inside `<img class="home-hero-img" src="...">`. Matched
+    // by that class specifically, not just "the first `<img>` on the page":
+    // the portal's own logo (`<img class="home-logo" src="/assets/logo.png">`)
+    // renders earlier in the markup and would otherwise false-match here.
+    homepage_card_img: home.html.match(/<img class="home-hero-img" src="([^"]*)"/)?.[1] ?? null,
   };
 }
 
