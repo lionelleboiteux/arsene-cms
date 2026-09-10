@@ -451,7 +451,10 @@ function page(
     '<meta charset="utf-8"/>',
     '<meta name="viewport" content="width=device-width, initial-scale=1"/>',
     `<title>${escape(title)}</title>`,
-    '<link rel="icon" type="image/png" href="/assets/logo.png"/>',
+    // A dedicated square asset, not the header logo directly: the shield
+    // mark is portrait (taller than wide), and browsers force favicons into
+    // a square slot — reusing the header logo there squished it.
+    '<link rel="icon" type="image/png" href="/assets/favicon.png"/>',
     `<style>${SITE_CSS}</style>`,
     FC_SHARED_HEAD,
     head,
