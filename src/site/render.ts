@@ -140,6 +140,10 @@ function relativeTime(iso: string, now: Date = new Date()): string {
 const SITE_CSS = `
 :root{--bg:#fff;--fg:#16181c;--muted:#6b7280;--card-bg:#f4f4f5}
 @media (prefers-color-scheme:dark){:root{--bg:#0b0b0c;--fg:#f2f2f3;--muted:#9a9aa2;--card-bg:#1c1c1f}}
+/* Homepage/league/category listings match pronos's own pages — always
+   light, regardless of device preference. Only the article page itself
+   (page()'s own forceLight=false) still follows prefers-color-scheme. */
+body.force-light{--bg:#fff;--fg:#16181c;--muted:#6b7280;--card-bg:#f4f4f5}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);line-height:1.55;
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
@@ -351,9 +355,15 @@ const NAV_LABEL_OVERRIDES: Record<string, string> = {
   'Premier League': 'FPL',
 };
 
-function page(title: string, head: string, body: string, currentLeague?: string): string {
+/** `forceLight` defaults on: every listing page (`listing()`, `leagueListing()`,
+ *  `notFound()`) matches pronos's always-light background. Only
+ *  `renderArticlePage` opts out, so reading an article still follows the
+ *  visitor's own device preference. */
+function page(title: string, head: string, body: string, currentLeague?: string, forceLight = true): string {
   const navLabel = currentLeague === undefined ? undefined : (NAV_LABEL_OVERRIDES[currentLeague] ?? currentLeague);
-  const bodyAttrs = navLabel === undefined ? '' : ` data-current-league="${escape(navLabel)}"`;
+  const bodyAttrs =
+    (navLabel === undefined ? '' : ` data-current-league="${escape(navLabel)}"`) +
+    (forceLight ? ' class="force-light"' : '');
   return [
     '<!doctype html><html lang="fr"><head>',
     '<meta charset="utf-8"/>',
@@ -525,7 +535,7 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
       // a visitor's browser.
       const articleBody = `<div class="body">${sanitizePastedHtml(row.body_html, { allowedImageOrigin: opts.cdnOrigin })}</div>`;
       const body = `<main data-article-title="${escape(row.title)}">${hero}${meta}${articleBody}</main>`;
-      return { html: page(row.title, head, body, row.league_name), json_ld: [jsonLd] };
+      return { html: page(row.title, head, body, row.league_name, false), json_ld: [jsonLd] };
     },
 
     /**

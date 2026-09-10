@@ -322,6 +322,54 @@ describe('public site', () => {
     });
   });
 
+  describe('force-light — listing pages match pronos\'s always-light background, the article page follows device preference', () => {
+    const isForcedLight = (html: string): boolean => /<body[^>]*\bclass="force-light"/.test(html);
+
+    it('the homepage is forced light', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderHomepage();
+
+      expect(isForcedLight(page.html)).toBe(true);
+    });
+
+    it('a league page is forced light', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderLeaguePage({ league_slug: 'ligue-1' });
+
+      expect(isForcedLight(page?.html ?? '')).toBe(true);
+    });
+
+    it('a league/season/category listing is forced light', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderCategoryPage({
+        league_slug: 'ligue-1',
+        season_slug: '26-27',
+        type_slug: 'pronos',
+      });
+
+      expect(isForcedLight(page.html)).toBe(true);
+    });
+
+    it('the article page is NOT forced light — it follows the visitor\'s own device preference', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderArticlePage({
+        league_slug: 'ligue-1',
+        season_slug: '26-27',
+        type_slug: 'pronos',
+        slug: 'pronos-ligue-1-journee-12',
+      });
+
+      expect(isForcedLight(page.html)).toBe(false);
+    });
+
+    it('a not-found page is forced light', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderNotFound();
+
+      expect(isForcedLight(page.html)).toBe(true);
+    });
+  });
+
   describe('data-current-league — what the client-side nav-highlight script reads', () => {
     const currentLeagueOf = (html: string | undefined): string | null =>
       html?.match(/<body data-current-league="([^"]*)"/)?.[1] ?? null;
