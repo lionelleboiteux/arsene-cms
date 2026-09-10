@@ -252,9 +252,11 @@ const HOME_PAGE_CSS = `
   background:var(--h-red-500);color:var(--h-white)}
 .home-btn-ghost{background:var(--h-blue-700)}
 .home-card-title{font-family:var(--h-font-display);font-weight:700;color:var(--h-blue-900);font-size:16px}
-.home-tool-slots{display:flex;gap:8px;margin-top:10px}
-.home-tool-slot{flex:1;height:44px;background:var(--h-gray-100);border-radius:4px;
-  display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--h-gray-600)}
+.home-tool-slots{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.home-tool-link{flex:1;min-width:140px;height:44px;border-radius:var(--h-radius-pill);
+  display:flex;align-items:center;justify-content:center;text-align:center;text-decoration:none;
+  font-family:var(--h-font-display);font-weight:700;font-size:13px;color:var(--h-blue-700);
+  box-shadow:inset 0 0 0 1.5px var(--h-blue-700)}
 .home-cta{background:var(--h-red-500)}
 .home-cta-title{color:var(--h-white)}
 .home-cta-sub{font-size:13px;margin-top:4px;color:var(--h-white)}
@@ -614,10 +616,10 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
       '<div class="home-col-main">',
       heroCard,
       '<div class="home-card home-tool">',
-      '<div class="home-card-title">🛠 Outil — Absents &amp; compos probables L1</div>',
+      '<div class="home-card-title">🛠 Outil pour la Ligue 1</div>',
       '<div class="home-tool-slots">',
-      '<div class="home-tool-slot">équipe A</div>',
-      '<div class="home-tool-slot">équipe B</div>',
+      '<a class="home-tool-link" href="https://l1.dnp.fantasy-coach.fr/">Indisponibles / DNP</a>',
+      '<a class="home-tool-link" href="https://l1.compos.fantasy-coach.fr/">Compos probables</a>',
       '</div>',
       '</div>',
       '</div>',
