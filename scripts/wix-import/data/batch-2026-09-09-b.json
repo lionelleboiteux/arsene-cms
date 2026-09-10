@@ -1,0 +1,4700 @@
+[
+  {
+    "id": "77e2580d-5d8a-47fd-941e-60a5afa6fb51",
+    "title": "Game Week 02 – Eliteserien 2026",
+    "slug": "game-week-02-eliteserien-2026",
+    "categoryIds": [
+      "467d5c80-9e00-4aa4-9711-6c7a6a5038ee",
+      "703bdb8c-ae64-4c79-b2d1-d820c0617798"
+    ],
+    "richContent": {
+      "nodes": [
+        {
+          "type": "PARAGRAPH",
+          "id": "d90z292",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "ijtn094",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Surprise, surprise.",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "FONT_SIZE",
+                    "fontSizeData": {
+                      "unit": "PX",
+                      "value": 24
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "omr6t97",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "ny9793264",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "tr9rj2931",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "IMAGE",
+          "id": "vs89k3109",
+          "nodes": [
+            {
+              "type": "CAPTION",
+              "id": "nubg13112",
+              "nodes": [
+                {
+                  "type": "TEXT",
+                  "id": "",
+                  "nodes": [],
+                  "textData": {
+                    "text": "Mads Kikkenborg peut laisser éclater sa joie : pour ses débuts en Eliteserien, le Danois, nouveau portier de Molde, s'est imposé à Rosenborg (2-0).",
+                    "decorations": []
+                  }
+                }
+              ]
+            }
+          ],
+          "imageData": {
+            "containerData": {
+              "width": {
+                "size": "CONTENT"
+              },
+              "alignment": "CENTER",
+              "textWrap": true
+            },
+            "image": {
+              "src": {
+                "id": "3448f3_7a0c2caef85c4c9786a090affb744094~mv2.jpg"
+              },
+              "width": 680,
+              "height": 680
+            },
+            "caption": "Mads Kikkenborg peut laisser éclater sa joie : pour ses débuts en Eliteserien, le Danois, nouveau portier de Molde, s'est imposé à Rosenborg (2-0)."
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "h2l0q118",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "q707l3338",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "wb2qi3412",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "knoq8119",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Tops",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "COLOR",
+                    "colorData": {
+                      "foreground": "#2DB4DF"
+                    }
+                  },
+                  {
+                    "type": "FONT_SIZE",
+                    "fontSizeData": {
+                      "unit": "PX",
+                      "value": 24
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "hkuse121",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "f2gyh122",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Impressionnant contre Fredrikstad (4-0), ",
+                "decorations": []
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Tromsø",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": " est le premier leader.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "apbev126",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "z0s56127",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Molde",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": " et ",
+                "decorations": []
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Vålerenga",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": " ont pris un bon départ tandis que le promu ",
+                "decorations": []
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Lilleström",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": ", seul vainqueur à l'extérieur, confirme son profil de poil à gratter.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "8dd4n134",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "detjn135",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Bien décidés à vendre chèrement leurs peaux, ",
+                "decorations": []
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "HamKam",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": " et ",
+                "decorations": []
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Kristiansund",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": " ont endossé le costume de coupeurs de têtes. Deux très belles surprises.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "zboar141",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "omgjv142",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Le triplé de la tête de ",
+                "decorations": []
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Jens Hjertø-Dahl (Tromsø)",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": ", milieu norvégien de 20 ans toisant 1,94m .",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "nay35146",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "6krsm147",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Le doublé décisif de ",
+                "decorations": []
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Promise Meliga (Kristiansund)",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": ", attaquant nigérian de 18 ans sorti du banc à la 71' alors que son équipe était menée (1-2). Radar déclenché.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "xe7d7151",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "w6xxd152",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Flops",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "COLOR",
+                    "colorData": {
+                      "foreground": "#2DB4DF"
+                    }
+                  },
+                  {
+                    "type": "FONT_SIZE",
+                    "fontSizeData": {
+                      "unit": "PX",
+                      "value": 24
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "1fw5e154",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "frgjr155",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Dès la première journée de l'Eliteserien 2026, deux cador supposés se sont pris les pieds dans le tapis contre des adversaires jouant le maintien : ",
+                "decorations": []
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Viking",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": ", le champion sortant, est tombé à HamKam (2-1) et ",
+                "decorations": []
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Brann",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": " à Kristiansund (3-2).",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "b03en161",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "9902c162",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Deux défaites surprises qui font déjà les affaires de Bodø/Glimt qui pourtant ne jouait pas…",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "9xq9z164",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "w6n6s165",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Deuxième meilleure défense la saison dernière avec 35 buts encaissés, ",
+                "decorations": []
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Fredrikstad",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": " a pris l'eau avec quatre buts concédés dont trois sur coups de pied arrêtés.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "n19sg169",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "48vq8170",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Arrivé de Dundee United pour remplacer Stefan Ingi Sigurdarson et ses 15 buts et 1 passe, partis à Go Ahead Eagles aux Pays-Bas pour 2,7 M€, ",
+                "decorations": []
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Nikolaj Möller (Sandefjord)",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": " a mal commencé sous ses nouvelles couleurs en ratant le pénalty de l'égalisation. Doté du même profil d'avant-centre puissant (1,94m), le Suédois de 23 ans transféré pour 450 K€ se met déjà la pression.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "790fu108",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "f4vw0898",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "iocju960",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "2spge386",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Fantasy",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "COLOR",
+                    "colorData": {
+                      "foreground": "#2DB4DF"
+                    }
+                  },
+                  {
+                    "type": "FONT_SIZE",
+                    "fontSizeData": {
+                      "unit": "PX",
+                      "value": 24
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "tea9e733",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "b2yam2861",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "qefkr2698",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Calendrier, stratégie et jeton",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "UNDERLINE"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": " :",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "oov0v2700",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "upcjt2701",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Après le report du match Bodø/Glimt-Sarpsborg en ouverture l'Eliteserien pour cause de Ligue des champions, ce sont deux matchs de la deuxième journée qui sont à leurs tours reportés pour cause de NM (la Coupe de Norvège) et de Ligue des Champions : Lillestrøm - Kristiansund et Bodø/Glimt – HamKam. Au moment de la rédaction de ce billet, les dates de reprogrammation ne sont pas encore connues.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "omi4v2703",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "b2mgl2704",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Bodø/Glimt débutera donc sa saison de championnat lors de la troisième journée. Aussi, l'idée est de conserver le transfert de la semaine afin de le cumuler avec celui de la semaine prochaine.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "hj0dg2706",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "symri2707",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Avant d'effectuer, bien considérer les éléments calendaires suivants :",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "BULLETED_LIST",
+          "id": "aobhc2709",
+          "nodes": [
+            {
+              "type": "LIST_ITEM",
+              "id": "svw052710",
+              "nodes": [
+                {
+                  "type": "PARAGRAPH",
+                  "id": "fdnn52711",
+                  "nodes": [
+                    {
+                      "type": "TEXT",
+                      "id": "",
+                      "nodes": [],
+                      "textData": {
+                        "text": "journée 4 : Tromsø et Lillestrøm ont deux matchs",
+                        "decorations": []
+                      }
+                    }
+                  ],
+                  "style": {},
+                  "paragraphData": {
+                    "textStyle": {
+                      "textAlignment": "AUTO"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "LIST_ITEM",
+              "id": "9r1bz2713",
+              "nodes": [
+                {
+                  "type": "PARAGRAPH",
+                  "id": "5szi02714",
+                  "nodes": [
+                    {
+                      "type": "TEXT",
+                      "id": "",
+                      "nodes": [],
+                      "textData": {
+                        "text": "journée 6 : Bodø/Glimt, Brann, Start et Tromsø ont deux matchs",
+                        "decorations": []
+                      }
+                    }
+                  ],
+                  "style": {},
+                  "paragraphData": {
+                    "textStyle": {
+                      "textAlignment": "AUTO"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "bulletedListData": {
+            "indentation": 0
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "kj3ej2716",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "8q9ew2717",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "La majorité des managers fantasy va jouer des chips lors de ces deux journées 4 et 6, en particulier le jeton « Park the Bus ». Une des principales explications de la popularité des défenseurs de Tromsø qui ont été prioritairement ciblés en ouverture.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "oulo52719",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "hxl572720",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Avoir des joueurs de Tromsø en j4 et j6 est donc une priorité si ce n'est pas déjà le cas.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "7geir2722",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "h2tz52723",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Avoir trois joueurs de Bodø/Glimt lors de la journée 6 semble aussi être un impératif. Le choix du moment où ces actifs intégreront votre effectif aura son importance. Dès la journée 3 ou au contraire, attendre la journée 5 et que leur déplacement à Viking lors du choc de la journée 4 soit passé ? A suivre.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "9ilie2634",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "xs4s21145",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "jbf4o734",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Équipes à cibler",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "UNDERLINE"
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "qbtz1736",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "cb3j4737",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Fredrikstad",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": " pour son calendrier abordable sur les 3 prochaines journées (KFUM, aafk, VIF).",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "axd11740",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "24wjk741",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Tromsø",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": " va doubler en journée 4 soit 4 matchs à disputer sur les 3 prochaines journées dont 3 réceptions à domicile.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "g6o1j744",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "w9m17745",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Brann",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": " a sur le papier le calendrier le plus favorable sur les 3 prochaines journées.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "2uwcg748",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "pya451214",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "kyvpl749",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Player Picks - j2",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "UNDERLINE"
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "b2367751",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "8qaj2752",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Gardien",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "ITALIC",
+                    "italicData": true
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "ghiqv754",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "enuys755",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Klaesson (AaFK, 4,5, 12,1 %)",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": " : le gardien du promu a tout d'une belle tentation (prix, calendrier, qualité intrinsèque). Les suiveurs du championnat donnent son équipe comme favorite à la relégation : il ne va donc pas chômer...",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "fama4758",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "x3sti759",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Défenseur",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "ITALIC",
+                    "italicData": true
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "avzwb761",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "9uj5o762",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Sjökvist (KFUM, 5, 5,9 %)",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": " : passeur décisif, il a joué très haut dans le couloir droit de son équipe. Et il tire certains CPA.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "x11f0765",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "asvs0766",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Milieu",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "ITALIC",
+                    "italicData": true
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "z12g2768",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "r700g769",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Hjertø-Dahl (TIL, 7,1 , 28,9%)",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": " : trois buts de la tête et le milieu de terrain a pris la tête du classement des buteurs. Son nom est sur toutes les lèvres.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "tk0sj772",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "t46ub773",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Attaquant",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "ITALIC",
+                    "italicData": true
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "cz9la775",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "goks3776",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Lonebu (AaFK, 6, 10%)",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": " : des débuts remarqués à la pointe de l'attaque de son équipe, avec un premier but à la clef.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "yedho779",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "t5x02782",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "nw6og1411",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Capitaine",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "ITALIC",
+                    "italicData": true
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "6hq5v784",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "q3x1b785",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Tripic (VIK, 12, 70,3%)",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": " : son taux de propriété parle pour lui. Meilleur joueur la saison passée.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "5nh3c790",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "nmbc01658",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "o2rey791",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Différentiel",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "ITALIC",
+                    "italicData": true
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "v7nse793",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "tgi3a794",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Meliga (KBK, 6, 1,8%)",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": " : catalogué milieu dans le jeu, cet ailier droit a inscrit un doublé en sortie de banc. Pourrait encore démarrer sur le banc.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "mvit2797",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "2uqax2468",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "yurej2532",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "5a6e92404",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Les six rencontres au menu de cette seconde journée d'Eliteserien nous semblent particulièrement indécises et équilibrées. Aussi, notre effectif nous permettant d'aligner un onze compétitif avec un joueur sur le banc, notre stratégie sera de ne rien faire : on s'abstiendra de tout transfert afin d'une part de capitaliser un transfert gratuit et surtout afin d'observer au plus près les forces en présence sur ce début de saison.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "go5m7799",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "3pdy9800",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "IMAGE",
+          "id": "5b81e24063",
+          "nodes": [
+            {
+              "type": "CAPTION",
+              "id": "7jjlm24139",
+              "nodes": [
+                {
+                  "type": "TEXT",
+                  "id": "",
+                  "nodes": [],
+                  "textData": {
+                    "text": "Bus team - game week 02.",
+                    "decorations": []
+                  }
+                }
+              ]
+            }
+          ],
+          "imageData": {
+            "containerData": {
+              "width": {
+                "size": "CONTENT"
+              },
+              "alignment": "CENTER",
+              "textWrap": true
+            },
+            "image": {
+              "src": {
+                "id": "3448f3_9da27f4929014ad886382dfa912aab77~mv2.png"
+              },
+              "width": 887,
+              "height": 821
+            },
+            "caption": "Bus team - game week 02."
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "wurjf658",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "qt2u6695",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "laary116",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "8ydpz101",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "x4ks1103",
+          "nodes": [],
+          "paragraphData": {}
+        }
+      ],
+      "documentStyle": {}
+    },
+    "media": {
+      "wixMedia": {
+        "image": {
+          "id": "3448f3_7a0c2caef85c4c9786a090affb744094~mv2.jpg",
+          "url": "https://static.wixstatic.com/media/3448f3_7a0c2caef85c4c9786a090affb744094~mv2.jpg",
+          "height": 680,
+          "width": 680,
+          "altText": "Molde s'impose en ouverture de l'Eliteserien 2026.",
+          "filename": "j1 derby.jpg"
+        }
+      },
+      "displayed": true,
+      "custom": false,
+      "altText": "Molde s'impose en ouverture de l'Eliteserien 2026."
+    }
+  },
+  {
+    "id": "613b610c-2209-4091-840c-01807eac46b7",
+    "title": "Comment jouer à la Fantasy Eliteserien 2026 ?",
+    "slug": "comment-jouer-à-la-fantasy-eliteserien-2026",
+    "categoryIds": [
+      "6dff31c1-cfda-4a5a-a64d-eff8d87d5990",
+      "5501864a-9bd1-4ba1-99b0-93229cee3119",
+      "703bdb8c-ae64-4c79-b2d1-d820c0617798"
+    ],
+    "richContent": {
+      "nodes": [
+        {
+          "type": "PARAGRAPH",
+          "id": "wudsb2376",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "7pa5k11559",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "gc9b311612",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "k33ya2793",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "IMAGE",
+          "id": "kokyz10096",
+          "nodes": [
+            {
+              "type": "CAPTION",
+              "id": "3m3gu10098",
+              "nodes": [
+                {
+                  "type": "TEXT",
+                  "id": "",
+                  "nodes": [],
+                  "textData": {
+                    "text": "Martin Gjone jouera cette saison à HamKam. Et vous ?",
+                    "decorations": []
+                  }
+                }
+              ]
+            }
+          ],
+          "imageData": {
+            "containerData": {
+              "width": {
+                "size": "CONTENT"
+              },
+              "alignment": "CENTER",
+              "textWrap": true
+            },
+            "image": {
+              "src": {
+                "id": "3448f3_1a1dfe58fdbf4bc7be31d3d388bacf17~mv2.jpg"
+              },
+              "width": 1200,
+              "height": 799
+            },
+            "caption": "Martin Gjone jouera cette saison à HamKam. Et vous ?"
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "ymx7b2885",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "h7uf72931",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "lnp0c2977",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "6tqus2422",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "rgr412468",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "pokg1898",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Comment jouer à la Fantasy Eliteserien 2026 ?",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "etg1y900",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "ar24i901",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "yjowq902",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "La création gratuite d'un compte TV 2 est nécessaire pour accéder au jeu et s'inscrire. Il n'y a qu'à se laisser guider en arrivant ici : ",
+                "decorations": []
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "https://en.fantasy.eliteserien.no/",
+                "decorations": [
+                  {
+                    "type": "LINK",
+                    "linkData": {
+                      "link": {
+                        "url": "https://en.fantasy.eliteserien.no/",
+                        "target": "BLANK",
+                        "rel": {
+                          "noreferrer": true
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "UNDERLINE"
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "r4wjx905",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "h8pz6906",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Une interface en anglais est disponible (cliquer sur le drapeau de l'Union jack). Sinon, il vous reste le norvégien.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "m1yu2908",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "mxh99909",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "i82f4910",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Les grandes lignes du jeu",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "COLOR",
+                    "colorData": {
+                      "foreground": "#2DB4DF"
+                    }
+                  },
+                  {
+                    "type": "FONT_SIZE",
+                    "fontSizeData": {
+                      "unit": "PX",
+                      "value": 30
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "8u60e912",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "f2ghn913",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "v8lxa914",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Les règles sont disponibles sur le site sous l'onglet « help »",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "oasgn916",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "https://en.fantasy.eliteserien.no/help/rules",
+                "decorations": [
+                  {
+                    "type": "LINK",
+                    "linkData": {
+                      "link": {
+                        "url": "https://en.fantasy.eliteserien.no/help/rules",
+                        "target": "BLANK",
+                        "rel": {
+                          "noreferrer": true
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "UNDERLINE"
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "4tdit918",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "owvyi919",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "io0p2920",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "efo2l921",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Effectif",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "COLOR",
+                    "colorData": {
+                      "foreground": "#0D1223"
+                    }
+                  },
+                  {
+                    "type": "FONT_SIZE",
+                    "fontSizeData": {
+                      "unit": "PX",
+                      "value": 24
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "lv39z923",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "bcg81924",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Un budget initial de 100 millions.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "sibk7926",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "a0w0f927",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Un effectif de 15 joueurs, avec maximum trois joueurs du même club.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "e08mu929",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "9uf1g930",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Un onze de départ comprenant au moins trois défenseurs et un attaquant.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "5a5wa932",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "v503y933",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "c3zgq934",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Transferts",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "COLOR",
+                    "colorData": {
+                      "foreground": "#0D1223"
+                    }
+                  },
+                  {
+                    "type": "FONT_SIZE",
+                    "fontSizeData": {
+                      "unit": "PX",
+                      "value": 24
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "0r3ip936",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "1f71w937",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Un transfert gratuit par journée.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "2zt9o939",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "u0feb940",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Cumul possible des transferts gratuits, jusqu'à cinq maximum.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "mrtki942",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "z6kpm943",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Chaque transfert supplémentaire coûte quatre points.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "tdckz945",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "2kcqx946",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Les prix varient en fonction de l'offre et la demande, avec des variations entre prix d'achat et prix actuel. Le prix affiché sur votre page de transferts correspond au prix de vente du joueur. Ne pas oublier qu'une commission de 50 % (arrondie au dixième supérieur) est prélevée sur tout bénéfice réalisé sur la vente.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "gnftw948",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "rkwtx949",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Pause d'été entre le round 11 (29/05) et le round 12 (05/07) : chaque manager recevra au maximum cinq transferts gratuits supplémentaires, sans pouvoir excéder la règle des 5 transferts gratuits maximum.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "1arxk951",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "abepm952",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Toute modification de votre équipe (onze de départ, composition du banc, changement de capitaine et transferts) doit être effectuée avant la date limite de la journée pour être prise en compte pour les matchs à venir.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "r1z2p954",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "w6h0j955",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "En général, la date limite pour les compositions d'équipe (et donc la fin des transferts) est fixée à cinq minutes avant le coup d'envoi du premier match de la journée.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "19kfm957",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "rm5ag958",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Enfin, par défaut, votre onze de départ est aligné à chaque journée, il n'y a pas besoin de validation spécifique.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "yrgxo960",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "9scda961",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "fkgxs962",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Wilcards",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "COLOR",
+                    "colorData": {
+                      "foreground": "#0D1223"
+                    }
+                  },
+                  {
+                    "type": "FONT_SIZE",
+                    "fontSizeData": {
+                      "unit": "PX",
+                      "value": 24
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "005ck964",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "icgkg965",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Une wildcard vous permet d'effectuer un nombre illimité de transferts au cours d'une journée dans la limite de votre budget du moment.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "3obvh967",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "1qtfv968",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Vous disposez de deux wildcards sur la saison.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "04z29970",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "1mk3c971",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "L'usage de vos wildcards est encadré :",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "6k93j973",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "BULLETED_LIST",
+          "id": "8h4im974",
+          "nodes": [
+            {
+              "type": "LIST_ITEM",
+              "id": "028or975",
+              "nodes": [
+                {
+                  "type": "PARAGRAPH",
+                  "id": "ona9i976",
+                  "nodes": [
+                    {
+                      "type": "TEXT",
+                      "id": "",
+                      "nodes": [],
+                      "textData": {
+                        "text": "la première à utiliser entre les journées 2 et 15",
+                        "decorations": []
+                      }
+                    }
+                  ],
+                  "style": {},
+                  "paragraphData": {
+                    "textStyle": {
+                      "textAlignment": "AUTO"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "LIST_ITEM",
+              "id": "3bdv1978",
+              "nodes": [
+                {
+                  "type": "PARAGRAPH",
+                  "id": "kj2y8979",
+                  "nodes": [
+                    {
+                      "type": "TEXT",
+                      "id": "",
+                      "nodes": [],
+                      "textData": {
+                        "text": "la seconde à utiliser entre les journées 16 et 30.",
+                        "decorations": []
+                      }
+                    }
+                  ],
+                  "style": {},
+                  "paragraphData": {
+                    "textStyle": {
+                      "textAlignment": "AUTO"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "bulletedListData": {
+            "indentation": 0
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "cmyoz981",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "k5huh982",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Lorsque vous jouez vos wildcards, vous conservez les transferts gratuits que vous possédiez avant de jouer la wildcard.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "gl27j17400",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "vwp5i984",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "IMAGE",
+          "id": "yxr7v12438",
+          "nodes": [
+            {
+              "type": "CAPTION",
+              "id": "5666j12468",
+              "nodes": [
+                {
+                  "type": "TEXT",
+                  "id": "",
+                  "nodes": [],
+                  "textData": {
+                    "text": "HamKam pour Hamarkameratene. Joue en vert et blanc dans sa Briskeby Arena, située dans la ville de Hamar.",
+                    "decorations": []
+                  }
+                }
+              ]
+            }
+          ],
+          "imageData": {
+            "containerData": {
+              "width": {
+                "size": "CONTENT"
+              },
+              "alignment": "CENTER",
+              "textWrap": true
+            },
+            "image": {
+              "src": {
+                "id": "3448f3_bdd314d92765464dab818a4b7432c729~mv2.jpg"
+              },
+              "width": 1600,
+              "height": 660
+            },
+            "caption": "HamKam pour Hamarkameratene. Joue en vert et blanc dans sa Briskeby Arena, située dans la ville de Hamar."
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "thltk12382",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "tlp22985",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "jma5o986",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Points",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "COLOR",
+                    "colorData": {
+                      "foreground": "#0D1223"
+                    }
+                  },
+                  {
+                    "type": "FONT_SIZE",
+                    "fontSizeData": {
+                      "unit": "PX",
+                      "value": 24
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "ryrte988",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "c2xfe989",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Vos joueurs titulaires marquent des points à chaque journée selon la nomenclature ci-dessous.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "dcmcf991",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "IMAGE",
+          "id": "kgl8l4680",
+          "nodes": [
+            {
+              "type": "CAPTION",
+              "id": "g40ve4712",
+              "nodes": [
+                {
+                  "type": "TEXT",
+                  "id": "",
+                  "nodes": [],
+                  "textData": {
+                    "text": "Nomenclature du scoring.",
+                    "decorations": []
+                  }
+                }
+              ]
+            }
+          ],
+          "imageData": {
+            "containerData": {
+              "width": {
+                "size": "CONTENT"
+              },
+              "alignment": "CENTER",
+              "textWrap": true
+            },
+            "image": {
+              "src": {
+                "id": "3448f3_cc3aae6868a04cfb9a244f66f2b18220~mv2.jpg"
+              },
+              "width": 605,
+              "height": 590
+            },
+            "caption": "Nomenclature du scoring."
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "jcrum4538",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "j6c1h4585",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "ik3ls4632",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "0derh992",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Un bonus est attribué à chaque match par le commentateur du match de TV 2 (chaîne de TV norvégienne).",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "hx0uj994",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "iknzc995",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "A noter que contrairement à FPL, il n'y a pas de Defensive contribution (DefCon).",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "5706v997",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "fukqj998",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Les points du capitaine sont doublés à chaque journée, avec désignation d'un vice-capitaine au cas où le capitaine est absent.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "ol1081000",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "ybaqb1001",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Si un titulaire de votre onze est absent, remplacement (s) automatique(s) en fonction de l'ordre sur le banc et de la structure de votre onze.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "y5sej1003",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "cnrxo4354",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "dpmp84401",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "0nvdr4448",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "88w4x1004",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "3hy931005",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Chips, la grande différence avec FPL",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "COLOR",
+                    "colorData": {
+                      "foreground": "#0D1223"
+                    }
+                  },
+                  {
+                    "type": "FONT_SIZE",
+                    "fontSizeData": {
+                      "unit": "PX",
+                      "value": 24
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "10bad1007",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "gay7q1008",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Les chips sont au nombre de quatre et sont à usage unique.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "9wz0m1010",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "4lw1e1011",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "On ne peut jouer qu'un seul chip à la fois par journée.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "zt86m1013",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "xz2jz1014",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "On ne peut pas jouer un chip en même temps qu'une wildcard.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "tzawx1016",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "gveqq1017",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Rich Uncle ",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "ITALIC",
+                    "italicData": true
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "w0pfg1019",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Un nombre illimité de transferts gratuits avec un budget illimité pour une seule journée. Puis, retour à votre effectif initial et vous conservez les transferts gratuits que vous possédiez avant de jouer ce chip.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "p8dsr1021",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "fido01022",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Attack! Attack!",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "ITALIC",
+                    "italicData": true
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "4gf9w1024",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Tous les attaquants doublent leurs points. Pas de capitaine cette journée là.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "vz1nt1026",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "d7mzf1027",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Two Captains",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "ITALIC",
+                    "italicData": true
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "5f7pl1029",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Le capitaine et le vice-capitaine doublent leurs points.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "ugorl1031",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "e02jc1032",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Park the Bus",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  },
+                  {
+                    "type": "ITALIC",
+                    "italicData": true
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "pce2q1034",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Tous les défenseurs doublent leurs points. Pas de capitaine cette journée là.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "h9mox6976",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "482h17024",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "qb45c7072",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "cff7d7120",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Voilà, il ne vous reste plus qu'à rejoindre notre Ligue Fantasy vous attend ici :",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "0fmsi9281",
+          "nodes": [],
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "viewer-xwudq1827",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "https://en.fantasy.eliteserien.no/leagues/auto-join/9oi91w",
+                "decorations": [
+                  {
+                    "type": "LINK",
+                    "linkData": {
+                      "link": {
+                        "url": "https://en.fantasy.eliteserien.no/leagues/auto-join/9oi91w",
+                        "target": "BLANK",
+                        "rel": {
+                          "noreferrer": true
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "UNDERLINE"
+                  }
+                ]
+              }
+            }
+          ],
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "5vowb9283",
+          "nodes": [],
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "viewer-nrn1j128",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "son code ",
+                "decorations": []
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "9oi91w",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            }
+          ],
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "d8c4k1036",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "vo93z1037",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "3dc2e1038",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "IMAGE",
+          "id": "5arbw2545",
+          "nodes": [
+            {
+              "type": "CAPTION",
+              "id": "kw0b32547",
+              "nodes": [
+                {
+                  "type": "TEXT",
+                  "id": "",
+                  "nodes": [],
+                  "textData": {
+                    "text": "Les clubs norvégiens aussi vous attendent...",
+                    "decorations": []
+                  }
+                }
+              ]
+            }
+          ],
+          "imageData": {
+            "containerData": {
+              "width": {
+                "size": "CONTENT"
+              },
+              "alignment": "CENTER",
+              "textWrap": true
+            },
+            "image": {
+              "src": {
+                "id": "3448f3_7e548e79a6de4760a2c2e62535e197bc~mv2.jpg"
+              },
+              "width": 1079,
+              "height": 1442
+            },
+            "caption": "Les clubs norvégiens aussi vous attendent..."
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "un4k51039",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        }
+      ],
+      "documentStyle": {}
+    },
+    "media": {
+      "wixMedia": {
+        "image": {
+          "id": "3448f3_1a1dfe58fdbf4bc7be31d3d388bacf17~mv2.jpg",
+          "url": "https://static.wixstatic.com/media/3448f3_1a1dfe58fdbf4bc7be31d3d388bacf17~mv2.jpg",
+          "height": 799,
+          "width": 1200,
+          "altText": "Eliteserien Fantasy, comment jouer ?",
+          "filename": "Martin Gjone HamKam.jpg"
+        }
+      },
+      "displayed": true,
+      "custom": true,
+      "altText": "Eliteserien Fantasy, comment jouer ?"
+    }
+  },
+  {
+    "id": "98ac2f84-b80a-4516-a8d8-e4de7248b8a5",
+    "title": "Eliteserien",
+    "slug": "eliteserien",
+    "categoryIds": [
+      "703bdb8c-ae64-4c79-b2d1-d820c0617798",
+      "6dff31c1-cfda-4a5a-a64d-eff8d87d5990"
+    ],
+    "richContent": {
+      "nodes": [
+        {
+          "type": "PARAGRAPH",
+          "id": "foo",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "3ha9j267",
+          "nodes": [],
+          "paragraphData": {}
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "lhrf6116",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "L'Eliteserien est de retour !",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "tvvte118",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "h66vv119",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Le championnat de Norvège reprend samedi 14 mars à 16h.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "l1f4d121",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "fh9qr122",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Notre Ligue Fantasy vous attend :",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "zp586124",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "xwudq1827",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "https://en.fantasy.eliteserien.no/leagues/auto-join/9oi91w",
+                "decorations": [
+                  {
+                    "type": "LINK",
+                    "linkData": {
+                      "link": {
+                        "url": "https://en.fantasy.eliteserien.no/leagues/auto-join/9oi91w",
+                        "target": "BLANK",
+                        "rel": {
+                          "noreferrer": true
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "UNDERLINE"
+                  }
+                ]
+              }
+            }
+          ],
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "kvp0w127",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "nrn1j128",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "son code ",
+                "decorations": []
+              }
+            },
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "9oi91w",
+                "decorations": [
+                  {
+                    "type": "BOLD",
+                    "fontWeightValue": 700
+                  }
+                ]
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "j5pz1251",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "0kajp1841",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "gfi3q132",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Une nouvelle rubrique vous accompagnera tout au long de la saison ici même.",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "llu8c134",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "gptuu135",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "Velkomst !",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "q9g8g137",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "fo5i8138",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "#Eliteserien",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "x7gc8140",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "#ESFantasy",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "d4nr6142",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "#2fantasy",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "8c3c7144",
+          "nodes": [
+            {
+              "type": "TEXT",
+              "id": "",
+              "nodes": [],
+              "textData": {
+                "text": "#fantasy",
+                "decorations": []
+              }
+            }
+          ],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "qxkah304",
+          "nodes": [],
+          "style": {},
+          "paragraphData": {
+            "textStyle": {
+              "textAlignment": "AUTO"
+            }
+          }
+        },
+        {
+          "type": "IMAGE",
+          "id": "9eyeo349",
+          "nodes": [
+            {
+              "type": "CAPTION",
+              "id": "x8xjw363",
+              "nodes": [
+                {
+                  "type": "TEXT",
+                  "id": "",
+                  "nodes": [],
+                  "textData": {
+                    "text": "Bodø Glimt, porte-étendard de l'Eliteserien.",
+                    "decorations": []
+                  }
+                }
+              ]
+            }
+          ],
+          "imageData": {
+            "containerData": {
+              "width": {
+                "size": "CONTENT"
+              },
+              "alignment": "CENTER",
+              "textWrap": true
+            },
+            "image": {
+              "src": {
+                "id": "3448f3_8269c54486da40568753816230277e4f~mv2.jpg"
+              },
+              "width": 2048,
+              "height": 1366
+            },
+            "caption": "Bodø Glimt, porte-étendard de l'Eliteserien."
+          }
+        },
+        {
+          "type": "PARAGRAPH",
+          "id": "8bs7u115",
+          "nodes": [],
+          "paragraphData": {}
+        }
+      ],
+      "documentStyle": {}
+    },
+    "media": {
+      "wixMedia": {
+        "image": {
+          "id": "3448f3_8269c54486da40568753816230277e4f~mv2.jpg",
+          "url": "https://static.wixstatic.com/media/3448f3_8269c54486da40568753816230277e4f~mv2.jpg",
+          "height": 1366,
+          "width": 2048,
+          "altText": "Eliteserien 2026 : Bodø Glimt à l'assaut de Viking.",
+          "filename": "HBebZn7XAAEaLWV.jpg"
+        }
+      },
+      "displayed": true,
+      "custom": true,
+      "altText": "Eliteserien 2026 : Bodø Glimt à l'assaut de Viking."
+    }
+  }
+]
