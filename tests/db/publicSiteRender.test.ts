@@ -193,9 +193,13 @@ describe('public site', () => {
         '<p class="article-card-teaser">« Une petite phrase qui donne envie de lire la suite » — dixit personne</p>',
       ),
       // The beforeAll fixture's own Premier League article never set a
-      // teaser — confirms a null teaser renders no element, not an empty one.
-      no_teaser_for_others: !page.html.includes('article-card-teaser"></p>'),
-    }).toEqual({ teaser_shown: true, no_teaser_for_others: true });
+      // teaser — the element still renders, empty, so every card's cover
+      // thumbnail lands at the same horizontal position on desktop
+      // regardless of which cards have a teaser and which don't. Omitting
+      // the element entirely for a teaser-less card was the first version
+      // of this, and visibly misaligned covers on a real mixed listing.
+      empty_teaser_still_renders_for_others: page.html.includes('article-card-teaser"></p>'),
+    }).toEqual({ teaser_shown: true, empty_teaser_still_renders_for_others: true });
   });
 
   it('AC-14: the published article page embeds its schema.org markup and the sitemap carries its canonical URL, with no writer action', async () => {

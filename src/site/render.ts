@@ -381,16 +381,22 @@ function viewOf(row: ArticleRow): PublishedArticleView {
  *  teaser (when the writer set one) sits between those two, hidden on
  *  mobile by `.article-card-teaser`'s own CSS (`SITE_CSS`) — narrow cards
  *  have no spare width for a third column, only the title/byline and the
- *  cover fit. */
+ *  cover fit.
+ *
+ *  The `<p class="article-card-teaser">` element itself is always emitted,
+ *  even with no text in it: on desktop it's the flex item that absorbs
+ *  whatever space the title/byline block doesn't use, so the cover
+ *  thumbnail lands at the same horizontal position on every card in the
+ *  list. Omitting the element entirely for a teaser-less card (the first
+ *  version of this) let `.article-card-text` shrink to its own content
+ *  width instead, pulling that card's cover thumbnail noticeably left of
+ *  every other card's — confirmed live, on a real listing mixing both. */
 function articleCard(row: ArticleRow): string {
   const cover =
     row.cover_image_url === null
       ? ''
       : `<img src="${escape(row.cover_image_url)}" alt="${escape(row.title)}" class="article-card-cover"/>`;
-  const teaser =
-    row.teaser === null || row.teaser === ''
-      ? ''
-      : `<p class="article-card-teaser">${escape(row.teaser)}</p>`;
+  const teaser = `<p class="article-card-teaser">${row.teaser === null ? '' : escape(row.teaser)}</p>`;
   return [
     `<li class="article-card" data-article-title="${escape(row.title)}">`,
     `<a href="${articlePath(viewOf(row))}">`,
