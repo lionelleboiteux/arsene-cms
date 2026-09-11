@@ -166,6 +166,38 @@ describe('public site', () => {
     });
   });
 
+  it('a listing card shows its teaser when the writer set one, and shows nothing extra when they didn\'t', async () => {
+    const { renderer, db } = ctx();
+    // Premier League / Pronos deliberately — Ligue 1 / Pronos / 26-27 is the
+    // exact bucket the season-scoping test below asserts an exact article
+    // list for, and this fixture must not leak into it.
+    await seedArticle(db.client, {
+      writer_id: await seedWriter(db.client, 'Autrice Teaser'),
+      title: 'Avec teaser',
+      league_name: 'Premier League',
+      type_name: 'Pronos',
+      status: 'published',
+      slug: 'avec-teaser',
+      published_at: '2026-08-13T09:00:00Z',
+      teaser: '« Une petite phrase qui donne envie de lire la suite » — dixit personne',
+    });
+
+    const page = await renderer.renderCategoryPage({
+      league_slug: 'premier-league',
+      season_slug: '26-27',
+      type_slug: 'pronos',
+    });
+
+    expect({
+      teaser_shown: page.html.includes(
+        '<p class="article-card-teaser">« Une petite phrase qui donne envie de lire la suite » — dixit personne</p>',
+      ),
+      // The beforeAll fixture's own Premier League article never set a
+      // teaser — confirms a null teaser renders no element, not an empty one.
+      no_teaser_for_others: !page.html.includes('article-card-teaser"></p>'),
+    }).toEqual({ teaser_shown: true, no_teaser_for_others: true });
+  });
+
   it('AC-14: the published article page embeds its schema.org markup and the sitemap carries its canonical URL, with no writer action', async () => {
     const { renderer } = ctx();
 

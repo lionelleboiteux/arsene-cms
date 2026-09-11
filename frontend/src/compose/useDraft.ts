@@ -20,6 +20,12 @@ export type DraftFields = {
   type_name: string;
   meta_title: string;
   meta_description: string;
+  /** Short excerpt shown only on desktop listing cards (`articleCard()`,
+   *  `src/site/render.ts`), between the title/byline and the cover thumb —
+   *  UI-capped at 250 chars (`ComposePage.tsx`'s `<textarea maxLength>`),
+   *  same "no DB/API enforcement, just the editor" relationship title and
+   *  body_html already have. */
+  teaser: string;
 };
 
 export type DraftState =
@@ -52,6 +58,7 @@ function emptyFields(): DraftFields {
     type_name: '',
     meta_title: '',
     meta_description: '',
+    teaser: '',
   };
 }
 
@@ -68,6 +75,7 @@ async function persistFields(articleId: string, fields: DraftFields): Promise<vo
       category_id: fields.category_id,
       meta_title: fields.meta_title,
       meta_description: fields.meta_description,
+      teaser: fields.teaser,
       updated_at: new Date().toISOString(),
     })
     .eq('id', articleId);
@@ -77,7 +85,7 @@ async function persistFields(articleId: string, fields: DraftFields): Promise<vo
 async function hydrateExtraFields(articleId: string): Promise<Partial<DraftFields>> {
   const { data } = await supabase
     .from('articles')
-    .select('league_id, category_id, meta_title, meta_description, arsene_leagues(name), categories(name)')
+    .select('league_id, category_id, meta_title, meta_description, teaser, arsene_leagues(name), categories(name)')
     .eq('id', articleId)
     .single();
   if (data === null) return {};
@@ -86,6 +94,7 @@ async function hydrateExtraFields(articleId: string): Promise<Partial<DraftField
     category_id: string | null;
     meta_title: string | null;
     meta_description: string | null;
+    teaser: string | null;
     arsene_leagues: unknown;
     categories: unknown;
   };
@@ -96,6 +105,7 @@ async function hydrateExtraFields(articleId: string): Promise<Partial<DraftField
     type_name: embeddedName(row.categories),
     meta_title: row.meta_title ?? '',
     meta_description: row.meta_description ?? '',
+    teaser: row.teaser ?? '',
   };
 }
 

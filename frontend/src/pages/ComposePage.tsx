@@ -265,6 +265,19 @@ export function ComposePage({
       </div>
 
       <div className="field-row">
+        <label htmlFor="teaser">Teaser</label>
+        <textarea
+          id="teaser"
+          value={fields.teaser}
+          onChange={(event) => setField('teaser', event.target.value.slice(0, 250))}
+          maxLength={250}
+          rows={3}
+          placeholder="Un court texte, affiché uniquement sur la version desktop des listes d'articles"
+        />
+        <p className="char-counter">{fields.teaser.length}/250</p>
+      </div>
+
+      <div className="field-row">
         <label htmlFor="body">Contenu</label>
         <BodyEditor ref={bodyEditorRef} value={fields.body_html} onChange={(html) => setField('body_html', html)} />
       </div>

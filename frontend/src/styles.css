@@ -54,6 +54,13 @@ body {
   margin: 1rem 0;
 }
 
+.char-counter {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #666;
+  align-self: flex-end;
+}
+
 .body-editor {
   min-height: 16rem;
   border: 1px solid #ccc;

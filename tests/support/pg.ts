@@ -135,6 +135,9 @@ export type SeedArticleOpts = {
   published_at?: string | null;
   first_published_at?: string | null;
   body_html?: string;
+  /** Desktop-only listing-card excerpt (0011_article_teaser.sql). Defaults
+   *  to `null` — most fixtures don't need one, same as most real drafts. */
+  teaser?: string | null;
   /** Credited authors, ordinal order (`article_authors`). Defaults to just
    *  `writer_id` — the single-author case every existing caller wants;
    *  pass more to seed a co-authored fixture directly. */
@@ -146,8 +149,8 @@ export async function seedArticle(client: pg.Client, o: SeedArticleOpts): Promis
   const res = await client.query(
     `insert into articles
        (writer_id, title, body_html, league_id, category_id, status, slug,
-        meta_title, meta_description, published_at, first_published_at)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        meta_title, meta_description, teaser, published_at, first_published_at)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      returning id`,
     [
       o.writer_id,
@@ -159,6 +162,7 @@ export async function seedArticle(client: pg.Client, o: SeedArticleOpts): Promis
       o.slug ?? null,
       o.title,
       'Nos pronostics, confiance, scores et analyses match par match.',
+      o.teaser ?? null,
       o.published_at ?? null,
       o.first_published_at ?? o.published_at ?? null,
     ],

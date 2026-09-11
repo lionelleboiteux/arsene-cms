@@ -42,6 +42,11 @@ type ArticleRow = {
    *  `writer_avatars` row (0010), or `null` if they never set one. */
   authors: { name: string; avatar_url: string | null }[];
   cover_image_url: string | null;
+  /** Desktop-only listing-card excerpt (`ComposePage.tsx`'s "Teaser" field,
+   *  0011_article_teaser.sql) — `null` when the writer never filled it in,
+   *  same "no element at all" handling `articleCard()` already gives a
+   *  missing cover. */
+  teaser: string | null;
   published_at: Date;
   first_published_at: Date;
 };
@@ -65,7 +70,7 @@ type ArticleRow = {
  * `<img src="">`.
  */
 const PUBLISHED_ARTICLES_SQL = `
-  select a.id, a.title, a.slug, a.body_html,
+  select a.id, a.title, a.slug, a.body_html, a.teaser,
          l.name as league_name, c.name as type_name,
          coalesce(
            (select json_agg(json_build_object(
@@ -191,6 +196,15 @@ ul.articles{list-style:none;margin:0;padding:1rem;display:grid;gap:1rem;max-widt
 .article-card-title{margin:0 0 .3rem;font-size:1rem;font-weight:700;line-height:1.35}
 .article-card-byline{margin:0;color:var(--muted);font-size:.85rem}
 .article-card-cover{flex:none;width:76px;height:76px;object-fit:cover;border-radius:10px}
+/* Teaser (ComposePage.tsx's "Teaser" field) — desktop only, per the request
+   it was scoped to: a narrow card has no spare width for a third column
+   next to the title/byline and the cover thumbnail. */
+.article-card-teaser{display:none}
+@media (min-width:640px){
+  .article-card-text{flex:0 1 260px}
+  .article-card-teaser{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
+    overflow:hidden;flex:1 1 auto;min-width:0;margin:0;color:var(--muted);font-style:italic;font-size:.9rem}
+}
 p.empty{padding:2rem;color:var(--muted)}
 /* Same specificity fight as the .site-banner bleed fix above: nav.js's own
    injected stylesheet carries ".site-nav a{text-decoration:none;font-weight:600}",
@@ -363,12 +377,20 @@ function viewOf(row: ArticleRow): PublishedArticleView {
 /** AC-06: listings show the cover image and never a body image. Compact
  *  row layout — title and byline on the left, a small square thumbnail on
  *  the right — rather than a full-width hero per card, so a listing of many
- *  articles (a whole league, across every type) stays scannable. */
+ *  articles (a whole league, across every type) stays scannable. The
+ *  teaser (when the writer set one) sits between those two, hidden on
+ *  mobile by `.article-card-teaser`'s own CSS (`SITE_CSS`) — narrow cards
+ *  have no spare width for a third column, only the title/byline and the
+ *  cover fit. */
 function articleCard(row: ArticleRow): string {
   const cover =
     row.cover_image_url === null
       ? ''
       : `<img src="${escape(row.cover_image_url)}" alt="${escape(row.title)}" class="article-card-cover"/>`;
+  const teaser =
+    row.teaser === null || row.teaser === ''
+      ? ''
+      : `<p class="article-card-teaser">${escape(row.teaser)}</p>`;
   return [
     `<li class="article-card" data-article-title="${escape(row.title)}">`,
     `<a href="${articlePath(viewOf(row))}">`,
@@ -376,6 +398,7 @@ function articleCard(row: ArticleRow): string {
     `<h3 class="article-card-title">${escape(row.title)}</h3>`,
     `<p class="article-card-byline">${authorsHtml(row.authors)} · ${relativeTime(row.published_at.toISOString())}</p>`,
     '</div>',
+    teaser,
     cover,
     '</a>',
     '</li>',
