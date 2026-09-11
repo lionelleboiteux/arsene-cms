@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
+import { Node, mergeAttributes } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { TextStyle } from '@tiptap/extension-text-style';
 import Color from '@tiptap/extension-color';
@@ -12,6 +13,46 @@ export type BodyEditorHandle = {
    *  texte" on an already-uploaded, ready `BodyImageList` row. */
   insertImage(src: string, alt: string): void;
 };
+
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    caption: {
+      /** Turn the current block into a caption (e.g. the credit line under
+       *  an inserted image). @example editor.commands.setCaption() */
+      setCaption: () => ReturnType;
+    };
+  }
+}
+
+/**
+ * The paragraph-style dropdown's fourth option ("Légende"), for text like an
+ * image credit line — smaller and visually distinct from body copy on the
+ * published page (`.body small`, `src/site/render.ts`). Maps to a bare
+ * `<small>` tag, the same "just a semantic tag, no attributes" pattern
+ * `h2`/`h3` already use — `sanitizePastedHtml`'s `ALLOWED_TAGS`
+ * (`src/domain/paste.ts`) has the full reasoning for why `<small>` rather
+ * than `<figcaption>` (no `<figure>` grouping exists here) or a `class` on
+ * `<p>` (stripped unconditionally by the sanitizer's own `p` transform).
+ */
+const Caption = Node.create({
+  name: 'caption',
+  group: 'block',
+  content: 'inline*',
+  parseHTML() {
+    return [{ tag: 'small' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['small', mergeAttributes(HTMLAttributes), 0];
+  },
+  addCommands() {
+    return {
+      setCaption:
+        () =>
+        ({ commands }) =>
+          commands.setNode(this.name),
+    };
+  },
+});
 
 /**
  * Bold/italic/underline/paragraph-style/colour, plus inline images inserted
@@ -62,6 +103,7 @@ export const BodyEditor = forwardRef<BodyEditorHandle, { value: string; onChange
         TextStyle,
         Color.configure({ types: ['textStyle'] }),
         Image.configure({ inline: false, allowBase64: false }),
+        Caption,
       ],
       content: value,
       onUpdate: ({ editor: e }) => {
@@ -106,7 +148,9 @@ export const BodyEditor = forwardRef<BodyEditorHandle, { value: string; onChange
       ? 'h2'
       : editor.isActive('heading', { level: 3 })
         ? 'h3'
-        : 'p';
+        : editor.isActive('caption')
+          ? 'caption'
+          : 'p';
     const color = (editor.getAttributes('textStyle').color as string | undefined) ?? '#000000';
 
     return (
@@ -128,12 +172,14 @@ export const BodyEditor = forwardRef<BodyEditorHandle, { value: string; onChange
               const choice = event.target.value;
               if (choice === 'p') editor.chain().focus().setParagraph().run();
               else if (choice === 'h2') editor.chain().focus().toggleHeading({ level: 2 }).run();
-              else editor.chain().focus().toggleHeading({ level: 3 }).run();
+              else if (choice === 'h3') editor.chain().focus().toggleHeading({ level: 3 }).run();
+              else editor.chain().focus().setCaption().run();
             }}
           >
             <option value="p">Normal</option>
             <option value="h2">Titre 2</option>
             <option value="h3">Titre 3</option>
+            <option value="caption">Légende</option>
           </select>
           <button
             type="button"

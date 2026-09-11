@@ -11,8 +11,14 @@
 
 import sanitizeHtml from 'sanitize-html';
 
-/** Tags an article keeps. Everything else is unwrapped (its text survives). */
-const ALLOWED_TAGS = ['h2', 'h3', 'p', 'ul', 'ol', 'li', 'br', 'a', 'strong', 'em', 'u', 'span', 'img'] as const;
+/** Tags an article keeps. Everything else is unwrapped (its text survives).
+ *  `small` is the caption style (`BodyEditor.tsx`'s "Légende" option) — a
+ *  block-level paragraph style, same "bare semantic tag, no attributes"
+ *  pattern as `h2`/`h3`, picked over `figcaption` because this editor never
+ *  groups an image and its caption into a `<figure>`; picked over a `class`
+ *  on `<p>` because `transformTags` below strips every `p` attribute
+ *  unconditionally, so a class-based marker would never survive a save. */
+const ALLOWED_TAGS = ['h2', 'h3', 'p', 'small', 'ul', 'ol', 'li', 'br', 'a', 'strong', 'em', 'u', 'span', 'img'] as const;
 
 /** `class="MsoHeading2"` (Word) or `style="mso-style-name:'Heading 2'"`. */
 function wordHeadingTag(attribs: Record<string, string>): 'h2' | 'h3' | null {

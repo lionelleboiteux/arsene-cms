@@ -84,6 +84,11 @@ describe('paste sanitization', () => {
       expect(collapse(await sanitize(raw))).toBe('<p><strong>gras</strong><em>italique</em><u>souligné</u></p>');
     });
 
+    it('keeps a <small> caption block, with no attributes (BodyEditor.tsx\'s "Légende" style, e.g. under an image)', async () => {
+      const raw = '<small class="c1" style="color:red">Photo : Ligue 1</small>';
+      expect(collapse(await sanitize(raw))).toBe('<small>Photo : Ligue 1</small>');
+    });
+
     it('keeps a colour span, normalised to just its hex colour', async () => {
       const raw = '<p><span style="color: #FF0000; font-weight: bold">Texte</span></p>';
       expect(collapse(await sanitize(raw))).toBe('<p><span style="color:#FF0000">Texte</span></p>');
