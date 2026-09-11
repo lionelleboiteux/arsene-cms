@@ -38,7 +38,18 @@ export const BodyEditor = forwardRef<BodyEditorHandle, { value: string; onChange
     const lastEmittedRef = useRef<string | null>(value);
 
     const editor = useEditor({
-      immediatelyRender: true,
+      // `true` forces the editor to construct its DOM synchronously during
+      // React's render phase rather than in an effect — Tiptap's own docs
+      // now warn against this outside SSR contexts (where it's needed to
+      // avoid a hydration mismatch, which doesn't apply here: this is a
+      // pure client-side-rendered Vite SPA, no server render at all).
+      // Reproduced directly: with `true`, mounting this exact extension set
+      // (StarterKit + TextStyle + Color) hangs the tab's renderer outright
+      // in three independent repros this session — a live compose page, an
+      // isolated React harness, and a vanilla (non-React) Tiptap Editor, no
+      // StrictMode double-mount involved in two of the three. `false` is
+      // Tiptap v3's own current default for exactly this reason.
+      immediatelyRender: false,
       extensions: [
         StarterKit.configure({
           heading: { levels: [2, 3] },
