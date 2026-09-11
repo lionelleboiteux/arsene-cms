@@ -180,14 +180,23 @@ describe('convertRicosToHtml', () => {
     expect(result.html).toBe('<p><a href="https://pronos.fantasy-coach.fr/"><u>le jeu des pronos</u></a></p>');
   });
 
-  it('a non-hex COLOR foreground (rgb() or a named colour, both real Wix output) produces no span', () => {
+  it('a COLOR foreground in rgb() form — the real shape every colour in a real 442KB post used, never hex — is normalized to hex, not dropped', () => {
     const result = convertRicosToHtml({
       nodes: [
+        // The exact decoration shape from a real fetched Wix document
+        // (`background:"transparent",foreground:"rgb(34, 34, 34)"`).
+        paragraph('gris', [{ type: 'COLOR', colorData: { background: 'transparent', foreground: 'rgb(34, 34, 34)' } }]),
         paragraph('noir', [{ type: 'COLOR', colorData: { foreground: 'rgb(0, 0, 0)' } }]),
-        paragraph('bleu', [{ type: 'COLOR', colorData: { foreground: 'blue' } }]),
       ],
     });
-    expect(result.html).toBe('<p>noir</p><p>bleu</p>');
+    expect(result.html).toBe('<p><span style="color:#222222">gris</span></p><p><span style="color:#000000">noir</span></p>');
+  });
+
+  it('a named colour (no hex/rgb conversion exists for it) still produces no span', () => {
+    const result = convertRicosToHtml({
+      nodes: [paragraph('bleu', [{ type: 'COLOR', colorData: { foreground: 'blue' } }])],
+    });
+    expect(result.html).toBe('<p>bleu</p>');
   });
 
   it('a BULLETED_LIST of plain-paragraph items becomes <ul><li>', () => {

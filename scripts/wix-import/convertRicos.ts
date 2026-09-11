@@ -20,12 +20,17 @@
  * writers use a `LIST_ITEM > HEADING` as a bolded label line) are rendered
  * the same way top-level blocks are, then wrapped in `<li>`.
  *
- * A `COLOR` decoration only survives as a `<span style="color:...">` when
- * its foreground is the literal hex form `sanitizePastedHtml`'s
- * `allowedStyles` actually keeps (`^#[0-9a-f]{3,8}$`) — Wix also produces
- * `rgb(...)` and named colours (`"blue"`) that the sanitizer would silently
- * strip later anyway, so they're dropped here instead of emitted and lost.
- * A `LINK` decoration becomes `<a href="...">`, the one other inline tag
+ * A `COLOR` decoration survives as a `<span style="color:...">`, normalized
+ * to the literal hex form `sanitizePastedHtml`'s `allowedStyles` actually
+ * keeps (`^#[0-9a-f]{3,8}$`) — Wix's own `foreground` value is `rgb(r,g,b)`
+ * in every real document seen so far, never hex (confirmed against a real
+ * 442KB post carrying 2,034 COLOR decorations, all `rgb(...)`): an earlier
+ * version of this function only accepted literal hex on the theory that
+ * `rgb(...)` would reach the sanitizer and get stripped anyway, which
+ * silently dropped every colour on import rather than converting the
+ * format — `normalizeColor` closes that gap. A named colour (`"blue"`)
+ * still has no conversion and is dropped, same as before. A `LINK`
+ * decoration becomes `<a href="...">`, the one other inline tag
  * `sanitizePastedHtml` allows.
  *
  * Images aren't inlined as real URLs here — a Wix media id only resolves to
@@ -40,6 +45,19 @@
 
 const HEADING_MIN_FONT_SIZE = 24;
 const HEX_COLOR = /^#[0-9a-f]{3,8}$/i;
+const RGB_COLOR = /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i;
+
+/** `sanitizePastedHtml` only ever keeps a literal hex colour value — Wix's
+ *  `colorData.foreground` is `rgb(r,g,b)`, not hex, in every real document
+ *  seen so far. Returns `null` for anything neither form matches (a named
+ *  colour, an unexpected shape) rather than guessing. */
+function normalizeColor(value: string): string | null {
+  if (HEX_COLOR.test(value)) return value;
+  const rgb = RGB_COLOR.exec(value);
+  if (rgb === null) return null;
+  const toHex = (channel: string): string => Math.min(255, Math.max(0, Number(channel))).toString(16).padStart(2, '0');
+  return `#${toHex(rgb[1] ?? '0')}${toHex(rgb[2] ?? '0')}${toHex(rgb[3] ?? '0')}`;
+}
 
 // Extra fields real Wix documents carry (fontWeightValue, italicData, ...)
 // are allowed through but never read — only what each decoration type
@@ -98,8 +116,9 @@ function textRunHtml(node: RicosNode): string {
   const decorations = node.textData?.decorations ?? [];
 
   let html = text;
-  const color = decorations.find((d) => d.type === 'COLOR')?.colorData?.foreground;
-  if (color !== undefined && HEX_COLOR.test(color)) html = `<span style="color:${color}">${html}</span>`;
+  const rawColor = decorations.find((d) => d.type === 'COLOR')?.colorData?.foreground;
+  const color = rawColor === undefined ? null : normalizeColor(rawColor);
+  if (color !== null) html = `<span style="color:${color}">${html}</span>`;
   if (decorations.some((d) => d.type === 'UNDERLINE')) html = `<u>${html}</u>`;
   if (decorations.some((d) => d.type === 'ITALIC')) html = `<em>${html}</em>`;
   if (decorations.some((d) => d.type === 'BOLD')) html = `<strong>${html}</strong>`;
