@@ -556,7 +556,7 @@ describe('public site', () => {
       expect(order).toHaveLength(3);
     });
 
-    it('the sidebar has no low-value filler cards — just the Pronos CTA (MPG/Premier League/Bundesliga shortcut cards were removed, judged not to add anything)', async () => {
+    it('the sidebar has no low-value filler cards (MPG/Premier League/Bundesliga shortcut cards were removed, judged not to add anything)', async () => {
       const { renderer } = ctx();
       const page = await renderer.renderHomepage();
 
@@ -565,6 +565,20 @@ describe('public site', () => {
         has_mpg_filler: page.html.includes('dernier bilan'),
         has_shortcut_cards: page.html.includes('home-shortcut'),
       }).toEqual({ has_pronos_cta: true, has_mpg_filler: false, has_shortcut_cards: false });
+    });
+
+    it('the "Outil pour la Ligue 1" card sits in the sidebar under the Pronos CTA, not in the main column', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderHomepage();
+
+      const sideColumn = page.html.match(/<div class="home-col-side">(.*?)<\/div>\s*<footer/s)?.[1] ?? '';
+      const mainColumn = page.html.match(/<div class="home-col-main">(.*?)<\/div>\s*<div class="home-col-side">/s)?.[1] ?? '';
+
+      expect({
+        tool_card_in_side_column: sideColumn.includes('🛠 Outil pour la Ligue 1'),
+        pronos_cta_before_tool_card: sideColumn.indexOf('🎯 Pronos') < sideColumn.indexOf('🛠 Outil pour la Ligue 1'),
+        tool_card_not_in_main_column: !mainColumn.includes('🛠 Outil pour la Ligue 1'),
+      }).toEqual({ tool_card_in_side_column: true, pronos_cta_before_tool_card: true, tool_card_not_in_main_column: true });
     });
 
     it('has a footer with the current-year copyright line', async () => {
