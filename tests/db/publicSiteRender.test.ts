@@ -134,6 +134,22 @@ describe('public site', () => {
     });
   });
 
+  it('the "derniers Player Picks" block is omitted entirely when the hero is the only Ligue 1 Player Picks article published so far — no empty card, no placeholder', async () => {
+    const { renderer } = ctx();
+
+    const page = await renderer.renderHomepage();
+
+    expect(page.html).not.toContain('home-picks-card');
+  });
+
+  it('the hero subtitle falls back to the old static line when the hero article has no teaser', async () => {
+    const { renderer } = ctx();
+
+    const page = await renderer.renderHomepage();
+
+    expect(page.html).toContain('<p class="home-subtitle">Article hebdo — mis à jour chaque semaine</p>');
+  });
+
   it('AC-11: a category with no published article shows "No articles yet" rather than an error or a blank page', async () => {
     const { renderer } = ctx();
 
@@ -164,6 +180,23 @@ describe('public site', () => {
       images: [coverUrl],
       ogImage: coverUrl,
     });
+  });
+
+  it('SEO: a category listing renders a description meta tag built from its real league/type, plus robots index/follow', async () => {
+    const { renderer } = ctx();
+
+    const page = await renderer.renderCategoryPage({
+      league_slug: 'ligue-1',
+      season_slug: '26-27',
+      type_slug: 'pronos',
+    });
+
+    expect({
+      has_description: page.html.includes(
+        '<meta name="description" content="Pronos Ligue 1 — 26-27 : les derniers articles Fantasy Coach."/>',
+      ),
+      has_robots: page.html.includes('<meta name="robots" content="index, follow"/>'),
+    }).toEqual({ has_description: true, has_robots: true });
   });
 
   it('a listing card shows its teaser when the writer set one, and shows nothing extra when they didn\'t', async () => {
@@ -223,6 +256,27 @@ describe('public site', () => {
       json_ld_headline: 'Pronos Ligue 1 - Journée 12',
       sitemap_has_article: true,
     });
+  });
+
+  it('AC-13 follow-through: the article page renders its own meta_description as both <meta name="description"> and og:description, and uses meta_title for <title>', async () => {
+    const { renderer } = ctx();
+
+    const page = await renderer.renderArticlePage({
+      league_slug: 'ligue-1',
+      season_slug: '26-27',
+      type_slug: 'pronos',
+      slug: 'pronos-ligue-1-journee-12',
+    });
+
+    expect({
+      has_description: page.html.includes(
+        '<meta name="description" content="Nos pronostics, confiance, scores et analyses match par match."/>',
+      ),
+      has_og_description: page.html.includes(
+        '<meta property="og:description" content="Nos pronostics, confiance, scores et analyses match par match."/>',
+      ),
+      has_title: page.html.includes('<title>Pronos Ligue 1 - Journée 12</title>'),
+    }).toEqual({ has_description: true, has_og_description: true, has_title: true });
   });
 
   it('NFR-EGRESS-01: no rendered page points a visitor at Supabase Storage, because hotlinking blows the 5 GB/month egress free tier', async () => {
@@ -375,6 +429,21 @@ describe('public site', () => {
 
       expect(page).toBeNull();
     });
+
+    it('SEO: renders a description meta tag naming the league and article count, robots index/follow, and a one-line intro above the list', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderLeaguePage({ league_slug: 'bundesliga' });
+
+      expect({
+        has_description: page?.html.includes(
+          '<meta name="description" content="Bundesliga : toutes les analyses Fantasy Coach — 1 article publié."/>',
+        ),
+        has_robots: page?.html.includes('<meta name="robots" content="index, follow"/>'),
+        has_intro: page?.html.includes(
+          '<p class="listing-intro">1 article publié pour Bundesliga.</p>',
+        ),
+      }).toEqual({ has_description: true, has_robots: true, has_intro: true });
+    });
   });
 
   describe('force-light — listing pages match pronos\'s always-light background, the article page follows device preference', () => {
@@ -504,6 +573,128 @@ describe('public site', () => {
 
       const currentYear = new Date().getFullYear();
       expect(page.html).toContain(`<footer class="home-footer">© Fantasy Coach ${currentYear}</footer>`);
+    });
+
+    it('the Ligue 1 tools card has a third Groupes pill, alongside DNP and Compos, linking to the live groupes.fantasy-coach.fr site', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderHomepage();
+
+      expect({
+        dnp: page.html.includes('<a class="home-tool-link" href="https://l1.dnp.fantasy-coach.fr/">Indisponibles / DNP</a>'),
+        compos: page.html.includes(
+          '<a class="home-tool-link" href="https://l1.compos.fantasy-coach.fr/">Compos probables</a>',
+        ),
+        groupes: page.html.includes(
+          '<a class="home-tool-link" href="https://groupes.fantasy-coach.fr/">Groupes</a>',
+        ),
+      }).toEqual({ dnp: true, compos: true, groupes: true });
+    });
+
+    it('SEO: has a keyword-bearing <title>, a description/og:description, and robots index/follow', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderHomepage();
+
+      expect({
+        has_title: page.html.includes(
+          '<title>Fantasy Coach — Ligue 1, Premier League, Bundesliga : actus, pronos, compos</title>',
+        ),
+        has_description: page.html.includes('<meta name="description" content="Toute l’actualité Fantasy Foot'),
+        has_og_description: page.html.includes('<meta property="og:description" content="Toute l’actualité Fantasy Foot'),
+        has_robots: page.html.includes('<meta name="robots" content="index, follow"/>'),
+      }).toEqual({ has_title: true, has_description: true, has_og_description: true, has_robots: true });
+    });
+
+    it('lists the 3 most recent other Ligue 1 Player Picks articles under the hero, excluding the hero itself, most recent first', async () => {
+      const { renderer, db } = ctx();
+      const writer = await seedWriter(db.client, 'Recrue Picks');
+      // All published after the current hero ('Player Picks, Ligue 1, J1',
+      // 2026-08-20, seeded by the `renderLeaguePage` "groups by type" test
+      // above) so J8 becomes the new hero and J7/J6/J1 — not J5, the oldest —
+      // are the 3 most recent picks left over.
+      await seedArticle(db.client, {
+        writer_id: writer,
+        title: 'Player Picks, Ligue 1, J6',
+        league_name: 'Ligue 1',
+        type_name: 'Player Picks',
+        status: 'published',
+        slug: 'player-picks-ligue-1-j6',
+        published_at: '2026-08-23T09:00:00Z',
+      });
+      await seedArticle(db.client, {
+        writer_id: writer,
+        title: 'Player Picks, Ligue 1, J7',
+        league_name: 'Ligue 1',
+        type_name: 'Player Picks',
+        status: 'published',
+        slug: 'player-picks-ligue-1-j7',
+        published_at: '2026-08-24T09:00:00Z',
+      });
+      await seedArticle(db.client, {
+        writer_id: writer,
+        title: 'Player Picks, Ligue 1, J8',
+        league_name: 'Ligue 1',
+        type_name: 'Player Picks',
+        status: 'published',
+        slug: 'player-picks-ligue-1-j8',
+        published_at: '2026-08-25T09:00:00Z',
+      });
+
+      const page = await renderer.renderHomepage();
+      const picksTitles = [...page.html.matchAll(/<p class="home-pick-title">([^<]+)<\/p>/g)].map((m) => m[1]);
+
+      expect({
+        hero_title: page.html.match(/<h1 class="home-headline">([^<]+)<\/h1>/)?.[1],
+        picks_titles: picksTitles,
+        links_to_article: page.html.includes(
+          '<a class="home-pick" href="/articles/ligue-1/26-27/player-picks/player-picks-ligue-1-j7">',
+        ),
+      }).toEqual({
+        hero_title: 'Player Picks, Ligue 1, J8',
+        picks_titles: ['Player Picks, Ligue 1, J7', 'Player Picks, Ligue 1, J6', 'Player Picks, Ligue 1, J1'],
+        links_to_article: true,
+      });
+    });
+
+    it('the hero subtitle shows the article\'s own teaser when the writer set one, instead of the old static line', async () => {
+      const { renderer, db } = ctx();
+      const writer = await seedWriter(db.client, 'Teaser Writer');
+      // Published after J8 (the current hero, seeded above) so this becomes
+      // the new hero.
+      await seedArticle(db.client, {
+        writer_id: writer,
+        title: 'Player Picks, Ligue 1, J9',
+        league_name: 'Ligue 1',
+        type_name: 'Player Picks',
+        status: 'published',
+        slug: 'player-picks-ligue-1-j9',
+        published_at: '2026-08-26T09:00:00Z',
+        teaser: 'Mbappé et Doué en feu, notre sélection pour la J9.',
+      });
+
+      const page = await renderer.renderHomepage();
+
+      expect(page.html).toContain(
+        '<p class="home-subtitle">Mbappé et Doué en feu, notre sélection pour la J9.</p>',
+      );
+    });
+
+    it('the Pronos CTA shows the 5 pronos.fantasy-coach.fr league crests instead of the old "5 ligues couvertes" text', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderHomepage();
+
+      const crestsBlock = page.html.match(/<div class="home-cta-leagues">(.*?)<\/div>/s)?.[1] ?? '';
+      const crestAlts = [...crestsBlock.matchAll(/alt="([^"]+)"/g)].map((m) => m[1]);
+      const crestSrcs = [...crestsBlock.matchAll(/src="([^"]+)"/g)].map((m) => m[1]);
+
+      expect({
+        crestAlts,
+        allWikimediaHosted: crestSrcs.length > 0 && crestSrcs.every((src) => src?.startsWith('https://upload.wikimedia.org/')),
+        has_old_text: page.html.includes('ligues couvertes'),
+      }).toEqual({
+        crestAlts: ['Ligue 1', 'Premier League', 'Bundesliga', 'Serie A', 'La Liga'],
+        allWikimediaHosted: true,
+        has_old_text: false,
+      });
     });
   });
 

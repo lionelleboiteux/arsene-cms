@@ -47,6 +47,13 @@ type ArticleRow = {
    *  same "no element at all" handling `articleCard()` already gives a
    *  missing cover. */
   teaser: string | null;
+  /** AC-13 — a writer's own edit if they made one, else `suggestMeta()`'s
+   *  own suggestion (`publishArticle.ts`'s three-way fallback: request body
+   *  → already-persisted value → generated suggestion) — always a real
+   *  value by the time an article is actually published, but typed
+   *  nullable anyway since nothing here re-validates that. */
+  meta_title: string | null;
+  meta_description: string | null;
   published_at: Date;
   first_published_at: Date;
 };
@@ -70,7 +77,7 @@ type ArticleRow = {
  * `<img src="">`.
  */
 const PUBLISHED_ARTICLES_SQL = `
-  select a.id, a.title, a.slug, a.body_html, a.teaser,
+  select a.id, a.title, a.slug, a.body_html, a.teaser, a.meta_title, a.meta_description,
          l.name as league_name, c.name as type_name,
          coalesce(
            (select json_agg(json_build_object(
@@ -189,6 +196,7 @@ h1.title-only{padding:2rem 1.25rem 0;font-size:clamp(1.5rem,4vw,2.25rem);font-we
    so it reads as its own line rather than running into the next paragraph. */
 .body small{display:block;margin:-.25rem 0 1rem;font-size:.85rem;color:var(--muted);font-style:italic}
 h2.section-title{max-width:900px;margin:1.5rem auto .25rem;padding:0 1rem;font-size:1.15rem}
+.listing-intro{max-width:900px;margin:1rem auto 0;padding:0 1rem;color:var(--muted);font-size:.95rem}
 ul.articles{list-style:none;margin:0;padding:1rem;display:grid;gap:1rem;max-width:900px;margin-inline:auto}
 .article-card{background:var(--card-bg);border-radius:12px;overflow:hidden}
 .article-card a{display:flex;align-items:center;gap:.9rem;padding:.85rem 1rem;text-decoration:none}
@@ -301,9 +309,26 @@ const HOME_PAGE_CSS = `
   display:flex;align-items:center;justify-content:center;text-align:center;text-decoration:none;
   font-family:var(--h-font-display);font-weight:700;font-size:13px;color:var(--h-blue-700);
   box-shadow:inset 0 0 0 1.5px var(--h-blue-700)}
+/* "Derniers Player Picks" — a fourth home-page card, styled like the
+   others (.home-card) rather than reusing SITE_CSS's .article-card, which
+   is a visually different system (plain listing pages, not the portal). */
+.home-picks{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.home-pick{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}
+.home-pick-cover{width:56px;height:56px;border-radius:4px;object-fit:cover;flex:none;background:var(--h-gray-100)}
+.home-pick-title{font-family:var(--h-font-display);font-weight:700;font-size:14px;color:var(--h-blue-900);margin:0}
+.home-pick-byline{font-size:12px;color:var(--h-gray-600);margin:2px 0 0}
+/* One-line SEO/intro copy under the header — matches the terse, factual
+   voice already used elsewhere on this page (e.g. .home-subtitle), not a
+   marketing paragraph. */
+.home-intro{max-width:1100px;margin:16px auto 0;padding:0 24px;color:var(--h-blue-900);font-size:14px}
 .home-cta{background:var(--h-red-500)}
 .home-cta-title{color:var(--h-white)}
-.home-cta-sub{font-size:13px;margin-top:4px;color:var(--h-white)}
+/* A white chip behind each crest — the logos are Wikimedia originals in
+   their own varied colours, not this page's palette, so a white backing
+   keeps every one of them legible on the CTA's red background regardless
+   of its own colours. */
+.home-cta-leagues{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
+.home-cta-leagues img{height:24px;width:auto;max-width:44px;object-fit:contain;background:var(--h-white);border-radius:4px;padding:3px}
 /* Same gradient as .home-header-top, so the page bookends itself in the
    same brand colours it opened with. */
 .home-footer{background:linear-gradient(180deg,var(--h-blue-300),var(--h-blue-500));
@@ -444,6 +469,40 @@ const HOME_SOCIALS: { label: string; url: string; icon: string }[] = [
   { label: 'X', url: 'https://x.com/FantasyCoach_FR', icon: '/assets/social-x.png' },
 ];
 
+/** The 5 leagues pronos.fantasy-coach.fr itself covers (its own <title>/
+ *  meta description) — a separate site with its own league set, not
+ *  `arsene_leagues`. Real crests, the same Wikimedia-hosted `logo_url`
+ *  values pronos's own `leagues` table already serves and its own
+ *  frontend already hotlinks directly (`GET /v1/leagues` on its API,
+ *  confirmed live) — not Supabase Storage, so NFR-EGRESS-01 doesn't apply,
+ *  and no new asset/licensing pipeline needed in this repo since pronos
+ *  already established this exact use is fine. */
+const PRONOS_LEAGUES: { name: string; logoUrl: string }[] = [
+  {
+    name: 'Ligue 1',
+    logoUrl:
+      "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Logo_Ligue_1_McDonald%27s_2024.svg/960px-Logo_Ligue_1_McDonald%27s_2024.svg.png",
+  },
+  {
+    name: 'Premier League',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/en/thumb/f/f2/Premier_League_Logo.svg/250px-Premier_League_Logo.svg.png',
+  },
+  {
+    name: 'Bundesliga',
+    logoUrl:
+      'https://upload.wikimedia.org/wikipedia/en/thumb/d/df/Bundesliga_logo_%282017%29.svg/330px-Bundesliga_logo_%282017%29.svg.png',
+  },
+  {
+    name: 'Serie A',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/en/thumb/a/ab/Serie_A_ENILIVE_logo.svg/250px-Serie_A_ENILIVE_logo.svg.png',
+  },
+  {
+    name: 'La Liga',
+    logoUrl:
+      'https://upload.wikimedia.org/wikipedia/commons/thumb/5/54/LaLiga_EA_Sports_2023_Vertical_Logo.svg/960px-LaLiga_EA_Sports_2023_Vertical_Logo.svg.png',
+  },
+];
+
 /**
  * `<fc-nav>`'s own `current` attribute only names which *site* in the
  * fantasy-coach.fr family is active (`current="arsene"`, above) — it has no
@@ -554,12 +613,18 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
   const published = async (): Promise<ArticleRow[]> =>
     (await client.query<ArticleRow>(PUBLISHED_ARTICLES_SQL)).rows;
 
-  const listing = (title: string, rows: ArticleRow[], currentLeague?: string): RenderedPage => {
+  const listing = (
+    title: string,
+    rows: ArticleRow[],
+    currentLeague?: string,
+    description?: string,
+  ): RenderedPage => {
     const first = rows[0];
-    const head =
-      first?.cover_image_url == null
-        ? ''
-        : `<meta property="og:image" content="${escape(first.cover_image_url)}"/>`;
+    const head = [
+      first?.cover_image_url == null ? '' : `<meta property="og:image" content="${escape(first.cover_image_url)}"/>`,
+      description === undefined ? '' : `<meta name="description" content="${escape(description)}"/>`,
+      '<meta name="robots" content="index, follow"/>',
+    ].join('');
     const body =
       rows.length === 0
         ? '<p class="empty">No articles yet</p>'
@@ -581,23 +646,27 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
    *  than a redundant single-section heading. */
   const leagueListing = (title: string, rows: ArticleRow[]): RenderedPage => {
     const first = rows[0];
-    const head =
-      first?.cover_image_url == null
-        ? ''
-        : `<meta property="og:image" content="${escape(first.cover_image_url)}"/>`;
+    const description = `${title} : toutes les analyses Fantasy Coach — ${rows.length} article${rows.length === 1 ? '' : 's'} publié${rows.length === 1 ? '' : 's'}.`;
+    const head = [
+      first?.cover_image_url == null ? '' : `<meta property="og:image" content="${escape(first.cover_image_url)}"/>`,
+      `<meta name="description" content="${escape(description)}"/>`,
+      '<meta name="robots" content="index, follow"/>',
+    ].join('');
     if (rows.length === 0) {
       return { html: page(title, head, '<p class="empty">No articles yet</p>', title), json_ld: [] };
     }
+    const intro = `<p class="listing-intro">${escape(`${rows.length} article${rows.length === 1 ? '' : 's'} publié${rows.length === 1 ? '' : 's'} pour ${title}.`)}</p>`;
     const types = [...new Set(rows.map((row) => row.type_name))].sort(nameCollator.compare);
     const body =
-      types.length <= 1
+      intro +
+      (types.length <= 1
         ? `<ul class="articles">${rows.map(articleCard).join('')}</ul>`
         : types
             .map((type) => {
               const group = rows.filter((row) => row.type_name === type);
               return `<h2 class="section-title">${escape(type)}</h2><ul class="articles">${group.map(articleCard).join('')}</ul>`;
             })
-            .join('');
+            .join(''));
     // `title` is always the league's own display name here (`renderLeaguePage`
     // passes `league.name` straight through), so it doubles as the value the
     // nav-highlight script (`NAV_CURRENT_LEAGUE_SCRIPT`) matches against.
@@ -636,10 +705,20 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
    *  `3a` / `ui_kits/website/Home.jsx`) — one hero article, not a listing.
    *  `hero` is `undefined` only when nothing has ever been published yet;
    *  the rest of the portal (header, tool teaser, sidebar) still renders. */
-  const homePage = (hero: ArticleRow | undefined, leagues: { name: string }[]): RenderedPage => {
+  const HOME_DESCRIPTION =
+    'Toute l’actualité Fantasy Foot : Ligue 1, Premier League, Bundesliga, Scandinavie — analyses, pronos et outils, mis à jour chaque semaine.';
+
+  const homePage = (
+    hero: ArticleRow | undefined,
+    lastPicks: ArticleRow[],
+    leagues: { name: string }[],
+  ): RenderedPage => {
     const head = [
       '<link rel="preconnect" href="https://fonts.googleapis.com">',
       '<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;700;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">',
+      `<meta name="description" content="${escape(HOME_DESCRIPTION)}"/>`,
+      `<meta property="og:description" content="${escape(HOME_DESCRIPTION)}"/>`,
+      '<meta name="robots" content="index, follow"/>',
       `<style>${HOME_PAGE_CSS}</style>`,
     ].join('');
 
@@ -676,10 +755,38 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
             '<div>',
             `<div class="home-eyebrow">${escape(`${hero.league_name} · ${hero.type_name}`)}</div>`,
             `<h1 class="home-headline">${escape(hero.title)}</h1>`,
-            '<p class="home-subtitle">Article hebdo — mis à jour chaque semaine</p>',
+            // Falls back to the old static line when the writer never set a
+            // teaser (0011_article_teaser.sql) — same "no element at all"
+            // handling would leave a visible gap here, unlike the listing
+            // card's own empty-but-present <p>, so this one keeps a value.
+            `<p class="home-subtitle">${hero.teaser === null ? 'Article hebdo — mis à jour chaque semaine' : escape(hero.teaser)}</p>`,
             '<span class="home-btn">Lire l’article</span>',
             '</div>',
             '</a>',
+          ].join('');
+
+    const picksBlock =
+      lastPicks.length === 0
+        ? ''
+        : [
+            '<div class="home-card home-picks-card">',
+            '<div class="home-card-title">📋 Derniers Player Picks — Ligue 1</div>',
+            '<div class="home-picks">',
+            ...lastPicks.map((pick) =>
+              [
+                `<a class="home-pick" href="${articlePath(viewOf(pick))}">`,
+                pick.cover_image_url === null
+                  ? '<div class="home-pick-cover"></div>'
+                  : `<img class="home-pick-cover" src="${escape(pick.cover_image_url)}" alt="${escape(pick.title)}"/>`,
+                '<div>',
+                `<p class="home-pick-title">${escape(pick.title)}</p>`,
+                `<p class="home-pick-byline">${authorsHtml(pick.authors)} · ${relativeTime(pick.published_at.toISOString())}</p>`,
+                '</div>',
+                '</a>',
+              ].join(''),
+            ),
+            '</div>',
+            '</div>',
           ].join('');
 
     const body = [
@@ -695,21 +802,27 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
       '</div>',
       `<div class="home-header-sub"><nav class="home-pills">${formatPills}</nav></div>`,
       '</header>',
+      `<p class="home-intro">${escape(HOME_DESCRIPTION)}</p>`,
       '<div class="home-body">',
       '<div class="home-col-main">',
       heroCard,
+      picksBlock,
       '<div class="home-card home-tool">',
       '<div class="home-card-title">🛠 Outil pour la Ligue 1</div>',
       '<div class="home-tool-slots">',
       '<a class="home-tool-link" href="https://l1.dnp.fantasy-coach.fr/">Indisponibles / DNP</a>',
       '<a class="home-tool-link" href="https://l1.compos.fantasy-coach.fr/">Compos probables</a>',
+      '<a class="home-tool-link" href="https://groupes.fantasy-coach.fr/">Groupes</a>',
       '</div>',
       '</div>',
       '</div>',
       '<div class="home-col-side">',
       '<a class="home-card home-cta" href="https://pronos.fantasy-coach.fr">',
       '<div class="home-card-title home-cta-title">🎯 Pronos</div>',
-      '<div class="home-cta-sub">5 ligues couvertes — joue vite</div>',
+      // pronos.fantasy-coach.fr's own 5 covered leagues (its frontend/index.html
+      // <title>) — a fixed list, not `leagues` (Arsène's own content leagues,
+      // a different, smaller set with no Serie A/La Liga entry).
+      `<div class="home-cta-leagues">${PRONOS_LEAGUES.map((l) => `<img src="${l.logoUrl}" alt="${escape(l.name)}"/>`).join('')}</div>`,
       '<span class="home-btn home-btn-ghost">Jouer</span>',
       '</a>',
       '</div>',
@@ -718,7 +831,17 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
       '</div>',
     ].join('');
 
-    return { html: page('Fantasy Coach', head, body, undefined, true, false), json_ld: [] };
+    return {
+      html: page(
+        'Fantasy Coach — Ligue 1, Premier League, Bundesliga : actus, pronos, compos',
+        head,
+        body,
+        undefined,
+        true,
+        false,
+      ),
+      json_ld: [],
+    };
   };
 
   return {
@@ -733,7 +856,14 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
       // recently across every league/type. `rows` is already `published_at
       // desc` (`PUBLISHED_ARTICLES_SQL`), so the first match is the newest.
       const hero = rows.find((row) => row.league_name === 'Ligue 1' && row.type_name === 'Player Picks');
-      return homePage(hero, leagues);
+      // The 3 Player Picks right before the hero, not including it — the
+      // hero is already the most prominent thing on the page, repeating it
+      // a few hundred pixels below would read as a bug. `rows` is already
+      // `published_at desc`, so this is genuinely "the next 3 most recent".
+      const lastPicks = rows
+        .filter((row) => row.league_name === 'Ligue 1' && row.type_name === 'Player Picks' && row.id !== hero?.id)
+        .slice(0, 3);
+      return homePage(hero, lastPicks, leagues);
     },
 
     /** Shared not-found page — used by `renderArticlePage`'s own miss and by
@@ -754,10 +884,16 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
           seasonSlug(row.first_published_at) === args.season_slug &&
           toSlug(row.type_name) === args.type_slug,
       );
+      const first = rows[0];
+      const description =
+        first === undefined
+          ? undefined
+          : `${first.type_name} ${first.league_name} — ${args.season_slug} : les derniers articles Fantasy Coach.`;
       return listing(
         `${args.league_slug} / ${args.season_slug} / ${args.type_slug}`,
         rows,
         rows[0]?.league_name,
+        description,
       );
     },
 
@@ -797,9 +933,22 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
       }
       const view = viewOf(row);
       const jsonLd = buildStructuredData(view, opts.siteOrigin);
+      // AC-13's own suggestion/writer-edit, persisted at publish time —
+      // never rendered anywhere until now (`PUBLISHED_ARTICLES_SQL` now
+      // selects both). Title falls back to the plain article title for a
+      // pre-existing row that somehow has no meta_title; description has
+      // no equally-good fallback, so it's simply omitted rather than
+      // guessed at.
+      const pageTitle = row.meta_title !== null && row.meta_title !== '' ? row.meta_title : row.title;
       const head = [
         `<link rel="canonical" href="${opts.siteOrigin}${articlePath(view)}"/>`,
         `<meta property="og:image" content="${escape(view.cover_image_url)}"/>`,
+        row.meta_description === null || row.meta_description === ''
+          ? ''
+          : [
+              `<meta name="description" content="${escape(row.meta_description)}"/>`,
+              `<meta property="og:description" content="${escape(row.meta_description)}"/>`,
+            ].join(''),
         `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`,
       ].join('');
       const hero = view.cover_image_url
@@ -828,7 +977,7 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
       // a visitor's browser.
       const articleBody = `<div class="body">${sanitizePastedHtml(row.body_html, { allowedImageOrigin: opts.cdnOrigin })}</div>`;
       const body = `<main data-article-title="${escape(row.title)}">${hero}${meta}${articleBody}</main>`;
-      return { html: page(row.title, head, body, row.league_name, false), json_ld: [jsonLd] };
+      return { html: page(pageTitle, head, body, row.league_name, false), json_ld: [jsonLd] };
     },
 
     /**
