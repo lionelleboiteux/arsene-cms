@@ -165,11 +165,14 @@ describe('the real public site routes', () => {
     expect(body.redirect).toBe(`${SITE_ORIGIN}/articles/ligue-1/26-27/pronos/pp-test`);
   });
 
-  it('PUBLIC-ROUTE-12: an old Wix bookmark for a post never migrated to Arsène is a real 404, not a homepage bounce', async () => {
+  it('PUBLIC-ROUTE-12: an old Wix bookmark for a post never manually migrated to Arsène signals a redirect to the static Wix archive, not a 404', async () => {
     const { server } = ctx();
     const res = await fetch(`${server.url}/public/post/never-migrated-from-wix`);
 
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    const body = (await res.json()) as { redirect?: string };
+    expect(body.redirect).toBe('https://archive.fantasy-coach.fr/never-migrated-from-wix');
   });
 
   it('PUBLIC-ROUTE-09: /public/articles/{league_slug} requires no credential and lists every published article in that league', async () => {

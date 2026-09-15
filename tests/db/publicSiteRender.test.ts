@@ -589,7 +589,7 @@ describe('public site', () => {
       expect(page.html).toContain(`<footer class="home-footer">© Fantasy Coach ${currentYear}</footer>`);
     });
 
-    it('the Ligue 1 tools card has a third Groupes pill, alongside DNP and Compos, linking to the live groupes.fantasy-coach.fr site', async () => {
+    it('the Ligue 1 tools card has a third Groupes pill, alongside DNP and Compos, linking to the live l1.groupes.fantasy-coach.fr site', async () => {
       const { renderer } = ctx();
       const page = await renderer.renderHomepage();
 
@@ -599,9 +599,38 @@ describe('public site', () => {
           '<a class="home-tool-link" href="https://l1.compos.fantasy-coach.fr/">Compos probables</a>',
         ),
         groupes: page.html.includes(
-          '<a class="home-tool-link" href="https://groupes.fantasy-coach.fr/">Groupes</a>',
+          '<a class="home-tool-link" href="https://l1.groupes.fantasy-coach.fr/">Groupes</a>',
         ),
       }).toEqual({ dnp: true, compos: true, groupes: true });
+    });
+
+    it('the Ligue 1 pill has a mega-menu dropdown (same 4 items as fc-shared/nav.js\'s own Ligue 1 dropdown); Premier League and Bundesliga get none', async () => {
+      const { renderer } = ctx();
+      const page = await renderer.renderHomepage();
+
+      const navItem = page.html.match(/<span class="home-nav-item">(.*?)<\/span>/s)?.[1] ?? '';
+      const dropdownLinks = [...navItem.matchAll(/<div class="home-nav-dropdown"[^>]*>(.*?)<\/div>/gs)]
+        .flatMap((m) => [...(m[1] ?? '').matchAll(/<a href="([^"]+)">([^<]+)<\/a>/g)])
+        .map((m) => ({ href: m[1] ?? '', label: m[2] ?? '' }));
+
+      expect({
+        ligue1_has_dropdown: navItem.includes('Ligue 1'),
+        dropdown_items: dropdownLinks,
+        premier_league_has_no_dropdown: dropdownLinks.every((d) => !d.label.includes('Premier League')),
+        bundesliga_has_no_caret_near_its_link: !page.html.includes(
+          '<span class="home-nav-item"><a class="home-pill" href="/articles/bundesliga"',
+        ),
+      }).toEqual({
+        ligue1_has_dropdown: true,
+        dropdown_items: [
+          { href: 'https://l1.dnp.fantasy-coach.fr/', label: 'Indisponibles / DNP' },
+          { href: 'https://www.fantasy-coach.fr/suspendus-prochain-jaune', label: 'Suspendus au prochain jaune' },
+          { href: 'https://l1.compos.fantasy-coach.fr/', label: 'Compos' },
+          { href: 'https://l1.groupes.fantasy-coach.fr/', label: 'Groupes' },
+        ],
+        premier_league_has_no_dropdown: true,
+        bundesliga_has_no_caret_near_its_link: true,
+      });
     });
 
     it('SEO: has a keyword-bearing <title>, a description/og:description, and robots index/follow', async () => {

@@ -154,7 +154,12 @@ function relativeTime(iso: string, now: Date = new Date()): string {
  * asset route would mean solving that problem twice for one page's worth of
  * CSS.
  */
-const SITE_CSS = `
+/** Exported so `scripts/wix-archive/generate.ts` can wrap the ~600
+ *  never-manually-imported Wix posts in this exact shell — a static
+ *  archive, not a real `articles` row, but still visually native to the
+ *  site. No behavior change for any real page: still just a plain
+ *  template-string constant used the same way everywhere else here. */
+export const SITE_CSS = `
 :root{--bg:#fff;--fg:#16181c;--muted:#6b7280;--card-bg:#f4f4f5}
 @media (prefers-color-scheme:dark){:root{--bg:#0b0b0c;--fg:#f2f2f3;--muted:#9a9aa2;--card-bg:#1c1c1f}}
 /* Homepage/league/category listings match pronos's own pages — always
@@ -263,6 +268,20 @@ const HOME_PAGE_CSS = `
   border-radius:var(--h-radius-pill);text-decoration:none;padding:6px 14px;font-size:13px;
   background:transparent;color:var(--h-white)}
 .home-pill.active{background:var(--h-white);color:var(--h-blue-700)}
+/* The Ligue 1 pill's mega-menu — same open/close behaviour as fc-shared's
+   own .nav-item/.nav-dropdown, adapted to this page's own token system
+   rather than reusing fc-shared's hardcoded colours. */
+.home-nav-item{position:relative;display:inline-flex;align-items:center;gap:2px}
+.home-nav-caret{background:none;border:none;color:var(--h-white);cursor:pointer;font-size:11px;padding:2px;line-height:1;opacity:.85}
+.home-nav-caret:hover{opacity:1}
+.home-nav-dropdown{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:6px;
+  background:var(--h-white);border-radius:8px;box-shadow:0 6px 16px rgba(0,0,0,.2);padding:6px 0;
+  min-width:220px;z-index:40;flex-direction:column}
+.home-nav-dropdown[hidden]{display:none}
+.home-nav-item.open .home-nav-dropdown{display:flex}
+.home-nav-dropdown a{color:var(--h-blue-900);text-decoration:none;font-weight:600;font-size:13px;
+  padding:8px 16px;white-space:nowrap}
+.home-nav-dropdown a:hover{background:var(--h-gray-100)}
 .home-header-sub{background:var(--h-blue-600);padding:8px 28px;display:flex;gap:8px;
   border-bottom:3px solid var(--h-red-500);flex-wrap:wrap;justify-content:center}
 .home-pill-sm{display:inline-flex;align-items:center;font-family:var(--h-font-display);font-weight:700;
@@ -503,6 +522,52 @@ const PRONOS_LEAGUES: { name: string; logoUrl: string }[] = [
   },
 ];
 
+/** Same 4 items as `fc-shared/nav.js`'s own Ligue 1 dropdown (`LINKS[0].children`
+ *  there) — the home page's own header stands in for `<fc-nav>` entirely
+ *  (`page()`'s `showFcNav` doc comment), so it needs its own copy of this
+ *  menu rather than inheriting one from the shared script. Kept in sync by
+ *  hand since `fc-shared` is a separate repo this project doesn't own. */
+const LIGUE1_NAV_CHILDREN: { label: string; url: string }[] = [
+  { label: 'Indisponibles / DNP', url: 'https://l1.dnp.fantasy-coach.fr/' },
+  { label: 'Suspendus au prochain jaune', url: 'https://www.fantasy-coach.fr/suspendus-prochain-jaune' },
+  { label: 'Compos', url: 'https://l1.compos.fantasy-coach.fr/' },
+  { label: 'Groupes', url: 'https://l1.groupes.fantasy-coach.fr/' },
+];
+
+/** Open/close behaviour mirrors `fc-shared/nav.js`'s own dropdown (hover to
+ *  open, click the caret to toggle, outside click/Escape to close) — but
+ *  scoped to a single `.home-nav-item`, since the home page's own header
+ *  only ever gives one pill (Ligue 1) a dropdown, unlike nav.js which
+ *  handles an arbitrary list. */
+const HOME_NAV_DROPDOWN_SCRIPT = `<script>(function(){
+  var item = document.querySelector('.home-nav-item');
+  if (!item) return;
+  var caret = item.querySelector('.home-nav-caret');
+  var dd = item.querySelector('.home-nav-dropdown');
+  var open = function(){
+    item.classList.add('open');
+    dd.hidden = false;
+    caret.setAttribute('aria-expanded', 'true');
+  };
+  var close = function(){
+    item.classList.remove('open');
+    dd.hidden = true;
+    caret.setAttribute('aria-expanded', 'false');
+  };
+  caret.addEventListener('click', function(e){
+    e.stopPropagation();
+    if (item.classList.contains('open')) close(); else open();
+  });
+  item.addEventListener('mouseenter', open);
+  item.addEventListener('mouseleave', close);
+  document.addEventListener('click', function(e){
+    if (!e.target.closest('.home-nav-item')) close();
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') close();
+  });
+})();</script>`;
+
 /**
  * `<fc-nav>`'s own `current` attribute only names which *site* in the
  * fantasy-coach.fr family is active (`current="arsene"`, above) — it has no
@@ -572,8 +637,11 @@ const NAV_LABEL_OVERRIDES: Record<string, string> = {
  *  exception: its own two-tier header stands in for site navigation there,
  *  so stacking the shared `fc-shared` banner on top of it would just double
  *  up navigation on the one page that has its own. `NAV_CURRENT_LEAGUE_SCRIPT`
- *  is a safe no-op either way — the home page never sets `data-current-league`. */
-function page(
+ *  is a safe no-op either way — the home page never sets `data-current-league`.
+ *
+ *  Exported for `scripts/wix-archive/generate.ts` — same reasoning as
+ *  `SITE_CSS` above. */
+export function page(
   title: string,
   head: string,
   body: string,
@@ -730,7 +798,21 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
     const leaguePills = leagues
       .map((league) => {
         const active = hero !== undefined && league.name === hero.league_name;
-        return `<a class="home-pill${active ? ' active' : ''}" href="/articles/${toSlug(league.name)}">${escape(league.name)}</a>`;
+        const link = `<a class="home-pill${active ? ' active' : ''}" href="/articles/${toSlug(league.name)}">${escape(league.name)}</a>`;
+        // Only Ligue 1 gets a dropdown — it's the only league with sibling
+        // tools to link to (DNP/Compos/Groupes); Premier League and
+        // Bundesliga have no equivalent today (confirmed with the user).
+        if (league.name !== 'Ligue 1') return link;
+        const dropdown = LIGUE1_NAV_CHILDREN.map(
+          (child) => `<a href="${escape(child.url)}">${escape(child.label)}</a>`,
+        ).join('');
+        return [
+          '<span class="home-nav-item">',
+          link,
+          '<button type="button" class="home-nav-caret" aria-haspopup="true" aria-expanded="false" aria-label="Plus de pages Ligue 1">▾</button>',
+          `<div class="home-nav-dropdown" hidden>${dropdown}</div>`,
+          '</span>',
+        ].join('');
       })
       .join('');
     const formatPills = HOME_FORMAT_PILLS()
@@ -822,13 +904,14 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
       '<div class="home-tool-slots">',
       '<a class="home-tool-link" href="https://l1.dnp.fantasy-coach.fr/">Indisponibles / DNP</a>',
       '<a class="home-tool-link" href="https://l1.compos.fantasy-coach.fr/">Compos probables</a>',
-      '<a class="home-tool-link" href="https://groupes.fantasy-coach.fr/">Groupes</a>',
+      '<a class="home-tool-link" href="https://l1.groupes.fantasy-coach.fr/">Groupes</a>',
       '</div>',
       '</div>',
       '</div>',
       '</div>',
       `<footer class="home-footer">© Fantasy Coach ${new Date().getFullYear()}</footer>`,
       '</div>',
+      HOME_NAV_DROPDOWN_SCRIPT,
     ].join('');
 
     return {

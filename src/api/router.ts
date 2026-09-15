@@ -910,15 +910,27 @@ async function renderLeagueOrLegacyArticle(
 }
 
 /**
+ * The ~600 Wix posts never manually imported as real Arsène articles live
+ * here instead — a static, pre-rendered archive (`scripts/wix-archive/`),
+ * deployed the same way pronos/compos/DNP/groupes are (GitHub Pages), with
+ * zero Supabase involvement. Its own 404 page is the correct answer for a
+ * slug that matches nothing there either (a typo'd bookmark, or one of the
+ * small number of posts `resolveWixPostPath`'s own normalization still
+ * can't match) — so `renderWixPostRedirect` below no longer needs to
+ * distinguish that case itself.
+ */
+const WIX_ARCHIVE_ORIGIN = 'https://archive.fantasy-coach.fr';
+
+/**
  * `/public/post/{slug}` — an old Wix bookmark. Unambiguous, unlike
  * `renderLeagueOrLegacyArticle`'s own `/public/articles/{slug}`: Wix never
  * put a league listing at this path, so there's no "try it as a league
  * first" step here. `resolveWixPostPath` (`src/site/render.ts`) already
  * absorbs the handful of systematic ways a Wix slug differs from Arsène's
- * own; a slug that still resolves to nothing (the vast majority of Wix's
- * own archive, never migrated) is a real 404, not a homepage bounce — the
- * same "no match, no guess" shape `renderLeagueOrLegacyArticle` already
- * uses for its own not-found case.
+ * own; a slug that still resolves to nothing there isn't necessarily a
+ * real 404 — most of Wix's archive was never manually imported as a real
+ * Arsène article at all, so it falls through to the static archive
+ * (`WIX_ARCHIVE_ORIGIN`) instead of bouncing the visitor to a dead end.
  */
 async function renderWixPostRedirect(
   op: Extract<Operation, { kind: 'public-post-legacy' }>,
@@ -928,10 +940,9 @@ async function renderWixPostRedirect(
   const renderer = await getSiteRenderer(ctx);
 
   const path = await renderer.resolveWixPostPath({ slug: op.slug });
-  if (path === null) {
-    return jsonPageResponse((await renderer.renderNotFound()).html, 404, cors);
-  }
-  return new Response(JSON.stringify({ redirect: `${ctx.opts.siteOrigin ?? DEFAULT_SITE_ORIGIN}${path}` }), {
+  const redirect =
+    path === null ? `${WIX_ARCHIVE_ORIGIN}/${op.slug}` : `${ctx.opts.siteOrigin ?? DEFAULT_SITE_ORIGIN}${path}`;
+  return new Response(JSON.stringify({ redirect }), {
     status: 200,
     headers: { 'content-type': 'application/json', ...cors },
   });
