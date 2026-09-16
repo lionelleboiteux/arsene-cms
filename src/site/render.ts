@@ -488,6 +488,7 @@ function articleCard(row: ArticleRow): string {
 const FC_SHARED_HEAD = [
   '<script src="https://cdn.jsdelivr.net/gh/lionelleboiteux/fc-shared@main/nav.js" defer></script>',
   '<script src="https://cdn.jsdelivr.net/gh/lionelleboiteux/fc-shared@main/ads.js" async></script>',
+  '<script src="https://cdn.jsdelivr.net/gh/lionelleboiteux/fc-shared@main/ga.js" async></script>',
 ].join('');
 
 /**
@@ -1032,6 +1033,19 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
       );
       if (row === undefined) {
         return notFound();
+      }
+      // First-party, server-side view counter (0012_article_views.sql) —
+      // no cookie, no client JS, nothing a consent gate or ad-blocker can
+      // catch, since it never touches the browser at all. Best-effort:
+      // a transient insert failure must never turn an otherwise-successful
+      // page render into a 500, so any error here is logged and swallowed,
+      // never propagated. `console.error`, not thrown — same reasoning as
+      // `router.ts`'s own `observability.record`: a real Deno primitive,
+      // not Node's `process.stderr` compat surface.
+      try {
+        await client.query('insert into arsene_article_views (article_id) values ($1)', [row.id]);
+      } catch (err) {
+        console.error(JSON.stringify({ level: 'error', event: 'article_view_insert_failed', error: String(err) }));
       }
       const view = viewOf(row);
       const jsonLd = buildStructuredData(view, opts.siteOrigin);

@@ -258,6 +258,60 @@ describe('public site', () => {
     });
   });
 
+  it('renderArticlePage records a first-party view on every real (non-404) request — no cookie, no client JS (0012_article_views.sql)', async () => {
+    const { renderer, db } = ctx();
+    const writer = await seedWriter(db.client, 'Views Writer Fixture');
+    // A league/type combo unused elsewhere in this file — this session's
+    // established fixture-collision-avoidance discipline: seeding another
+    // Ligue 1/Pronos/26-27 article here landed it inside the exact-list
+    // assertion the "scoped to its season" test above makes for that
+    // precise bucket, confirmed live.
+    const articleId = await seedArticle(db.client, {
+      writer_id: writer,
+      title: 'View Counter Fixture Article',
+      league_name: 'Eliteserien',
+      type_name: 'Guides',
+      status: 'published',
+      slug: 'view-counter-fixture-article',
+      published_at: '2026-08-15T10:00:00Z',
+    });
+
+    await renderer.renderArticlePage({
+      league_slug: 'eliteserien',
+      season_slug: '26-27',
+      type_slug: 'guides',
+      slug: 'view-counter-fixture-article',
+    });
+    await renderer.renderArticlePage({
+      league_slug: 'eliteserien',
+      season_slug: '26-27',
+      type_slug: 'guides',
+      slug: 'view-counter-fixture-article',
+    });
+
+    const rows = await db.client.query<{ count: number }>(
+      'select count(*)::int as count from arsene_article_views where article_id = $1',
+      [articleId],
+    );
+    expect(rows.rows[0]?.count).toBe(2);
+  });
+
+  it('a 404 for a slug that matches no real article records no view', async () => {
+    const { renderer, db } = ctx();
+
+    const before = await db.client.query<{ count: number }>('select count(*)::int as count from arsene_article_views');
+
+    await renderer.renderArticlePage({
+      league_slug: 'ligue-1',
+      season_slug: '26-27',
+      type_slug: 'pronos',
+      slug: 'this-slug-does-not-exist-at-all',
+    });
+
+    const after = await db.client.query<{ count: number }>('select count(*)::int as count from arsene_article_views');
+    expect(after.rows[0]?.count).toBe(before.rows[0]?.count);
+  });
+
   it('AC-13 follow-through: the article page renders its own meta_description as both <meta name="description"> and og:description, and uses meta_title for <title>', async () => {
     const { renderer } = ctx();
 

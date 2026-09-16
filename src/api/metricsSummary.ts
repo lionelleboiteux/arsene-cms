@@ -24,12 +24,21 @@
  * `imageStatus.ts`'s pattern) keeps it out of reach of a writer's bearer
  * token or an anonymous caller — a writer JWT proves who is drafting
  * articles, not that they may read team-wide timing aggregates.
+ *
+ * Also returns the top articles by view count (`arsene_article_views`,
+ * 0012_article_views.sql — same RLS-with-no-policies shape as
+ * `arsene_telemetry_events`, same service-role-only access reasoning).
+ * Unlike the time-to-publish samples above, this deliberately *does* name
+ * which article: a view count is aggregate published-content performance
+ * data, not information about a specific writer or visitor, so there's no
+ * equivalent reason to anonymize it here.
  */
 
 import { verifySharedSecret } from './auth.ts';
 import { errorResponse, type HandlerResponse } from './http.ts';
 
 export type TimeToPublishSample = { published_at: string; minutes: number };
+export type ArticleViewCount = { article_id: string; title: string; slug: string | null; views: number };
 
 export type MetricsSummaryRequest = {
   /** The `x-arsene-dashboard-secret` header, never an Authorization one. */
@@ -41,11 +50,15 @@ export type MetricsSummaryDeps = {
   repo: {
     getTimeToPublishSamples(): Promise<TimeToPublishSample[]>;
     getActiveWriterCount(sinceDaysAgo: number): Promise<number>;
+    getArticleViewCounts(limit: number): Promise<ArticleViewCount[]>;
   };
 };
 
 /** Matches `state.json`'s `success.metrics[0].by_when` window. */
 const ADOPTION_WINDOW_DAYS = 30;
+/** Plenty for a "which articles are doing well" glance without the
+ *  response growing unbounded as the archive does. */
+const TOP_ARTICLES_LIMIT = 50;
 
 export async function handleMetricsSummary(
   req: MetricsSummaryRequest,
@@ -55,9 +68,10 @@ export async function handleMetricsSummary(
     return errorResponse(401, 'UNAUTHORIZED', 'A valid dashboard secret is required.');
   }
 
-  const [samples, active_writers] = await Promise.all([
+  const [samples, active_writers, article_views] = await Promise.all([
     deps.repo.getTimeToPublishSamples(),
     deps.repo.getActiveWriterCount(ADOPTION_WINDOW_DAYS),
+    deps.repo.getArticleViewCounts(TOP_ARTICLES_LIMIT),
   ]);
   return {
     status: 200,
@@ -67,6 +81,7 @@ export async function handleMetricsSummary(
       counter_metric: {
         active_writers_last_30_days: active_writers,
       },
+      article_views,
     },
   };
 }

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { handleMetricsSummary, type MetricsSummaryDeps, type TimeToPublishSample } from '../../src/api/metricsSummary.js';
+import {
+  handleMetricsSummary,
+  type ArticleViewCount,
+  type MetricsSummaryDeps,
+  type TimeToPublishSample,
+} from '../../src/api/metricsSummary.js';
 
 /**
  * `GET /internal/metrics/time-to-publish` — John's dashboard gate
@@ -11,12 +16,17 @@ import { handleMetricsSummary, type MetricsSummaryDeps, type TimeToPublishSample
 
 const DASHBOARD_SECRET = 'dashboard-shared-secret-not-a-writer-token';
 
-function buildDeps(samples: TimeToPublishSample[] = [], activeWriters = 0): MetricsSummaryDeps {
+function buildDeps(
+  samples: TimeToPublishSample[] = [],
+  activeWriters = 0,
+  articleViews: ArticleViewCount[] = [],
+): MetricsSummaryDeps {
   return {
     dashboardSecret: DASHBOARD_SECRET,
     repo: {
       getTimeToPublishSamples: async () => samples,
       getActiveWriterCount: async () => activeWriters,
+      getArticleViewCounts: async () => articleViews,
     },
   };
 }
@@ -38,7 +48,11 @@ describe('metrics summary authentication', () => {
   it('DASHBOARD-AUTH-03: an unconfigured deployment (empty dashboardSecret) refuses every caller, including one guessing an empty string', async () => {
     const deps: MetricsSummaryDeps = {
       dashboardSecret: '',
-      repo: { getTimeToPublishSamples: async () => [], getActiveWriterCount: async () => 0 },
+      repo: {
+        getTimeToPublishSamples: async () => [],
+        getActiveWriterCount: async () => 0,
+        getArticleViewCounts: async () => [],
+      },
     };
     const res = await handleMetricsSummary({ dashboard_secret: '' }, deps);
     expect(res.status).toBe(401);
@@ -74,5 +88,17 @@ describe('metrics summary happy path', () => {
 
     expect(res.status).toBe(200);
     expect((res.body as { time_to_publish: unknown[] }).time_to_publish).toEqual([]);
+  });
+
+  it('DASHBOARD-05: returns the top article view counts untouched, unlike the anonymized time-to-publish samples — naming which article is the point of this metric', async () => {
+    const articleViews: ArticleViewCount[] = [
+      { article_id: 'a1', title: 'Player Picks, Ligue 1, J5', slug: 'player-picks-ligue-1-j5', views: 42 },
+      { article_id: 'a2', title: 'Guide Ligue 1, PSG', slug: 'guide-ligue-1-psg', views: 7 },
+    ];
+
+    const res = await handleMetricsSummary({ dashboard_secret: DASHBOARD_SECRET }, buildDeps([], 0, articleViews));
+
+    expect(res.status).toBe(200);
+    expect((res.body as { article_views: ArticleViewCount[] }).article_views).toEqual(articleViews);
   });
 });

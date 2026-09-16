@@ -689,6 +689,39 @@ export function createRepo(pool: pg.Pool) {
       );
       return Number(res.rows[0]?.count ?? 0);
     },
+
+    /**
+     * Top articles by view count (`arsene_article_views`,
+     * 0012_article_views.sql) — the write side lives in
+     * `src/site/render.ts`'s `renderArticlePage`, not here. Unlike
+     * `getTimeToPublishSamples` above, this deliberately *does* surface
+     * `article_id`/`title`: view counts are aggregate published-content
+     * performance data, not information about a specific writer or
+     * visitor, so there's no equivalent privacy reason to anonymize it —
+     * the whole point of the metric is knowing which article. An `inner
+     * join` (not `left join`) means an article with zero views simply
+     * doesn't appear, rather than padding the response with a long tail
+     * of zero-count rows nobody asked for.
+     */
+    async getArticleViewCounts(
+      limit: number,
+    ): Promise<{ article_id: string; title: string; slug: string | null; views: number }[]> {
+      const res = await pool.query<{ article_id: string; title: string; slug: string | null; views: string }>(
+        `select a.id as article_id, a.title, a.slug, count(v.id) as views
+           from articles a
+           join arsene_article_views v on v.article_id = a.id
+          group by a.id, a.title, a.slug
+          order by views desc, a.title
+          limit $1`,
+        [limit],
+      );
+      return res.rows.map((row) => ({
+        article_id: row.article_id,
+        title: row.title,
+        slug: row.slug,
+        views: Number(row.views),
+      }));
+    },
   };
 }
 

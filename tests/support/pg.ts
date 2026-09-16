@@ -254,6 +254,23 @@ export async function insertTelemetry(
   );
 }
 
+/** Seeds a raw `arsene_article_views` row (0012_article_views.sql) — no
+ *  writer, unlike `insertTelemetry` above, since a page view has none.
+ *  `viewed_at` defaults to `now()` at the DB level when omitted. */
+export async function insertArticleView(
+  client: pg.Client,
+  o: { article_id: string; viewed_at?: string },
+): Promise<void> {
+  if (o.viewed_at === undefined) {
+    await client.query(`insert into arsene_article_views (article_id) values ($1)`, [o.article_id]);
+    return;
+  }
+  await client.query(`insert into arsene_article_views (article_id, viewed_at) values ($1, $2)`, [
+    o.article_id,
+    o.viewed_at,
+  ]);
+}
+
 export type PgError = Error & { code?: string };
 
 export async function captureSqlError(fn: () => Promise<unknown>): Promise<string | null> {
