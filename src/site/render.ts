@@ -359,24 +359,43 @@ const HOME_PAGE_CSS = `
 const nameCollator = new Intl.Collator('fr');
 
 /**
- * The two systematic ways a Wix post's own slug differs from the slug it
- * was imported into Arsène under (`.claude/skills/import-wix-articles/`) —
- * not random, so a short ordered list of transforms resolves an old
- * bookmark without a hand-maintained per-post mapping table:
+ * Two of the three systematic ways a Wix post's own slug differs from the
+ * slug it was imported into Arsène under
+ * (`.claude/skills/import-wix-articles/`) — not random, so a short ordered
+ * list of transforms resolves an old bookmark without a hand-maintained
+ * per-post mapping table:
  *  - a dedup suffix Wix appends (`player-picks-ligue-1-j1-4` → Arsène's
  *    `player-picks-ligue-1-j1`)
  *  - a season infix Wix inserts (`player-picks-26-27-premier-league-j1` →
  *    Arsène's `player-picks-premier-league-j1`)
- * `resolveWixPostPath` tries the bare slug first, then each of these in
- * order; a slug still unresolved after all of them is real Wix archive
- * that was never migrated (most of it — see that skill's own numbers), and
- * gets a real 404 rather than a guess.
+ * The third — accents — is `stripAccents`, just below: orthogonal to
+ * both of these (a slug can need it alongside either, both, or neither),
+ * so it's applied across every candidate in `resolveWixPostPath` rather
+ * than folded in here. A slug still unresolved after all of them is real
+ * Wix archive that was never migrated (most of it — see that skill's own
+ * numbers), and gets a real 404 rather than a guess.
  */
 const WIX_SLUG_NORMALIZATIONS: ((slug: string) => string)[] = [
   (slug) => slug.replace(/-\d+$/, ''),
   (slug) => slug.replace(/-\d\d-\d\d-/, '-'),
   (slug) => slug.replace(/-\d+$/, '').replace(/-\d\d-\d\d-/, '-'),
 ];
+
+/** A third, independent way a Wix slug can differ — accents, which a real
+ *  Arsène slug never carries (`toSlug()`, `src/domain/seo.ts`, strips
+ *  them the same way at publish time). Applied on top of every candidate
+ *  above in `resolveWixPostPath`, not folded into the array itself: it's
+ *  orthogonal to the dedup-suffix/season-infix transforms (a slug can
+ *  need either, both, or neither alongside it), so combining it by hand
+ *  into every array entry would just be the same transform copy-pasted
+ *  four times. Confirmed live: without this, an old bookmark for either
+ *  of two manually-imported articles ("Eliteserien 2026 - Bilan à
+ *  mi-saison", "Comment jouer à la Fantasy Eliteserien 2026 ?") 404'd
+ *  instead of resolving, since neither existing normalization touches
+ *  accents at all. */
+function stripAccents(slug: string): string {
+  return slug.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+}
 
 /** A small round avatar next to a name — the writer's most recent *ready*
  *  upload (0010), or a plain initial-letter circle when they never set
@@ -1081,7 +1100,8 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
      *  for what's usually going to be a miss anyway). */
     async resolveWixPostPath(args: { slug: string }): Promise<string | null> {
       const rows = await published();
-      const candidates = [args.slug, ...WIX_SLUG_NORMALIZATIONS.map((normalize) => normalize(args.slug))];
+      const base = [args.slug, ...WIX_SLUG_NORMALIZATIONS.map((normalize) => normalize(args.slug))];
+      const candidates = [...new Set([...base, ...base.map(stripAccents)])];
       for (const candidate of candidates) {
         const row = rows.find((r) => r.slug === candidate);
         if (row !== undefined) return articlePath(viewOf(row));

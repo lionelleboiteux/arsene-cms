@@ -48,6 +48,22 @@ beforeAll(async () => {
       role: 'cover',
       optimized_url: 'https://cdn.fantasycoach.example/pp-test/cover-optimized.webp',
     });
+    // PUBLIC-ROUTE-11b's own fixture: a real Arsène slug is always plain
+    // ASCII (`toSlug()` strips accents at publish time), but the Wix
+    // bookmark for it can carry one — exercises the actual HTTP-level bug
+    // (`new URL(...).pathname` never percent-decodes non-ASCII, confirmed
+    // live) that no `tests/db/publicSiteRender.test.ts` unit test can see,
+    // since those call `resolveWixPostPath` directly with an
+    // already-decoded string.
+    await seedArticle(db.client, {
+      writer_id: writerId,
+      title: 'Guide Eliteserien Mi-saison',
+      league_name: 'Eliteserien',
+      type_name: 'Guides',
+      status: 'published',
+      slug: 'eliteserien-2026-bilan-a-mi-saison',
+      published_at: '2026-08-20T17:13:28Z',
+    });
     const server = await startHttpServer({
       port: await freePort(),
       databaseUrl: db.connectionUri,
@@ -163,6 +179,18 @@ describe('the real public site routes', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { redirect?: string };
     expect(body.redirect).toBe(`${SITE_ORIGIN}/articles/ligue-1/26-27/pronos/pp-test`);
+  });
+
+  it("PUBLIC-ROUTE-11b: an old Wix bookmark carrying a real accent resolves over an actual HTTP request, not just at the render-function level", async () => {
+    const { server } = ctx();
+    // The literal 'à' below is what a real browser/curl sends — `fetch`
+    // percent-encodes it into the request line itself, the same as any
+    // real old Wix bookmark would arrive at this route over the wire.
+    const res = await fetch(`${server.url}/public/post/eliteserien-2026-bilan-à-mi-saison`);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { redirect?: string };
+    expect(body.redirect).toBe(`${SITE_ORIGIN}/articles/eliteserien/26-27/guides/eliteserien-2026-bilan-a-mi-saison`);
   });
 
   it('PUBLIC-ROUTE-12: an old Wix bookmark for a post never manually migrated to Arsène signals a redirect to the static Wix archive, not a 404', async () => {

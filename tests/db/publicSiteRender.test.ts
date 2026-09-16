@@ -960,6 +960,42 @@ describe('public site', () => {
       expect(path).toBe('/articles/ligue-1/26-27/pronos/player-picks-ligue-1-j1-both');
     });
 
+    it("strips accents Wix's own raw slug carries but a real Arsène slug never does, on the bare slug", async () => {
+      const { renderer, db } = ctx();
+      const writer = await seedWriter(db.client, 'Wix Accent Fixture');
+      await seedArticle(db.client, {
+        writer_id: writer,
+        title: 'Guide Eliteserien Mi-saison',
+        league_name: 'Eliteserien',
+        type_name: 'Guides',
+        status: 'published',
+        slug: 'eliteserien-2026-bilan-a-mi-saison',
+        published_at: '2026-08-20T17:13:28Z',
+      });
+
+      const path = await renderer.resolveWixPostPath({ slug: 'eliteserien-2026-bilan-à-mi-saison' });
+
+      expect(path).toBe('/articles/eliteserien/26-27/guides/eliteserien-2026-bilan-a-mi-saison');
+    });
+
+    it('strips accents together with the dedup suffix, when a slug needs both at once', async () => {
+      const { renderer, db } = ctx();
+      const writer = await seedWriter(db.client, 'Wix Accent Dedup Fixture');
+      await seedArticle(db.client, {
+        writer_id: writer,
+        title: 'Comment Jouer a la Fantasy Eliteserien',
+        league_name: 'Eliteserien',
+        type_name: 'Guides',
+        status: 'published',
+        slug: 'comment-jouer-a-la-fantasy-eliteserien-2026',
+        published_at: '2026-08-20T17:13:28Z',
+      });
+
+      const path = await renderer.resolveWixPostPath({ slug: 'comment-jouer-à-la-fantasy-eliteserien-2026-4' });
+
+      expect(path).toBe('/articles/eliteserien/26-27/guides/comment-jouer-a-la-fantasy-eliteserien-2026');
+    });
+
     it('returns null for a Wix post that was never migrated to Arsène, rather than guessing', async () => {
       const { renderer } = ctx();
 

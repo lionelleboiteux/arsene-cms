@@ -1113,6 +1113,24 @@ type Operation =
   | { kind: 'admin-delete-article'; article_id: string }
   | { kind: 'admin-unpublish-article'; article_id: string };
 
+/** `new URL(request.url).pathname` never percent-decodes non-ASCII
+ *  characters (confirmed: a real `à` in the request URL stays literally
+ *  `%C3%A0` in `.pathname`) — every real Arsène slug is plain ASCII
+ *  (`toSlug()` strips accents at publish time), so this never mattered
+ *  for any route matched below until the Wix-bookmark-compatibility route
+ *  (`PUBLIC_POST_ROUTE`) started needing to match against a genuinely
+ *  accented Wix slug. Falls back to the raw, still-encoded value on a
+ *  malformed percent-sequence rather than throwing — a garbled bookmark
+ *  should just fail to match anything downstream (a 404), not 500 the
+ *  whole request. */
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 function matchRoute(path: string): Operation | null {
   if (path === CREATE_DRAFT_ROUTE) return { kind: 'create-draft' };
   if (path === METRICS_SUMMARY_ROUTE) return { kind: 'metrics-summary' };
@@ -1175,7 +1193,7 @@ function matchRoute(path: string): Operation | null {
 
   const publicPost = PUBLIC_POST_ROUTE.exec(path);
   if (publicPost?.[1] !== undefined) {
-    return { kind: 'public-post-legacy', slug: publicPost[1] };
+    return { kind: 'public-post-legacy', slug: safeDecodeURIComponent(publicPost[1]) };
   }
 
   const article = ARTICLE_ROUTE.exec(path);
