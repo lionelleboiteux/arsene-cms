@@ -208,6 +208,12 @@ body {
   color: #1e7a34;
 }
 
+.view-count {
+  font-size: 0.75rem;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
 .co-authors-list {
   display: flex;
   flex-wrap: wrap;

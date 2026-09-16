@@ -52,6 +52,10 @@ export type ArseneClient = {
   /** The caller's own row — `{id, display_name, avatar_url}` — the
    *  first-login onboarding gate's read (`app.tsx`) and "Ma photo"'s. */
   getOwnWriter(): Promise<unknown>;
+  /** Any active writer, not admin-only — the home page's per-article view
+   *  counts (`{views: {article_id, views}[]}`). An article absent from the
+   *  list simply has zero. */
+  getArticleViews(): Promise<unknown>;
   /** No `role`, no `Idempotency-Key`, unlike `uploadArticleImage` — a rare
    *  accidental double-submit just creates one extra `writer_avatars` row. */
   uploadAvatar(args: { file: { filename: string; content_type: string; bytes: Uint8Array } }): Promise<unknown>;
@@ -175,6 +179,14 @@ export function createArseneClient(opts: {
 
     async getOwnWriter() {
       const response = await fetch(`${opts.baseUrl}/v1/writers/me`, {
+        headers: headers({}),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      return parse(response);
+    },
+
+    async getArticleViews() {
+      const response = await fetch(`${opts.baseUrl}/v1/articles/views`, {
         headers: headers({}),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });

@@ -111,3 +111,32 @@ describe('article view counts', () => {
     expect(counts[0]?.article_id).toBe(high);
   });
 });
+
+describe('all article view counts', () => {
+  it('counts views per article, no title/slug/limit, an article with zero views simply absent', async () => {
+    const writer = await seedWriter(db.client, 'All Views Writer');
+    const viewed = await seedArticle(db.client, {
+      writer_id: writer,
+      title: 'Viewed Article',
+      league_name: 'Ligue 1',
+      type_name: 'Player Picks',
+      status: 'published',
+      slug: 'viewed-article-all-views-test',
+    });
+    const neverViewed = await seedArticle(db.client, {
+      writer_id: writer,
+      title: 'Never Viewed Article All Views',
+      league_name: 'Ligue 1',
+      type_name: 'Player Picks',
+      status: 'published',
+      slug: 'never-viewed-article-all-views-test',
+    });
+
+    for (let i = 0; i < 2; i += 1) await insertArticleView(db.client, { article_id: viewed });
+
+    const counts = await createRepo(pool).getAllArticleViewCounts();
+
+    expect(counts).toContainEqual({ article_id: viewed, views: 2 });
+    expect(counts.some((c) => c.article_id === neverViewed)).toBe(false);
+  });
+});

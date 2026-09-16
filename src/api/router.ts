@@ -46,6 +46,7 @@ import { createRepo, type Repo } from './repo.ts';
 import { handleUploadImage, type UploadDeps } from './uploadImage.ts';
 import { handleUploadAvatar, type UploadAvatarDeps } from './uploadAvatar.ts';
 import { handleListActiveWriters, handleGetOwnWriter, type WritersDeps } from './writers.ts';
+import { handleGetArticleViews, type ArticleViewsDeps } from './articleViews.ts';
 import { createSiteRenderer } from '../site/render.ts';
 
 const ARTICLE_ROUTE = /^\/v1\/articles\/([^/]+)\/(publish|images|open)$/;
@@ -98,6 +99,10 @@ const WRITER_ME_ROUTE = '/v1/writers/me';
  *  `Idempotency-Key` requirement (`uploadAvatar.ts`'s own doc comment has
  *  the reasoning). */
 const WRITER_AVATAR_ROUTE = '/v1/writers/me/avatar';
+/** The home page's per-article view counts — same plain `verify()` gate as
+ *  `WRITERS_ROUTE` above, not admin-only (`articleViews.ts`'s own doc
+ *  comment has the reasoning). */
+const ARTICLE_VIEWS_ROUTE = '/v1/articles/views';
 /** DELETE-only, like `ARTICLE_IMAGE_ROUTE` — no other verb ever shares this
  *  exact path, so there's no CORS-preflight-advertising conflict to worry
  *  about (see the comment above on the writers routes). */
@@ -400,6 +405,13 @@ function writersDeps(ctx: Ctx): WritersDeps {
   };
 }
 
+function articleViewsDeps(ctx: Ctx): ArticleViewsDeps {
+  return {
+    auth: { verifyBearer: async (token) => verify(token, ctx) },
+    repo: ctx.repo,
+  };
+}
+
 function avatarDeps(ctx: Ctx): UploadAvatarDeps {
   return {
     auth: { verifyBearer: async (token) => verify(token, ctx) },
@@ -666,6 +678,9 @@ const listWriters = (request: Request, ctx: Ctx): Promise<HandlerResponse> =>
 
 const getOwnWriter = (request: Request, ctx: Ctx): Promise<HandlerResponse> =>
   handleGetOwnWriter({ authorization: request.headers.get('authorization') }, writersDeps(ctx));
+
+const getArticleViews = (request: Request, ctx: Ctx): Promise<HandlerResponse> =>
+  handleGetArticleViews({ authorization: request.headers.get('authorization') }, articleViewsDeps(ctx));
 
 /** Mirrors `upload()` below almost exactly (the Fetch API's own multipart
  *  parser, the dev/test Lambda shim on a `processing` result) — just a
@@ -1107,6 +1122,7 @@ type Operation =
   | { kind: 'admin-list-writers' }
   | { kind: 'list-writers' }
   | { kind: 'get-own-writer' }
+  | { kind: 'article-views' }
   | { kind: 'upload-avatar' }
   | { kind: 'admin-invite-writer' }
   | { kind: 'admin-writer-action'; writer_id: string; action: 'revoke' | 'reinstate' }
@@ -1139,6 +1155,7 @@ function matchRoute(path: string): Operation | null {
   if (path === WRITER_AVATAR_ROUTE) return { kind: 'upload-avatar' };
   if (path === WRITER_ME_ROUTE) return { kind: 'get-own-writer' };
   if (path === WRITERS_ROUTE) return { kind: 'list-writers' };
+  if (path === ARTICLE_VIEWS_ROUTE) return { kind: 'article-views' };
   if (path === ADMIN_INVITE_WRITER_ROUTE) return { kind: 'admin-invite-writer' };
 
   const adminWriterAction = ADMIN_WRITER_ACTION_ROUTE.exec(path);
@@ -1265,6 +1282,8 @@ function dispatch(
       return listWriters(request, ctx);
     case 'get-own-writer':
       return getOwnWriter(request, ctx);
+    case 'article-views':
+      return getArticleViews(request, ctx);
     case 'upload-avatar':
       return avatarUpload(request, raw, ctx);
     case 'admin-invite-writer':

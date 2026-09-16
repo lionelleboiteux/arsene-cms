@@ -722,6 +722,23 @@ export function createRepo(pool: pg.Pool) {
         views: Number(row.views),
       }));
     },
+
+    /**
+     * View count per article, every article that has at least one view —
+     * the writer home page's per-article count, not a top-N leaderboard
+     * like `getArticleViewCounts` above. No `limit`, no title/slug (the
+     * frontend already has those from its own `articles` select): this
+     * exists purely to be merged client-side onto an already-fetched
+     * article list by `article_id`.
+     */
+    async getAllArticleViewCounts(): Promise<{ article_id: string; views: number }[]> {
+      const res = await pool.query<{ article_id: string; views: string }>(
+        `select article_id, count(*) as views
+           from arsene_article_views
+          group by article_id`,
+      );
+      return res.rows.map((row) => ({ article_id: row.article_id, views: Number(row.views) }));
+    },
   };
 }
 

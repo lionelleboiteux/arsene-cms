@@ -43,6 +43,10 @@ export function HomePage({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [unpublishingId, setUnpublishingId] = useState<string | null>(null);
   const [unpublishError, setUnpublishError] = useState<string | null>(null);
+  // article_id -> view count (`GET /v1/articles/views`) — an article absent
+  // from the response simply has zero, so this stays an empty object until
+  // the fetch resolves rather than defaulting every id to 0 up front.
+  const [viewCounts, setViewCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     (async () => {
@@ -54,6 +58,19 @@ export function HomePage({
         if (err instanceof ArseneApiError && err.status === 401) return;
         // Anything else (network hiccup, etc.) — no admin controls this
         // load, same as a 401; not worth its own error banner here.
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const client = await arseneClient();
+        const { views } = (await client.getArticleViews()) as { views: { article_id: string; views: number }[] };
+        setViewCounts(Object.fromEntries(views.map((v) => [v.article_id, v.views])));
+      } catch {
+        // Best-effort — a failed view-count fetch must never block the
+        // article list itself from rendering; articles just show no count.
       }
     })();
   }, []);
@@ -180,6 +197,7 @@ export function HomePage({
                 onDelete={(id) => void handleDelete(id)}
                 unpublishingId={unpublishingId}
                 onUnpublish={(id) => void handleUnpublish(id)}
+                viewCounts={viewCounts}
               />
             );
           })}
@@ -194,6 +212,7 @@ export function HomePage({
               onDelete={(id) => void handleDelete(id)}
               unpublishingId={unpublishingId}
               onUnpublish={(id) => void handleUnpublish(id)}
+              viewCounts={viewCounts}
             />
           )}
         </>
@@ -216,6 +235,7 @@ function LeagueSection({
   onDelete,
   unpublishingId,
   onUnpublish,
+  viewCounts,
 }: {
   title: string;
   articles: ArticleListItem[];
@@ -226,6 +246,7 @@ function LeagueSection({
   onDelete?: (articleId: string) => void;
   unpublishingId?: string | null;
   onUnpublish?: (articleId: string) => void;
+  viewCounts: Record<string, number>;
 }) {
   return (
     <section className="league-section">
@@ -246,6 +267,11 @@ function LeagueSection({
               </button>
               <div className="article-list-actions">
                 <span className={`status-badge status-${article.status}`}>{STATUS_LABEL[article.status]}</span>
+                {article.status === 'published' && (
+                  <span className="view-count" title="Nombre de vues">
+                    {(viewCounts[article.id] ?? 0).toLocaleString('fr-FR')} vues
+                  </span>
+                )}
                 {isAdmin === true && article.status === 'draft' && onDelete !== undefined && (
                   <button
                     type="button"
