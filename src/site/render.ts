@@ -558,13 +558,24 @@ const LIGUE1_NAV_CHILDREN: { label: string; url: string }[] = [
  *  open, click the caret to toggle, outside click/Escape to close) — but
  *  scoped to a single `.home-nav-item`, since the home page's own header
  *  only ever gives one pill (Ligue 1) a dropdown, unlike nav.js which
- *  handles an arbitrary list. */
+ *  handles an arbitrary list.
+ *
+ *  `close()` on `mouseleave` used to fire immediately — but
+ *  `.home-nav-dropdown` sits `margin-top:6px` below the pill row, so a
+ *  cursor moving straight down from the pill to the dropdown crosses a
+ *  strip that's outside both boxes for an instant, closing the menu before
+ *  the pointer ever reaches it (confirmed live: the submenu was
+ *  unreachable). A short close delay, cancelled by the next `mouseenter`
+ *  (which fires again once the pointer lands on the dropdown, still a
+ *  descendant of `item`), tolerates that gap without changing the layout. */
 const HOME_NAV_DROPDOWN_SCRIPT = `<script>(function(){
   var item = document.querySelector('.home-nav-item');
   if (!item) return;
   var caret = item.querySelector('.home-nav-caret');
   var dd = item.querySelector('.home-nav-dropdown');
+  var closeTimer = null;
   var open = function(){
+    if (closeTimer !== null) { clearTimeout(closeTimer); closeTimer = null; }
     item.classList.add('open');
     dd.hidden = false;
     caret.setAttribute('aria-expanded', 'true');
@@ -574,12 +585,16 @@ const HOME_NAV_DROPDOWN_SCRIPT = `<script>(function(){
     dd.hidden = true;
     caret.setAttribute('aria-expanded', 'false');
   };
+  var scheduleClose = function(){
+    if (closeTimer !== null) clearTimeout(closeTimer);
+    closeTimer = setTimeout(close, 300);
+  };
   caret.addEventListener('click', function(e){
     e.stopPropagation();
     if (item.classList.contains('open')) close(); else open();
   });
   item.addEventListener('mouseenter', open);
-  item.addEventListener('mouseleave', close);
+  item.addEventListener('mouseleave', scheduleClose);
   document.addEventListener('click', function(e){
     if (!e.target.closest('.home-nav-item')) close();
   });
