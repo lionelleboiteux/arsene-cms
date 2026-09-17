@@ -658,7 +658,7 @@ describe('public site', () => {
       }).toEqual({ dnp: true, compos: true, groupes: true });
     });
 
-    it('the Ligue 1 pill has a mega-menu dropdown (3 items — "Suspendus au prochain jaune" is commented out in LIGUE1_NAV_CHILDREN until that page exists); Premier League and Bundesliga get none', async () => {
+    it('the Ligue 1 pill has a mega-menu dropdown (4 items, incl. "Suspendus au prochain jaune" pointing at the DNP static page); Premier League and Bundesliga get none', async () => {
       const { renderer } = ctx();
       const page = await renderer.renderHomepage();
 
@@ -678,6 +678,10 @@ describe('public site', () => {
         ligue1_has_dropdown: true,
         dropdown_items: [
           { href: 'https://l1.dnp.fantasy-coach.fr/', label: 'Indisponibles / DNP' },
+          {
+            href: 'https://l1.dnp.fantasy-coach.fr/suspensionsProchainJaune.html',
+            label: 'Suspendus au prochain jaune',
+          },
           { href: 'https://l1.compos.fantasy-coach.fr/', label: 'Compos' },
           { href: 'https://l1.groupes.fantasy-coach.fr/', label: 'Groupes' },
         ],

@@ -549,9 +549,9 @@ const PRONOS_LEAGUES: { name: string; logoUrl: string }[] = [
  *  hand since `fc-shared` is a separate repo this project doesn't own. */
 const LIGUE1_NAV_CHILDREN: { label: string; url: string }[] = [
   { label: 'Indisponibles / DNP', url: 'https://l1.dnp.fantasy-coach.fr/' },
-  // "Suspendus au prochain jaune" — commented out, the page doesn't exist
-  // yet (being built the evening of 2026-09-16). Re-add once it's live.
-  // { label: 'Suspendus au prochain jaune', url: 'https://www.fantasy-coach.fr/suspendus-prochain-jaune' },
+  // Re-added 2026-09-17 — now lives on the DNP static site rather than the
+  // old (never-built) www.fantasy-coach.fr path.
+  { label: 'Suspendus au prochain jaune', url: 'https://l1.dnp.fantasy-coach.fr/suspensionsProchainJaune.html' },
   { label: 'Compos', url: 'https://l1.compos.fantasy-coach.fr/' },
   { label: 'Groupes', url: 'https://l1.groupes.fantasy-coach.fr/' },
 ];
