@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient.ts';
 import { arseneClient } from '../lib/arseneApi.ts';
 import { ArseneApiError } from '../../../src/api/client.ts';
@@ -62,18 +62,25 @@ export function HomePage({
     })();
   }, []);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const client = await arseneClient();
-        const { views } = (await client.getArticleViews()) as { views: { article_id: string; views: number }[] };
-        setViewCounts(Object.fromEntries(views.map((v) => [v.article_id, v.views])));
-      } catch {
-        // Best-effort — a failed view-count fetch must never block the
-        // article list itself from rendering; articles just show no count.
-      }
-    })();
+  // Its own function (not inlined in the mount effect below) so "Actualiser"
+  // can re-run it too — it used to only ever fetch once, on mount, so a
+  // real new view landing after the page loaded never showed up without a
+  // full reload; clicking "Actualiser" looked like it refreshed everything
+  // but silently left this one count stale.
+  const refreshViewCounts = useCallback(async () => {
+    try {
+      const client = await arseneClient();
+      const { views } = (await client.getArticleViews()) as { views: { article_id: string; views: number }[] };
+      setViewCounts(Object.fromEntries(views.map((v) => [v.article_id, v.views])));
+    } catch {
+      // Best-effort — a failed view-count fetch must never block the
+      // article list itself from rendering; articles just show no count.
+    }
   }, []);
+
+  useEffect(() => {
+    void refreshViewCounts();
+  }, [refreshViewCounts]);
 
   async function handleDelete(articleId: string) {
     if (!window.confirm('Supprimer définitivement ce brouillon ? Cette action est irréversible.')) return;
@@ -218,7 +225,14 @@ export function HomePage({
         </>
       )}
 
-      <button type="button" onClick={() => void refresh()} className="refresh-button">
+      <button
+        type="button"
+        onClick={() => {
+          void refresh();
+          void refreshViewCounts();
+        }}
+        className="refresh-button"
+      >
         Actualiser
       </button>
     </main>
