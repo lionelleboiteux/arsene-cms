@@ -70,6 +70,13 @@ export function ComposePage({
   const [categoryChoice, setCategoryChoice] = useState('');
   const hydratedForRef = useRef<string | null>(null);
   const bodyEditorRef = useRef<BodyEditorHandle>(null);
+  // Manual save button — a direct call into `saveNow` (the same immediate
+  // write `confirmTaxonomy` below already uses), not a new persistence
+  // path. `{}` as the patch: no field changes to layer on, just "persist
+  // whatever's in `fieldsRef` right now" instead of waiting for the next
+  // 30s autosave tick.
+  const [manualSaving, setManualSaving] = useState(false);
+  const [manualSaveError, setManualSaveError] = useState<string | null>(null);
   useEffect(() => {
     if (state.status !== 'editable' || hydratedForRef.current === state.articleId) return;
     hydratedForRef.current = state.articleId;
@@ -104,6 +111,18 @@ export function ComposePage({
 
   const { fields } = state;
 
+  async function handleSaveNow() {
+    setManualSaveError(null);
+    setManualSaving(true);
+    try {
+      await saveNow({});
+    } catch (err) {
+      setManualSaveError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setManualSaving(false);
+    }
+  }
+
   async function confirmTaxonomy() {
     setTaxonomyError(null);
     try {
@@ -120,6 +139,9 @@ export function ComposePage({
         <button type="button" onClick={onBack}>
           ← Accueil
         </button>
+        <button type="button" onClick={() => void handleSaveNow()} disabled={manualSaving}>
+          {manualSaving ? 'Enregistrement…' : 'Sauvegarder maintenant'}
+        </button>
         <SaveIndicator indicator={state.savedIndicator} />
         <button type="button" onClick={onOpenAvatar}>
           Ma photo
@@ -128,6 +150,11 @@ export function ComposePage({
           Se déconnecter
         </button>
       </header>
+      {manualSaveError !== null && (
+        <p role="alert" className="error-text">
+          {manualSaveError}
+        </p>
+      )}
 
       <div className="field-row">
         <label htmlFor="title">Titre</label>
