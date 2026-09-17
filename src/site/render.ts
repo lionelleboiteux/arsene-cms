@@ -481,14 +481,25 @@ function articleCard(row: ArticleRow): string {
  * pulled straight from jsDelivr, no build step, matching this file's own
  * "plain HTML string, no framework" shape exactly. `nav.js` defines
  * `<fc-nav>`; `ads.js` is the AdSense + consent loader, same publisher ID
- * across every site. Pinned to `@main` (not a version tag) like every
- * other sibling site, so a `nav.js` edit over there reaches this site too,
- * on jsDelivr's ~12h branch-ref cache.
+ * across every site.
+ *
+ * Pinned to a commit SHA (`FC_SHARED_REF` below), not `@main` — `@main`
+ * used to mean an `fc-shared` edit could sit unseen by a returning visitor
+ * for up to 7 days (the browser's own cache for that exact URL) even after
+ * a jsDelivr purge, discovered live the day the "Suspendus au prochain
+ * jaune" URL was fixed there and still didn't show up. A SHA-pinned URL is
+ * immutable, so jsDelivr and every browser can cache it forever; bumping
+ * `FC_SHARED_REF` after any `fc-shared` change is what actually invalidates
+ * the old one, since it's a different URL, not a header any cache can
+ * choose to ignore. Every other site that loads `fc-shared` needs the same
+ * bump, by hand, in its own `<script src>` tags — `fc-shared/README.md`
+ * documents the full list.
  */
+const FC_SHARED_REF = 'ee6630a';
 const FC_SHARED_HEAD = [
-  '<script src="https://cdn.jsdelivr.net/gh/lionelleboiteux/fc-shared@main/nav.js" defer></script>',
-  '<script src="https://cdn.jsdelivr.net/gh/lionelleboiteux/fc-shared@main/ads.js" async></script>',
-  '<script src="https://cdn.jsdelivr.net/gh/lionelleboiteux/fc-shared@main/ga.js" async></script>',
+  `<script src="https://cdn.jsdelivr.net/gh/lionelleboiteux/fc-shared@${FC_SHARED_REF}/nav.js" defer></script>`,
+  `<script src="https://cdn.jsdelivr.net/gh/lionelleboiteux/fc-shared@${FC_SHARED_REF}/ads.js" async></script>`,
+  `<script src="https://cdn.jsdelivr.net/gh/lionelleboiteux/fc-shared@${FC_SHARED_REF}/ga.js" async></script>`,
 ].join('');
 
 /**
