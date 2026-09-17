@@ -203,6 +203,13 @@ button:disabled {
   gap: 0.75rem;
 }
 
+.article-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
 .article-list-actions {
   display: flex;
   align-items: center;

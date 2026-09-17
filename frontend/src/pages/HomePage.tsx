@@ -276,16 +276,7 @@ function LeagueSection({
         <ul className="article-list">
           {articles.map((article) => (
             <li key={article.id}>
-              <button type="button" className="article-link" onClick={() => onOpenArticle(article.id)}>
-                {article.title === '' ? 'Sans titre' : article.title}
-              </button>
-              <div className="article-list-actions">
-                <span className={`status-badge status-${article.status}`}>{STATUS_LABEL[article.status]}</span>
-                {article.status === 'published' && (
-                  <span className="view-count" title="Nombre de vues">
-                    {(viewCounts[article.id] ?? 0).toLocaleString('fr-FR')} vues
-                  </span>
-                )}
+              <div className="article-title-group">
                 {article.public_url !== null && (
                   <a
                     href={article.public_url}
@@ -298,6 +289,17 @@ function LeagueSection({
                     ↗
                   </a>
                 )}
+                <button type="button" className="article-link" onClick={() => onOpenArticle(article.id)}>
+                  {article.title === '' ? 'Sans titre' : article.title}
+                </button>
+              </div>
+              <div className="article-list-actions">
+                {article.status === 'published' && (
+                  <span className="view-count" title="Nombre de vues">
+                    {(viewCounts[article.id] ?? 0).toLocaleString('fr-FR')} vues
+                  </span>
+                )}
+                <span className={`status-badge status-${article.status}`}>{STATUS_LABEL[article.status]}</span>
                 {isAdmin === true && article.status === 'draft' && onDelete !== undefined && (
                   <button
                     type="button"
