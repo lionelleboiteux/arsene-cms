@@ -24,3 +24,10 @@ export const ARSENE_API_BASE = requireEnv('VITE_ARSENE_API_BASE');
  *  to point at (`sanitizePastedHtml`, `src/domain/paste.ts`) — same value
  *  `router.ts` already resolves server-side from `CDN_ORIGIN`. */
 export const CDN_ORIGIN = requireEnv('VITE_CDN_ORIGIN');
+
+/** The public site's own origin — same value `router.ts` resolves
+ *  server-side from the `SITE_ORIGIN` Edge Function secret (`DEFAULT_SITE_
+ *  ORIGIN`'s doc comment there has the reasoning). Used by the home page's
+ *  "open in a new tab" link (`useArticleList.ts`), the only place this
+ *  frontend ever needs to build a public article URL. */
+export const SITE_ORIGIN = requireEnv('VITE_SITE_ORIGIN');

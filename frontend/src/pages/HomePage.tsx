@@ -272,6 +272,18 @@ function LeagueSection({
                     {(viewCounts[article.id] ?? 0).toLocaleString('fr-FR')} vues
                   </span>
                 )}
+                {article.public_url !== null && (
+                  <a
+                    href={article.public_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="open-article-link"
+                    title="Ouvrir l'article publié dans un nouvel onglet"
+                    aria-label="Ouvrir l'article publié dans un nouvel onglet"
+                  >
+                    ↗
+                  </a>
+                )}
                 {isAdmin === true && article.status === 'draft' && onDelete !== undefined && (
                   <button
                     type="button"
