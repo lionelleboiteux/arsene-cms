@@ -8,6 +8,17 @@ import { supabase } from '../lib/supabaseClient.ts';
  * clicking the link lands back on `/compose`, session already established
  * (supabase-js's default `detectSessionInUrl: true` handles the token in the
  * URL fragment before this component ever mounts).
+ *
+ * `shouldCreateUser: false` — without it, `signInWithOtp` silently creates
+ * a brand-new (writer-less) Supabase Auth account for *any* typed email,
+ * including a mistyped one, and still reports success. That real account
+ * gets a real session and a real magic link, but `router.ts`'s `verify()`
+ * rejects every API call from it (no matching `writers` row) with a flat
+ * "Auth bearer token required" — indistinguishable from an expired link,
+ * so "just request a new one" never helps. Confirmed live: exactly this
+ * happened to a writer who typed a plausible-looking but wrong address.
+ * With this flag, Supabase refuses upfront (`otp_disabled`) instead of
+ * quietly minting an unusable account.
  */
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -21,12 +32,16 @@ export function LoginPage() {
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/compose` },
+      options: { emailRedirectTo: `${window.location.origin}/compose`, shouldCreateUser: false },
     });
 
     if (error) {
       setStatus('error');
-      setErrorMessage(error.message);
+      setErrorMessage(
+        error.code === 'otp_disabled'
+          ? "Cette adresse n'est pas reconnue comme celle d'un·e rédacteur·ice. Vérifiez que vous utilisez bien l'adresse à laquelle vous avez été invité(e), ou contactez un administrateur."
+          : error.message,
+      );
       return;
     }
     setStatus('sent');
