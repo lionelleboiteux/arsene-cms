@@ -1,12 +1,51 @@
 :root {
   color-scheme: light dark;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --btn-bg: #f3f4f6;
+  --btn-fg: #16181c;
+  --btn-border: #d0d5dd;
+  --chip-bg: #eef1f5;
+  --chip-fg: #16181c;
+  --chip-remove-fg: #6b7280;
+}
+
+/* Plain `<button>`s (the header/toolbar ones — "Sauvegarder maintenant",
+   "Accueil", etc.) and the co-author chips relied on the browser's own
+   dark-mode colors (`color-scheme: light dark` above, or a hardcoded
+   light-only chip background) — both ended up low-contrast in an actual
+   dark system theme (confirmed via screenshot: text nearly unreadable
+   against its own button/chip background). Explicit light/dark tokens
+   here replace that guesswork. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --btn-bg: #2c2f36;
+    --btn-fg: #f2f2f3;
+    --btn-border: #494d57;
+    --chip-bg: #2c2f36;
+    --chip-fg: #f2f2f3;
+    --chip-remove-fg: #9aa1ad;
+  }
 }
 
 body {
   margin: 0;
   background: canvas;
   color: canvastext;
+}
+
+button {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border: 1px solid var(--btn-border);
+  border-radius: 0.375rem;
+  padding: 0.4rem 0.75rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .auth-page {
@@ -228,7 +267,8 @@ body {
   font-size: 0.85rem;
   padding: 0.2rem 0.5rem;
   border-radius: 999px;
-  background: #eef1f5;
+  background: var(--chip-bg);
+  color: var(--chip-fg);
 }
 
 .co-author-chip button {
@@ -238,7 +278,7 @@ body {
   font: inherit;
   line-height: 1;
   cursor: pointer;
-  color: #6b7280;
+  color: var(--chip-remove-fg);
 }
 
 .co-author-chip button:hover {
