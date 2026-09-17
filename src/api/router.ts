@@ -1240,7 +1240,8 @@ const methodOf = (op: Operation): string => {
     op.kind === 'public-post-legacy' ||
     op.kind === 'admin-list-writers' ||
     op.kind === 'list-writers' ||
-    op.kind === 'get-own-writer'
+    op.kind === 'get-own-writer' ||
+    op.kind === 'article-views'
   ) {
     return 'GET';
   }
