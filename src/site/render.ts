@@ -1084,14 +1084,30 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
       // no equally-good fallback, so it's simply omitted rather than
       // guessed at.
       const pageTitle = row.meta_title !== null && row.meta_title !== '' ? row.meta_title : row.title;
+      const canonicalUrl = `${opts.siteOrigin}${articlePath(view)}`;
       const head = [
-        `<link rel="canonical" href="${opts.siteOrigin}${articlePath(view)}"/>`,
+        `<link rel="canonical" href="${canonicalUrl}"/>`,
+        // og:image alone used to be the whole card — enough for most link
+        // unfurlers (Facebook, Slack, Discord all fall back to Open Graph
+        // tags), but X specifically requires its own twitter:card to pick a
+        // card type at all; with none, X showed a plain text link, no image,
+        // even though og:image was correct — confirmed live 2026-09-18.
+        // og:title/og:url and the twitter:* mirrors aren't strictly needed
+        // for X (which falls back to Open Graph for those), but cost nothing
+        // and make the card complete on every unfurler at once.
+        `<meta property="og:type" content="article"/>`,
+        `<meta property="og:url" content="${escape(canonicalUrl)}"/>`,
+        `<meta property="og:title" content="${escape(pageTitle)}"/>`,
         `<meta property="og:image" content="${escape(view.cover_image_url)}"/>`,
+        `<meta name="twitter:card" content="summary_large_image"/>`,
+        `<meta name="twitter:title" content="${escape(pageTitle)}"/>`,
+        `<meta name="twitter:image" content="${escape(view.cover_image_url)}"/>`,
         row.meta_description === null || row.meta_description === ''
           ? ''
           : [
               `<meta name="description" content="${escape(row.meta_description)}"/>`,
               `<meta property="og:description" content="${escape(row.meta_description)}"/>`,
+              `<meta name="twitter:description" content="${escape(row.meta_description)}"/>`,
             ].join(''),
         `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`,
       ].join('');

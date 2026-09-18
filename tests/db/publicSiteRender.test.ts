@@ -333,6 +333,31 @@ describe('public site', () => {
     }).toEqual({ has_description: true, has_og_description: true, has_title: true });
   });
 
+  it('an article page carries twitter:card — without it, X (Twitter) showed a plain text link with no image even though og:image was correct, confirmed live 2026-09-18', async () => {
+    const { renderer } = ctx();
+
+    const page = await renderer.renderArticlePage({
+      league_slug: 'ligue-1',
+      season_slug: '26-27',
+      type_slug: 'pronos',
+      slug: 'pronos-ligue-1-journee-12',
+    });
+
+    expect({
+      has_twitter_card: page.html.includes('<meta name="twitter:card" content="summary_large_image"/>'),
+      has_twitter_image: /<meta name="twitter:image" content="[^"]+"\/>/.test(page.html),
+      has_twitter_title: page.html.includes('<meta name="twitter:title" content="Pronos Ligue 1 - Journée 12"/>'),
+      has_og_title: page.html.includes('<meta property="og:title" content="Pronos Ligue 1 - Journée 12"/>'),
+      has_og_type: page.html.includes('<meta property="og:type" content="article"/>'),
+    }).toEqual({
+      has_twitter_card: true,
+      has_twitter_image: true,
+      has_twitter_title: true,
+      has_og_title: true,
+      has_og_type: true,
+    });
+  });
+
   it('NFR-EGRESS-01: no rendered page points a visitor at Supabase Storage, because hotlinking blows the 5 GB/month egress free tier', async () => {
     const { renderer } = ctx();
 
