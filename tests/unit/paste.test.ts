@@ -26,8 +26,13 @@ const sanitize = (html: string, allowedImageOrigin = CDN_ORIGIN) =>
 
 describe('paste sanitization', () => {
   it('AC-03: pasting a Word document keeps its "Heading 2" paragraph as an H2 and discards the custom font and styling', async () => {
+    // Word's own "Heading 2" style genuinely wraps its run in <b> (real
+    // Word HTML, not an artifact of this test) — kept, not stripped: a
+    // heading being marked bold too is a real, correct thing for a
+    // document to say, and BodyEditor.tsx's editor supports a bold mark
+    // inside a heading node same as anywhere else.
     expect(collapse(await sanitize(WORD_PASTE_HTML))).toBe(
-      '<h2>Les affiches de la journée</h2><p>PSG reçoit Marseille dimanche soir.</p>',
+      '<h2><b>Les affiches de la journée</b></h2><p>PSG reçoit Marseille dimanche soir.</p>',
     );
   });
 
@@ -89,9 +94,42 @@ describe('paste sanitization', () => {
       expect(collapse(await sanitize(raw))).toBe('<small>Photo : Ligue 1</small>');
     });
 
-    it('keeps a colour span, normalised to just its hex colour', async () => {
-      const raw = '<p><span style="color: #FF0000; font-weight: bold">Texte</span></p>';
+    it('keeps a colour span, normalised to just its hex colour value (whitespace/case)', async () => {
+      const raw = '<p><span style="color: #FF0000">Texte</span></p>';
       expect(collapse(await sanitize(raw))).toBe('<p><span style="color:#FF0000">Texte</span></p>');
+    });
+
+    it('keeps bold/italic/underline expressed as inline CSS on a span — Google Docs\' own paste shape, which uses no <b>/<em>/<u> tags at all', async () => {
+      const raw = '<p><span style="font-weight:700">Gras</span> <span style="font-style:italic">Italique</span> <span style="text-decoration:underline">Souligné</span></p>';
+      expect(collapse(await sanitize(raw))).toBe(
+        '<p><span style="font-weight:700">Gras</span><span style="font-style:italic">Italique</span><span style="text-decoration:underline">Souligné</span></p>',
+      );
+    });
+
+    it('keeps every combination of colour/bold/italic/underline together on one span', async () => {
+      const raw =
+        '<p><span style="color:#ff0000;font-weight:bold;font-style:italic;text-decoration:underline">Texte</span></p>';
+      expect(collapse(await sanitize(raw))).toBe(
+        '<p><span style="color:#ff0000;font-weight:bold;font-style:italic;text-decoration:underline">Texte</span></p>',
+      );
+    });
+
+    it('drops Google Docs\' own explicit "formatting is off" values (font-weight:400, font-style:normal, text-decoration:none), unwrapping the span entirely when that was its only style', async () => {
+      // Docs stamps every single span it emits with all four properties,
+      // whether or not any of them are actually "on" — a bug here would
+      // make ordinary, unformatted pasted text render bold/italic/underlined.
+      const raw = '<p><span style="font-weight:400;font-style:normal;text-decoration:none">Texte normal</span></p>';
+      expect(collapse(await sanitize(raw))).toBe('<p>Texte normal</p>');
+    });
+
+    it('keeps a literal <b>/<i> tag (real Word/webpage HTML, not just Docs\' span-style shape)', async () => {
+      const raw = '<p><b>Gras</b> <i>Italique</i></p>';
+      expect(collapse(await sanitize(raw))).toBe('<p><b>Gras</b><i>Italique</i></p>');
+    });
+
+    it('unwraps Google Docs\' own outer <b id="docs-internal-guid-...">, its whole-clipboard version marker, without stray-bolding everything it wraps', async () => {
+      const raw = '<b id="docs-internal-guid-abc123"><p>Un paragraphe <b>vraiment en gras</b> au milieu.</p></b>';
+      expect(collapse(await sanitize(raw))).toBe('<p>Un paragraphe <b>vraiment en gras</b> au milieu.</p>');
     });
 
     it('unwraps a span with no colour, keeping its text (Google Docs structural spans, AC-03c; also what real Word HTML wraps nearly every run in)', async () => {
