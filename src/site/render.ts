@@ -495,7 +495,7 @@ function articleCard(row: ArticleRow): string {
  * bump, by hand, in its own `<script src>` tags — `fc-shared/README.md`
  * documents the full list.
  */
-const FC_SHARED_REF = '188d7e4';
+const FC_SHARED_REF = 'c0d4fa8';
 const FC_SHARED_HEAD = [
   `<script src="https://cdn.jsdelivr.net/gh/lionelleboiteux/fc-shared@${FC_SHARED_REF}/nav.js" defer></script>`,
   `<script src="https://cdn.jsdelivr.net/gh/lionelleboiteux/fc-shared@${FC_SHARED_REF}/ads.js" async></script>`,
