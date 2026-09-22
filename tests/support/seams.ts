@@ -818,6 +818,10 @@ export async function loadAuth(): Promise<AuthModule> {
 // src/images/lambdaHandler.ts — ADR-0004 (real `sharp`, in AWS Lambda's Node)
 // ---------------------------------------------------------------------------
 
+export type OgCropResult =
+  | { ok: true; bytes: Uint8Array; byte_size: number }
+  | { ok: false; code: 'UNSUPPORTED_FORMAT' | 'CORRUPTED_FILE'; message: string };
+
 export interface ImageLambdaModule {
   /**
    * The whole optimisation step, moved out of the request path: image bytes
@@ -829,6 +833,14 @@ export interface ImageLambdaModule {
     bytes: Uint8Array,
     meta: { filename: string; declared_content_type: string },
   ): Promise<OptimizeResult>;
+  /** A 1200x630 JPEG crop of a cover photo, for the social-card og:image
+   *  (0013_article_images_og_url.sql) — see that migration's own doc
+   *  comment for why this fixes WhatsApp/Facebook/Twitter showing a tiny
+   *  square logo instead of a proper large-image card. */
+  buildOgImageCrop(
+    bytes: Uint8Array,
+    meta: { filename: string; declared_content_type: string },
+  ): Promise<OgCropResult>;
 }
 
 export async function loadImageLambda(): Promise<ImageLambdaModule> {
@@ -853,6 +865,9 @@ export type ImageStatusCallbackRequest = {
   body: {
     status: 'ready' | 'failed';
     optimized_url?: string | null;
+    /** 0013 — the cover's 1200x630 og-image crop, only ever sent for a
+     *  `role: 'cover'` row. */
+    og_url?: string | null;
     failure?: { code: string; message: string } | null;
   };
 };
@@ -866,6 +881,7 @@ export type ImageStatusDeps = {
       image_id: string;
       status: 'ready' | 'failed';
       optimized_url: string | null;
+      og_image_url: string | null;
       failure: { code: string; message: string } | null;
     }): Promise<boolean>;
   };

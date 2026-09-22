@@ -22,6 +22,10 @@ export type PublishedArticleView = {
    *  (`db/migrations/0009_article_authors.sql`). */
   author_names: string[];
   cover_image_url: string;
+  /** The cover, pre-cropped to exactly 1200x630 for a social-card og:image
+   *  (0013) — `''` for an article published before this existed, same
+   *  "empty string means none yet, never null" shape as `cover_image_url`. */
+  og_image_url: string;
   published_at: string;
   first_published_at: string;
 };
@@ -145,6 +149,7 @@ export function buildStructuredData(
     '@type': 'NewsArticle',
     headline: article.title,
     image: [article.cover_image_url],
+    og_image: [article.og_image_url],
     datePublished: article.first_published_at,
     dateModified: article.published_at,
     // schema.org's `author` accepts either shape — a single object for one

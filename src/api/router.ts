@@ -620,6 +620,7 @@ function convert(
         image_id,
         status: 'failed',
         optimized_url: null,
+        og_image_url: null,
         failure: { code: result.code, message: result.message },
       });
       return;
@@ -628,10 +629,17 @@ function convert(
       `${image_id}-optimized.${result.format}`,
       result.bytes,
     );
+    // This in-process fallback (the WASM codec, used when no S3/Lambda is
+    // configured — `ADR-0004`'s own doc comment has the "boots either way"
+    // reasoning) has no resize step, so it can't build a real 1200x630
+    // og-image crop the way the real Lambda does. `og_image_url` stays
+    // null — the render layer already falls back to the raw cover for
+    // exactly this case.
     await ctx.repo.setImageStatus({
       image_id,
       status: 'ready',
       optimized_url: stored.url,
+      og_image_url: null,
       failure: null,
     });
   })().catch((err: Error) =>

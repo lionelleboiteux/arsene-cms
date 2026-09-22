@@ -358,6 +358,103 @@ describe('public site', () => {
     });
   });
 
+  it('og:site_name is always present, and an article with no og-image crop yet emits no width/height/type/alt hints for it', async () => {
+    const { renderer } = ctx();
+
+    const page = await renderer.renderArticlePage({
+      league_slug: 'ligue-1',
+      season_slug: '26-27',
+      type_slug: 'pronos',
+      slug: 'pronos-ligue-1-journee-12',
+    });
+
+    expect({
+      has_site_name: page.html.includes('<meta property="og:site_name" content="Fantasy Coach"/>'),
+      // This fixture's cover (seeded above) never got an og_image_url —
+      // asserting width/height/type/alt are genuinely dimensions of what's
+      // being served, not a blanket claim about every og:image.
+      has_dimension_hints: /og:image:(width|height|type|alt)/.test(page.html),
+    }).toEqual({ has_site_name: true, has_dimension_hints: false });
+  });
+
+  it('0013: an article whose cover has a real 1200x630 og-image crop serves that as og:image/twitter:image, with width/height/type/alt asserted', async () => {
+    const { renderer, db } = ctx();
+    const writer = await seedWriter(db.client, 'Og Crop Writer');
+    const article = await seedArticle(db.client, {
+      writer_id: writer,
+      title: 'Article Avec Crop Og',
+      league_name: 'Ligue 1',
+      type_name: 'Pronos',
+      status: 'published',
+      slug: 'article-avec-crop-og',
+    });
+    const ogUrl = 'https://cdn.fantasycoach.example/og-crop-test/cover-og.jpg';
+    await seedImage(db.client, {
+      article_id: article,
+      role: 'cover',
+      optimized_url: 'https://cdn.fantasycoach.example/og-crop-test/cover-optimized.webp',
+      og_image_url: ogUrl,
+    });
+
+    const page = await renderer.renderArticlePage({
+      league_slug: 'ligue-1',
+      season_slug: '26-27',
+      type_slug: 'pronos',
+      slug: 'article-avec-crop-og',
+    });
+
+    expect({
+      og_image: page.html.match(/property="og:image"\s+content="([^"]+)"/)?.[1],
+      twitter_image: page.html.match(/name="twitter:image"\s+content="([^"]+)"/)?.[1],
+      has_type: page.html.includes('<meta property="og:image:type" content="image/jpeg"/>'),
+      has_width: page.html.includes('<meta property="og:image:width" content="1200"/>'),
+      has_height: page.html.includes('<meta property="og:image:height" content="630"/>'),
+      has_alt: page.html.includes('<meta property="og:image:alt" content="Article Avec Crop Og"/>'),
+    }).toEqual({
+      og_image: ogUrl,
+      twitter_image: ogUrl,
+      has_type: true,
+      has_width: true,
+      has_height: true,
+      has_alt: true,
+    });
+  });
+
+  it('og:description/twitter:description use the Teaser, not meta_description, when the writer set one — the actual point of this fix (image was the reported bug, but the ask also covered the description source)', async () => {
+    const { renderer, db } = ctx();
+    const writer = await seedWriter(db.client, 'Teaser Description Writer');
+    // `seedArticle` hardcodes meta_description to a fixed sentence
+    // ("Nos pronostics, confiance..." — see its own source, not
+    // configurable per fixture) — different from the teaser below either
+    // way, so which one wins is exactly what this test is checking.
+    await seedArticle(db.client, {
+      writer_id: writer,
+      title: 'Article Avec Teaser Et Meta Description',
+      league_name: 'Ligue 1',
+      type_name: 'Pronos',
+      status: 'published',
+      slug: 'article-avec-teaser-et-meta-description',
+      teaser: 'Le teaser, court et accrocheur.',
+    });
+
+    const page = await renderer.renderArticlePage({
+      league_slug: 'ligue-1',
+      season_slug: '26-27',
+      type_slug: 'pronos',
+      slug: 'article-avec-teaser-et-meta-description',
+    });
+
+    expect({
+      description: page.html.match(/<meta name="description" content="([^"]+)"\/>/)?.[1],
+      og_description: page.html.match(/property="og:description"\s+content="([^"]+)"/)?.[1],
+      twitter_description: page.html.match(/name="twitter:description"\s+content="([^"]+)"/)?.[1],
+    }).toEqual({
+      description: 'Le teaser, court et accrocheur.',
+      og_description: 'Le teaser, court et accrocheur.',
+      twitter_description: 'Le teaser, court et accrocheur.',
+    });
+  });
+
   it('NFR-EGRESS-01: no rendered page points a visitor at Supabase Storage, because hotlinking blows the 5 GB/month egress free tier', async () => {
     const { renderer } = ctx();
 

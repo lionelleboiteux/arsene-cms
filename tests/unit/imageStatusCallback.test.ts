@@ -137,3 +137,29 @@ describe('image status callback state machine', () => {
     });
   });
 });
+
+/** 0013 — the Lambda's `og_url` (only ever sent for a cover-role image's
+ *  1200x630 crop) has to actually reach `repo.setImageStatus` as
+ *  `og_image_url`, not get silently dropped on the way through. */
+describe('og_url threading (0013)', () => {
+  it('a ready callback carrying og_url passes it through as og_image_url', async () => {
+    const api = await loadImageStatus();
+    const { deps, updates } = buildImageStatusDeps({ row: processingRow() });
+
+    await api.handleImageStatusCallback(
+      callback({ body: { status: 'ready', optimized_url: COVER_OPTIMIZED_URL, og_url: 'https://cdn.example/og.jpg', failure: null } }),
+      deps,
+    );
+
+    expect(updates[0]?.og_image_url).toBe('https://cdn.example/og.jpg');
+  });
+
+  it('a ready callback with no og_url (a body image) passes og_image_url as null, not undefined', async () => {
+    const api = await loadImageStatus();
+    const { deps, updates } = buildImageStatusDeps({ row: processingRow() });
+
+    await api.handleImageStatusCallback(callback(), deps);
+
+    expect(updates[0]?.og_image_url).toBeNull();
+  });
+});

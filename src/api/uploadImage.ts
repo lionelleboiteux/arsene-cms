@@ -186,7 +186,12 @@ async function createImage(
 
   // AC-15: alt text comes from the article's own words, not from the pixels, so
   // it is ready the moment conversion completes rather than computed later.
-  const original = await deps.storage.put(`${id}-original-${req.file.filename}`, req.file.bytes);
+  // `role` rides along in the key itself (`lambda/imageConvert/handler.ts`'s
+  // `parseKey` reads it back out) — the Lambda is otherwise stateless, no DB
+  // read of its own, so this is the only way it can know whether to also
+  // build a 1200x630 og-image crop (0013 — cover only, a body image never
+  // needs one).
+  const original = await deps.storage.put(`${id}-${req.role}-original-${req.file.filename}`, req.file.bytes);
   return insert(id, req, deps, {
     status: 'processing',
     alt_text: generateAltText({

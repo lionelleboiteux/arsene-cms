@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import sharp from 'sharp';
 import { loadImageLambda } from '../support/seams.js';
 import {
   REAL_HEIC,
@@ -143,5 +144,73 @@ describe('Lambda image optimisation (ADR-0004)', () => {
       ok: true,
       within_one_second: true,
     });
+  });
+});
+
+/**
+ * 0013_article_images_og_url.sql's build step: a real cover photo in, a
+ * real 1200x630 JPEG out — verified against the *decoded* output
+ * dimensions, not just "some bytes came back", since the whole point of
+ * this crop is the exact size social platforms require for a large-image
+ * card (`buildOgImageCrop`'s own doc comment has the full reasoning).
+ */
+describe('og-image crop (0013)', () => {
+  it('crops a real cover photo to exactly 1200x630, regardless of its own aspect ratio', async () => {
+    const { buildOgImageCrop } = await loadImageLambda();
+    const bytes = await realPhoto('jpeg');
+
+    const result = await buildOgImageCrop(bytes, {
+      filename: 'psg-om-cover.jpg',
+      declared_content_type: 'image/jpeg',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const decoded = await sharp(Buffer.from(result.bytes)).metadata();
+    expect({ format: decoded.format, width: decoded.width, height: decoded.height }).toEqual({
+      format: 'jpeg',
+      width: 1200,
+      height: 630,
+    });
+  });
+
+  it('accepts every source format the cover-upload pipeline itself accepts (HEIC included)', async () => {
+    const { buildOgImageCrop } = await loadImageLambda();
+
+    const result = await buildOgImageCrop(REAL_HEIC, {
+      filename: 'IMG_4821.heic',
+      declared_content_type: 'image/heic',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const decoded = await sharp(Buffer.from(result.bytes)).metadata();
+    expect({ width: decoded.width, height: decoded.height }).toEqual({ width: 1200, height: 630 });
+  });
+
+  it('refuses a corrupted file cleanly, the same failure shape as optimizeImageBuffer', async () => {
+    const { buildOgImageCrop } = await loadImageLambda();
+
+    const result = await buildOgImageCrop(await corruptedJpeg(), {
+      filename: 'broken.jpg',
+      declared_content_type: 'image/jpeg',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe('CORRUPTED_FILE');
+  });
+
+  it('refuses a format this pipeline does not support at all', async () => {
+    const { buildOgImageCrop } = await loadImageLambda();
+
+    const result = await buildOgImageCrop(await unsupportedFile(), {
+      filename: 'notes.pdf',
+      declared_content_type: 'application/pdf',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe('UNSUPPORTED_FORMAT');
   });
 });

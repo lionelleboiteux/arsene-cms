@@ -28,6 +28,10 @@ export type ImageStatusCallbackRequest = {
   body: {
     status: 'ready' | 'failed';
     optimized_url?: string | null;
+    /** The same asset pre-cropped to 1200x630 for a social-card og:image
+     *  (0013) — only ever sent for a `role: 'cover'` row; the Lambda has no
+     *  use for one on a body image. */
+    og_url?: string | null;
     failure?: ImageFailure | null;
   };
 };
@@ -40,6 +44,7 @@ export type ImageStatusDeps = {
       image_id: string;
       status: 'ready' | 'failed';
       optimized_url: string | null;
+      og_image_url: string | null;
       failure: ImageFailure | null;
     }): Promise<boolean>;
   };
@@ -71,11 +76,13 @@ export async function handleImageStatusCallback(
   }
 
   const optimized_url = req.body.optimized_url ?? null;
+  const og_image_url = req.body.og_url ?? null;
   const failure = req.body.failure ?? null;
   const applied = await deps.repo.setImageStatus({
     image_id: req.image_id,
     status: req.body.status,
     optimized_url,
+    og_image_url,
     failure,
   });
   // Lost a race with a duplicate delivery: the database, not this read, decides.
@@ -95,6 +102,7 @@ export async function handleImageStatusCallback(
       image_id: req.image_id,
       status: req.body.status,
       optimized_url,
+      og_image_url,
       failure,
       updated_at: new Date().toISOString(),
     },

@@ -42,6 +42,12 @@ type ArticleRow = {
    *  `writer_avatars` row (0010), or `null` if they never set one. */
   authors: { name: string; avatar_url: string | null }[];
   cover_image_url: string | null;
+  /** The cover, pre-cropped to exactly 1200x630 (0013_article_images_og_url.sql)
+   *  — resolved the same "live row wins, else the structured_data snapshot"
+   *  way as `cover_image_url` just above, for the same reason (see that
+   *  field's own doc comment). `null` for an article published before this
+   *  existed, or while its cover has no `og_image_url` yet. */
+  og_image_url: string | null;
   /** Desktop-only listing-card excerpt (`ComposePage.tsx`'s "Teaser" field,
    *  0011_article_teaser.sql) — `null` when the writer never filled it in,
    *  same "no element at all" handling `articleCard()` already gives a
@@ -100,6 +106,13 @@ const PUBLISHED_ARTICLES_SQL = `
              limit 1),
            nullif(a.structured_data -> 'image' ->> 0, '')
          ) as cover_image_url,
+         coalesce(
+           (select i.og_image_url
+              from article_images i
+             where i.article_id = a.id and i.role = 'cover' and i.status = 'ready'
+             limit 1),
+           nullif(a.structured_data -> 'og_image' ->> 0, '')
+         ) as og_image_url,
          a.published_at,
          coalesce(a.first_published_at, a.published_at) as first_published_at
     from articles a
@@ -421,6 +434,43 @@ function authorsHtml(authors: { name: string; avatar_url: string | null }[]): st
   return `${parts.slice(0, -1).join(', ')} et ${parts[parts.length - 1]}`;
 }
 
+/**
+ * The og:image/twitter:image half of a social-share card, shared by the
+ * article page and both listing pages (`listing()`/`leagueListing()`) — all
+ * three used to emit only a bare `og:image` pointing at whatever size/
+ * aspect ratio the writer's raw cover upload happened to be, which is the
+ * actual bug: Facebook falls back to a small-square card layout unless the
+ * image is close to 1.91:1 *and* its width/height are declared up front.
+ * `og_image_url` (0013_article_images_og_url.sql) is a real 1200x630 JPEG
+ * crop of the same cover, built once by the Lambda — width/height/type/alt
+ * are only asserted when that's genuinely what's being served; the raw-
+ * cover fallback (published before this existed, or the crop hasn't landed
+ * yet) carries none of those, since its real dimensions aren't known here.
+ * No `twitter:description`/`og:description` here — each call site's own
+ * description differs enough (article: Teaser; listing: a generated
+ * league/category blurb) that composing it here would need as many
+ * parameters as just leaving it to the caller.
+ */
+function socialImageTags(image: { cover_image_url: string | null; og_image_url: string | null }, title: string): string {
+  const hasOgCrop = image.og_image_url !== null && image.og_image_url !== '';
+  const socialImage = hasOgCrop ? image.og_image_url : image.cover_image_url;
+  if (socialImage === null || socialImage === '') return '';
+  return [
+    `<meta property="og:image" content="${escape(socialImage)}"/>`,
+    hasOgCrop
+      ? [
+          `<meta property="og:image:type" content="image/jpeg"/>`,
+          `<meta property="og:image:width" content="1200"/>`,
+          `<meta property="og:image:height" content="630"/>`,
+          `<meta property="og:image:alt" content="${escape(title)}"/>`,
+        ].join('')
+      : '',
+    `<meta name="twitter:card" content="summary_large_image"/>`,
+    `<meta name="twitter:title" content="${escape(title)}"/>`,
+    `<meta name="twitter:image" content="${escape(socialImage)}"/>`,
+  ].join('');
+}
+
 function viewOf(row: ArticleRow): PublishedArticleView {
   return {
     article_id: row.id,
@@ -432,6 +482,7 @@ function viewOf(row: ArticleRow): PublishedArticleView {
     // deferred — the user asked for the byline, not structured data).
     author_names: row.authors.map((author) => author.name),
     cover_image_url: row.cover_image_url ?? '',
+    og_image_url: row.og_image_url ?? '',
     published_at: row.published_at.toISOString(),
     first_published_at: row.first_published_at.toISOString(),
   };
@@ -737,7 +788,7 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
   ): RenderedPage => {
     const first = rows[0];
     const head = [
-      first?.cover_image_url == null ? '' : `<meta property="og:image" content="${escape(first.cover_image_url)}"/>`,
+      first === undefined ? '' : socialImageTags(first, title),
       description === undefined ? '' : `<meta name="description" content="${escape(description)}"/>`,
       '<meta name="robots" content="index, follow"/>',
     ].join('');
@@ -764,7 +815,7 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
     const first = rows[0];
     const description = `${title} : toutes les analyses Fantasy Coach — ${rows.length} article${rows.length === 1 ? '' : 's'} publié${rows.length === 1 ? '' : 's'}.`;
     const head = [
-      first?.cover_image_url == null ? '' : `<meta property="og:image" content="${escape(first.cover_image_url)}"/>`,
+      first === undefined ? '' : socialImageTags(first, title),
       `<meta name="description" content="${escape(description)}"/>`,
       '<meta name="robots" content="index, follow"/>',
     ].join('');
@@ -1085,6 +1136,11 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
       // guessed at.
       const pageTitle = row.meta_title !== null && row.meta_title !== '' ? row.meta_title : row.title;
       const canonicalUrl = `${opts.siteOrigin}${articlePath(view)}`;
+      // og:description/twitter:description now read the Teaser
+      // (ComposePage.tsx's own field for exactly this kind of short,
+      // hand-written summary) rather than meta_description — falling back
+      // to meta_description for an article the writer never gave a teaser.
+      const description = row.teaser !== null && row.teaser !== '' ? row.teaser : row.meta_description;
       const head = [
         `<link rel="canonical" href="${canonicalUrl}"/>`,
         // og:image alone used to be the whole card — enough for most link
@@ -1092,22 +1148,20 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
         // tags), but X specifically requires its own twitter:card to pick a
         // card type at all; with none, X showed a plain text link, no image,
         // even though og:image was correct — confirmed live 2026-09-18.
-        // og:title/og:url and the twitter:* mirrors aren't strictly needed
-        // for X (which falls back to Open Graph for those), but cost nothing
-        // and make the card complete on every unfurler at once.
+        // og:title/og:url aren't strictly needed for X (which falls back to
+        // Open Graph for those), but cost nothing and make the card
+        // complete on every unfurler at once.
         `<meta property="og:type" content="article"/>`,
+        `<meta property="og:site_name" content="Fantasy Coach"/>`,
         `<meta property="og:url" content="${escape(canonicalUrl)}"/>`,
         `<meta property="og:title" content="${escape(pageTitle)}"/>`,
-        `<meta property="og:image" content="${escape(view.cover_image_url)}"/>`,
-        `<meta name="twitter:card" content="summary_large_image"/>`,
-        `<meta name="twitter:title" content="${escape(pageTitle)}"/>`,
-        `<meta name="twitter:image" content="${escape(view.cover_image_url)}"/>`,
-        row.meta_description === null || row.meta_description === ''
+        socialImageTags(view, pageTitle),
+        description === null || description === ''
           ? ''
           : [
-              `<meta name="description" content="${escape(row.meta_description)}"/>`,
-              `<meta property="og:description" content="${escape(row.meta_description)}"/>`,
-              `<meta name="twitter:description" content="${escape(row.meta_description)}"/>`,
+              `<meta name="description" content="${escape(description)}"/>`,
+              `<meta property="og:description" content="${escape(description)}"/>`,
+              `<meta name="twitter:description" content="${escape(description)}"/>`,
             ].join(''),
         `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`,
       ].join('');

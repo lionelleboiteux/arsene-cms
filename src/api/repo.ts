@@ -60,13 +60,16 @@ const TAKE_LOCK_SQL = `
   returning id
 `;
 
-/** ADR-0004: only a `processing` row moves, and only once. */
+/** ADR-0004: only a `processing` row moves, and only once. `og_image_url`
+ *  is `null` on every body-role row — the Lambda only ever builds one for a
+ *  cover (0013) — so this SQL doesn't need to know `role` itself. */
 const SET_IMAGE_STATUS_SQL = `
   update article_images
      set status = $2,
          optimized_url = $3,
          failure_code = $4,
-         failure_message = $5
+         failure_message = $5,
+         og_image_url = $6
    where id = $1 and status = 'processing'
   returning id
 `;
@@ -85,7 +88,8 @@ const SET_IMAGE_STATUS_AS_BODY_SQL = `
          status = $2,
          optimized_url = $3,
          failure_code = $4,
-         failure_message = $5
+         failure_message = $5,
+         og_image_url = $6
    where id = $1 and status = 'processing'
   returning id
 `;
@@ -213,6 +217,7 @@ export function createRepo(pool: pg.Pool) {
       image_id: string;
       status: 'ready' | 'failed';
       optimized_url: string | null;
+      og_image_url: string | null;
       failure: { code: string; message: string } | null;
     }): Promise<boolean> {
       if (!UUID.test(input.image_id)) return false;
@@ -222,6 +227,7 @@ export function createRepo(pool: pg.Pool) {
         input.optimized_url,
         input.failure?.code ?? null,
         input.failure?.message ?? null,
+        input.og_image_url,
       ];
       try {
         const res = await pool.query(SET_IMAGE_STATUS_SQL, params);
@@ -248,7 +254,7 @@ export function createRepo(pool: pg.Pool) {
     async getArticleImages(article_id: string): Promise<ImageRecord[]> {
       if (!UUID.test(article_id)) return [];
       const res = await pool.query<ImageRecord>(
-        `select id, article_id, role, status, alt_text, optimized_url,
+        `select id, article_id, role, status, alt_text, optimized_url, og_image_url,
                 original_url, replaced_cover_image_id
            from article_images where article_id = $1`,
         [article_id],

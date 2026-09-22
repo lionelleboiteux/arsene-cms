@@ -9,13 +9,17 @@
  *
  * Triggered by an S3 `ObjectCreated` event on the `originals/` prefix that
  * `src/api/s3Storage.ts` writes to. The object key is
- * `originals/{imageId}-original-{filename}` (the exact string
+ * `originals/{imageId}-{role}-original-{filename}` (the exact string
  * `uploadImage.ts` passes to `storage.put()`, prefixed by that store) — the
  * leading UUID is the `article_images.id` this Lambda reports back to.
+ * `role` rides along in the key itself (0013) since this Lambda has no DB
+ * of its own to look it up from — a `role: 'cover'` object additionally
+ * gets a 1200x630 og-image crop built alongside its usual optimized
+ * variant; a `role: 'body'` one never does.
  */
 
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
-import { optimizeImageBuffer } from '../../src/images/lambdaHandler.ts';
+import { optimizeImageBuffer, buildOgImageCrop } from '../../src/images/lambdaHandler.ts';
 
 const s3 = new S3Client({});
 
@@ -27,10 +31,11 @@ function requireEnv(name: string): string {
   return value;
 }
 
-/** `originals/{uuid}-original-{filename}` -> `{uuid, filename}`. The UUID is
- *  matched structurally (36 chars, RFC 4122 shape) rather than split on the
- *  first `-`, since a UUID itself contains hyphens. */
-const KEY_PATTERN = /^originals\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-original-(.+)$/i;
+/** `originals/{uuid}-{role}-original-{filename}` -> `{uuid, role, filename}`.
+ *  The UUID is matched structurally (36 chars, RFC 4122 shape) rather than
+ *  split on the first `-`, since a UUID itself contains hyphens. */
+const KEY_PATTERN =
+  /^originals\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(cover|body)-original-(.+)$/i;
 
 /** S3 event notifications URL-encode the object key (spaces as `+`, per an
  *  AWS-specific quirk, plus ordinary percent-encoding for everything else),
@@ -43,13 +48,15 @@ function decodeS3Key(key: string): string {
   return decodeURIComponent(key.replace(/\+/g, ' '));
 }
 
-export function parseKey(key: string): { imageId: string; filename: string } {
+export function parseKey(key: string): { imageId: string; role: 'cover' | 'body'; filename: string } {
   const decoded = decodeS3Key(key);
   const match = KEY_PATTERN.exec(decoded);
-  if (match === null || match[1] === undefined || match[2] === undefined) {
-    throw new Error(`object key "${decoded}" does not match the expected originals/{uuid}-original-{filename} shape`);
+  if (match === null || match[1] === undefined || match[2] === undefined || match[3] === undefined) {
+    throw new Error(
+      `object key "${decoded}" does not match the expected originals/{uuid}-{role}-original-{filename} shape`,
+    );
   }
-  return { imageId: match[1], filename: match[2] };
+  return { imageId: match[1], role: match[2].toLowerCase() as 'cover' | 'body', filename: match[3] };
 }
 
 async function streamToUint8Array(stream: {
@@ -60,7 +67,9 @@ async function streamToUint8Array(stream: {
 
 async function reportStatus(input: {
   imageId: string;
-  body: { status: 'ready'; optimized_url: string } | { status: 'failed'; failure: { code: string; message: string } };
+  body:
+    | { status: 'ready'; optimized_url: string; og_url?: string }
+    | { status: 'failed'; failure: { code: string; message: string } };
 }): Promise<void> {
   const base = requireEnv('ARSENE_API_BASE'); // e.g. https://<ref>.supabase.co/functions/v1/arsene-api
   const secret = requireEnv('IMAGE_CALLBACK_SECRET');
@@ -90,7 +99,7 @@ export const handler = async (event: S3Event): Promise<void> => {
   const cdnOrigin = requireEnv('CDN_ORIGIN');
 
   for (const record of event.Records) {
-    const { imageId, filename } = parseKey(record.s3.object.key);
+    const { imageId, role, filename } = parseKey(record.s3.object.key);
     // The real, decoded key — GetObject needs the actual S3 key (real spaces
     // etc.), not the URL-encoded form the event itself carries in `object.key`.
     const decodedKey = decodeS3Key(record.s3.object.key);
@@ -101,11 +110,9 @@ export const handler = async (event: S3Event): Promise<void> => {
       const bytes = await streamToUint8Array(
         original.Body as unknown as { transformToByteArray(): Promise<Uint8Array> },
       );
+      const meta = { filename, declared_content_type: original.ContentType ?? 'application/octet-stream' };
 
-      const result = await optimizeImageBuffer(bytes, {
-        filename,
-        declared_content_type: original.ContentType ?? 'application/octet-stream',
-      });
+      const result = await optimizeImageBuffer(bytes, meta);
 
       if (!result.ok) {
         await reportStatus({ imageId, body: { status: 'failed', failure: { code: result.code, message: result.message } } });
@@ -123,9 +130,33 @@ export const handler = async (event: S3Event): Promise<void> => {
         }),
       );
 
+      // Best-effort, cover-only: a failure here must not fail the cover
+      // upload itself (`render.ts` already falls back to the raw cover
+      // when `og_url` is absent) — losing the social-card crop is a much
+      // smaller problem than losing the cover the writer just uploaded.
+      let og_url: string | undefined;
+      if (role === 'cover') {
+        const ogResult = await buildOgImageCrop(bytes, meta);
+        if (ogResult.ok) {
+          const ogKey = `optimized/${imageId}-og.jpg`;
+          await s3.send(
+            new PutObjectCommand({
+              Bucket: bucket,
+              Key: ogKey,
+              Body: ogResult.bytes,
+              ContentType: 'image/jpeg',
+              CacheControl: 'public, max-age=31536000, immutable',
+            }),
+          );
+          og_url = `${cdnOrigin}/${ogKey}`;
+        } else {
+          console.error(`og-image crop for ${imageId} failed: ${ogResult.code} ${ogResult.message}`);
+        }
+      }
+
       await reportStatus({
         imageId,
-        body: { status: 'ready', optimized_url: `${cdnOrigin}/${optimizedKey}` },
+        body: { status: 'ready', optimized_url: `${cdnOrigin}/${optimizedKey}`, ...(og_url === undefined ? {} : { og_url }) },
       });
     } catch (err) {
       // Anything unexpected (S3 read failure, a bug) is reported as a failed

@@ -31,6 +31,9 @@ export type ImageRecord = {
   alt_text: string | null;
   /** The converted asset's real CDN URL, written by ADR-0004's callback. */
   optimized_url?: string | null;
+  /** The same asset, pre-cropped to exactly 1200x630 for a social-card
+   *  og:image — only ever populated for a `role: 'cover'` row (0013). */
+  og_image_url?: string | null;
   /**
    * The as-uploaded original in Supabase Storage. `null` on a row `uploadImage`
    * created while refusing the file, so nothing was ever stored for it.
@@ -312,6 +315,10 @@ async function publishNow(
     // it, or be the only one — so this reads the same row `refusePublish()`
     // required before it let the request get here.
     cover_image_url: usableCover(images)?.optimized_url ?? '',
+    // §6.4's own reasoning again, one layer further: the cover's pre-
+    // cropped 1200x630 og-image variant (0013), same "the real stored
+    // asset, never derived from the article id" rule.
+    og_image_url: usableCover(images)?.og_image_url ?? '',
     published_at: now.toISOString(),
     first_published_at: (article.first_published_at ?? now).toISOString(),
   };

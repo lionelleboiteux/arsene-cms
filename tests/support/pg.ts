@@ -191,12 +191,16 @@ export async function seedImage(
     status?: 'processing' | 'ready' | 'failed';
     alt_text?: string | null;
     optimized_url?: string;
+    /** The 1200x630 social-card crop (0013_article_images_og_url.sql) —
+     *  `undefined` leaves it `null`, same "not built yet" shape a real
+     *  cover has before the Lambda's callback lands. */
+    og_image_url?: string;
   },
 ): Promise<string> {
   const res = await client.query(
     `insert into article_images
-       (article_id, role, status, original_filename, alt_text, original_url, optimized_url)
-     values ($1, $2, $3, $4, $5, $6, $7)
+       (article_id, role, status, original_filename, alt_text, original_url, optimized_url, og_image_url)
+     values ($1, $2, $3, $4, $5, $6, $7, $8)
      returning id`,
     [
       o.article_id,
@@ -208,6 +212,7 @@ export async function seedImage(
       // to visitors — see NFR-EGRESS-01 in tests/db/publicSiteRender.test.ts.
       `https://projectref.supabase.co/storage/v1/object/articles/${o.article_id}/${o.role}-original.jpg`,
       o.optimized_url ?? `https://cdn.example/${o.article_id}/${o.role}-optimized.webp`,
+      o.og_image_url ?? null,
     ],
   );
   return res.rows[0].id;

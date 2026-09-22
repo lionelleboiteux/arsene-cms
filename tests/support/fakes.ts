@@ -320,6 +320,7 @@ export type BuiltImageStatusDeps = {
     image_id: string;
     status: 'ready' | 'failed';
     optimized_url: string | null;
+    og_image_url: string | null;
     failure: { code: string; message: string } | null;
   }>;
 };
