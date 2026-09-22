@@ -185,6 +185,73 @@ const ORIGIN_CASES: OriginCase[] = [
   },
 ];
 
+/**
+ * 0013 — the exact same class of bug this whole file already exists to
+ * catch (real config/schema silently not reaching the real deployment
+ * boundary), one layer over: `imageStatusBody`'s `z.object()` for the
+ * `'ready'` branch never declared `og_url` at all, so a genuine Lambda
+ * callback carrying it was accepted (200, no error anywhere) with `og_url`
+ * silently stripped before `handleImageStatusCallback` ever saw it — a
+ * plain `z.object()`'s default behaviour for any key it doesn't declare.
+ * Confirmed live 2026-09-22: `optimized_url` landed correctly,
+ * `og_image_url` stayed null, nothing logged an error at any layer.
+ * Invisible to `tests/unit/imageStatusCallback.test.ts`'s own og_url
+ * threading tests, which call `handleImageStatusCallback` directly and
+ * never go through the real zod schema at all — exactly why this needs
+ * the real spawned server, same as every other test in this file.
+ */
+describe('the og_url a cover-image callback carries reaches the database (0013)', () => {
+  it('a real callback with og_url on the configured CDN origin is accepted and stores it', async () => {
+    const { db, server, articleId } = ctx();
+    const image_id = await processingImage(db, articleId, 'og-url-present.jpg');
+    const optimized_url = `${CONFIGURED_CDN_ORIGIN}/articles/${image_id}-optimized.webp`;
+    const og_url = `${CONFIGURED_CDN_ORIGIN}/articles/${image_id}-og.jpg`;
+
+    const res = await fetch(`${server.url}/internal/images/${image_id}/status`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-arsene-image-callback-secret': CALLBACK_SECRET,
+      },
+      body: JSON.stringify({ status: 'ready', optimized_url, og_url, failure: null }),
+    });
+    const row = await db.client.query<{ og_image_url: string | null }>(
+      `select og_image_url from article_images where id = $1`,
+      [image_id],
+    );
+
+    expect({ callback_status: res.status, row_og_image_url: row.rows[0]?.og_image_url }).toEqual({
+      callback_status: 200,
+      row_og_image_url: og_url,
+    });
+  });
+
+  it('a real callback with no og_url at all (a body image) still succeeds, storing null', async () => {
+    const { db, server, articleId } = ctx();
+    const image_id = await processingImage(db, articleId, 'og-url-absent.jpg');
+    const optimized_url = `${CONFIGURED_CDN_ORIGIN}/articles/${image_id}-optimized.webp`;
+
+    const res = await fetch(`${server.url}/internal/images/${image_id}/status`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-arsene-image-callback-secret': CALLBACK_SECRET,
+      },
+      body: JSON.stringify({ status: 'ready', optimized_url, failure: null }),
+    });
+    const row = await db.client.query<{ status: string; og_image_url: string | null }>(
+      `select status, og_image_url from article_images where id = $1`,
+      [image_id],
+    );
+
+    expect({ callback_status: res.status, row_status: row.rows[0]?.status, row_og_image_url: row.rows[0]?.og_image_url }).toEqual({
+      callback_status: 200,
+      row_status: 'ready',
+      row_og_image_url: null,
+    });
+  });
+});
+
 describe('the CDN origin callbacks are validated against is configuration (verify v3, M-V3-04)', () => {
   it.each(
     ORIGIN_CASES.map(

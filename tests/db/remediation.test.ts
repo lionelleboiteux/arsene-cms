@@ -4,6 +4,7 @@ import { loadRepo, loadSiteRender } from '../support/seams.js';
 import {
   captureSqlError,
   seedArticle,
+  seedAvatar,
   seedWriter,
   startTestDatabase,
   type TestDatabase,
@@ -304,11 +305,18 @@ describe('image status callback persistence (ADR-0004)', () => {
     const image_id: string = inserted.rows[0].id;
     const optimized_url = `https://cdn.fantasycoach.example/articles/${image_id}-optimized.webp`;
 
-    const first = await repo.setImageStatus({ image_id, status: 'ready', optimized_url, failure: null });
+    const first = await repo.setImageStatus({
+      image_id,
+      status: 'ready',
+      optimized_url,
+      og_image_url: null,
+      failure: null,
+    });
     const second = await repo.setImageStatus({
       image_id,
       status: 'failed',
       optimized_url: null,
+      og_image_url: null,
       failure: { code: 'CORRUPTED_FILE', message: 'replayed callback' },
     });
     const row = await db.client.query(
@@ -324,6 +332,44 @@ describe('image status callback persistence (ADR-0004)', () => {
     }).toEqual({
       first_flip_applied: true,
       replayed_flip_applied: false,
+      status: 'ready',
+      optimized_url,
+    });
+  });
+
+  /**
+   * 0013 — `writer_avatars` has no `og_image_url` column at all (that field
+   * is article-image-only), so `SET_AVATAR_STATUS_SQL` only ever declares 5
+   * placeholders. Reusing the 6-element params array built for
+   * `SET_IMAGE_STATUS_SQL` against it isn't harmlessly ignored — Postgres's
+   * bind protocol rejects a parameter-count mismatch outright ("bind
+   * message supplies 6 parameters, but prepared statement requires 5",
+   * code 08P01), which is *not* the 23505 unique-violation this function's
+   * own catch block expects, so it propagated straight out of
+   * `setImageStatus` uncaught. Confirmed live 2026-09-22: every real avatar
+   * upload's row was left stuck in `processing` forever, immediately after
+   * deploying that mistake — this is the regression test that should have
+   * caught it before it ever reached production.
+   */
+  it('NFR-CALLBACK-AVATAR-01: flipping a processing avatar to ready does not throw a param-count mismatch, and really stores the optimized URL', async () => {
+    const { db, pool, writerB } = ctx();
+    const repo = (await loadRepo()).createRepo(pool);
+    const avatar_id = await seedAvatar(db.client, { writer_id: writerB, status: 'processing' });
+    const optimized_url = `https://cdn.fantasycoach.example/avatars/${avatar_id}-optimized.webp`;
+
+    const applied = await repo.setImageStatus({
+      image_id: avatar_id,
+      status: 'ready',
+      optimized_url,
+      og_image_url: null,
+      failure: null,
+    });
+    const row = await db.client.query(`select status, optimized_url from writer_avatars where id = $1`, [
+      avatar_id,
+    ]);
+
+    expect({ applied, status: row.rows[0]?.status, optimized_url: row.rows[0]?.optimized_url }).toEqual({
+      applied: true,
       status: 'ready',
       optimized_url,
     });

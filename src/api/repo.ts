@@ -229,10 +229,22 @@ export function createRepo(pool: pg.Pool) {
         input.failure?.message ?? null,
         input.og_image_url,
       ];
+      // `writer_avatars` has no `og_image_url` column (0013 is article-image-
+      // only), so `SET_AVATAR_STATUS_SQL` only ever declares 5 placeholders —
+      // reusing the 6-element `params` above for it isn't harmlessly ignored,
+      // it's a hard Postgres protocol error ("bind message supplies 6
+      // parameters, but prepared statement requires 5", code 08P01), not the
+      // 23505 unique-violation this function's own catch block below expects.
+      // Left uncaught, that error propagated out of `setImageStatus`
+      // entirely — for every avatar upload, since an avatar's id is never
+      // found in article_images and this is the very next thing tried — so
+      // the row was never updated at all, staying `processing` forever.
+      // Confirmed live 2026-09-22, immediately after deploying this mistake.
+      const avatarParams = params.slice(0, 5);
       try {
         const res = await pool.query(SET_IMAGE_STATUS_SQL, params);
         if (res.rowCount === 1) return true;
-        const avatarRes = await pool.query(SET_AVATAR_STATUS_SQL, params);
+        const avatarRes = await pool.query(SET_AVATAR_STATUS_SQL, avatarParams);
         return avatarRes.rowCount === 1;
       } catch (err) {
         if ((err as { code?: string }).code !== UNIQUE_VIOLATION) throw err;

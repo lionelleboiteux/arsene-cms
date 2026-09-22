@@ -199,6 +199,17 @@ const imageStatusBody = (cdnOrigin: string) =>
         .string()
         .min(1)
         .refine((value) => isCdnUrl(value, cdnOrigin), `must be a URL on ${cdnOrigin}`),
+      // 0013 — only ever sent for a cover-role image's 1200x630 crop; a
+      // plain z.object() strips any key not declared here, so omitting
+      // this silently dropped every og_url the Lambda ever sent, with no
+      // error anywhere (confirmed live 2026-09-22: optimized_url landed
+      // correctly, og_image_url stayed null, no failure logged at any
+      // layer — exactly what silent stripping looks like).
+      og_url: z
+        .string()
+        .min(1)
+        .refine((value) => isCdnUrl(value, cdnOrigin), `must be a URL on ${cdnOrigin}`)
+        .optional(),
       failure: z.null().optional(),
     }),
     z.object({

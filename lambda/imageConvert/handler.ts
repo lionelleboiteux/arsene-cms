@@ -31,11 +31,20 @@ function requireEnv(name: string): string {
   return value;
 }
 
-/** `originals/{uuid}-{role}-original-{filename}` -> `{uuid, role, filename}`.
+/** `originals/{uuid}-{role}-original-{filename}` -> `{uuid, role, filename}`
+ *  for an article image (`uploadImage.ts`), or `originals/{uuid}-original-
+ *  {filename}` -> `{uuid, role: null, filename}` for a writer avatar
+ *  (`uploadAvatar.ts`) — avatars share this same callback route and this
+ *  same Lambda (`imageStatus.ts`'s own doc comment: "an article image or a
+ *  writer avatar"), but were never given a role segment, since a profile
+ *  photo has no cover/body distinction. The role group is therefore
+ *  optional, not required — making it required broke every avatar upload
+ *  outright (parseKey throwing, uncaught, stuck `processing` forever),
+ *  confirmed live 2026-09-22 within minutes of deploying that mistake.
  *  The UUID is matched structurally (36 chars, RFC 4122 shape) rather than
  *  split on the first `-`, since a UUID itself contains hyphens. */
 const KEY_PATTERN =
-  /^originals\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(cover|body)-original-(.+)$/i;
+  /^originals\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(?:(cover|body)-)?original-(.+)$/i;
 
 /** S3 event notifications URL-encode the object key (spaces as `+`, per an
  *  AWS-specific quirk, plus ordinary percent-encoding for everything else),
@@ -48,15 +57,16 @@ function decodeS3Key(key: string): string {
   return decodeURIComponent(key.replace(/\+/g, ' '));
 }
 
-export function parseKey(key: string): { imageId: string; role: 'cover' | 'body'; filename: string } {
+export function parseKey(key: string): { imageId: string; role: 'cover' | 'body' | null; filename: string } {
   const decoded = decodeS3Key(key);
   const match = KEY_PATTERN.exec(decoded);
-  if (match === null || match[1] === undefined || match[2] === undefined || match[3] === undefined) {
+  if (match === null || match[1] === undefined || match[3] === undefined) {
     throw new Error(
-      `object key "${decoded}" does not match the expected originals/{uuid}-{role}-original-{filename} shape`,
+      `object key "${decoded}" does not match the expected originals/{uuid}-{original|role-original}-{filename} shape`,
     );
   }
-  return { imageId: match[1], role: match[2].toLowerCase() as 'cover' | 'body', filename: match[3] };
+  const role = match[2] === undefined ? null : (match[2].toLowerCase() as 'cover' | 'body');
+  return { imageId: match[1], role, filename: match[3] };
 }
 
 async function streamToUint8Array(stream: {

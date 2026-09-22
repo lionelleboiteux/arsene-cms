@@ -380,13 +380,24 @@ describe('public site', () => {
   it('0013: an article whose cover has a real 1200x630 og-image crop serves that as og:image/twitter:image, with width/height/type/alt asserted', async () => {
     const { renderer, db } = ctx();
     const writer = await seedWriter(db.client, 'Og Crop Writer');
+    // A league/type combo used nowhere else in this file — `Ligue 1`/`Pronos`
+    // is the heavily-reused, exact-count-asserted fixture group most other
+    // tests here share; adding to it broke a season-scoping test elsewhere
+    // in this same file (shared DB, no per-test isolation).
     const article = await seedArticle(db.client, {
       writer_id: writer,
       title: 'Article Avec Crop Og',
-      league_name: 'Ligue 1',
-      type_name: 'Pronos',
+      league_name: 'La Liga',
+      type_name: 'Og Crop Test 0013',
       status: 'published',
       slug: 'article-avec-crop-og',
+      // `seedArticle` defaults published_at to null even with status:
+      // 'published' if not given explicitly — fine in isolation, but this
+      // fixture outlives this one test (shared DB across the whole file),
+      // so a null published_at here broke every later test whose page
+      // enumerates "every published Ligue 1 article" (leagueListing,
+      // articleCard's own `.toISOString()`).
+      published_at: '2026-08-15T10:00:00Z',
     });
     const ogUrl = 'https://cdn.fantasycoach.example/og-crop-test/cover-og.jpg';
     await seedImage(db.client, {
@@ -397,9 +408,9 @@ describe('public site', () => {
     });
 
     const page = await renderer.renderArticlePage({
-      league_slug: 'ligue-1',
+      league_slug: 'la-liga',
       season_slug: '26-27',
-      type_slug: 'pronos',
+      type_slug: 'og-crop-test-0013',
       slug: 'article-avec-crop-og',
     });
 
@@ -427,20 +438,22 @@ describe('public site', () => {
     // ("Nos pronostics, confiance..." — see its own source, not
     // configurable per fixture) — different from the teaser below either
     // way, so which one wins is exactly what this test is checking.
+    // Same league/type isolation reasoning as the og-crop test above.
     await seedArticle(db.client, {
       writer_id: writer,
       title: 'Article Avec Teaser Et Meta Description',
-      league_name: 'Ligue 1',
-      type_name: 'Pronos',
+      league_name: 'La Liga',
+      type_name: 'Teaser Description Test 0013',
       status: 'published',
       slug: 'article-avec-teaser-et-meta-description',
       teaser: 'Le teaser, court et accrocheur.',
+      published_at: '2026-08-16T10:00:00Z',
     });
 
     const page = await renderer.renderArticlePage({
-      league_slug: 'ligue-1',
+      league_slug: 'la-liga',
       season_slug: '26-27',
-      type_slug: 'pronos',
+      type_slug: 'teaser-description-test-0013',
       slug: 'article-avec-teaser-et-meta-description',
     });
 
