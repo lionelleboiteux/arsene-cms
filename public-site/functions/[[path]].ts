@@ -3,11 +3,13 @@
  *
  * Arsène's actual public content lives on the arsene-api Supabase Edge
  * Function's `/public/*` routes (src/api/router.ts, src/site/render.ts).
- * There is no zone for fantasy-coach.fr on Cloudflare (DNS is still at Wix
- * as of 2026-09-04), so a Workers Custom Domain isn't available — Pages
- * custom domains are, the same external-DNS/CNAME mechanism already proven
- * working for arsene.fantasy-coach.fr (arsene-editor). This project exists
- * only to be that attachment point; it holds no content of its own.
+ * This project exists only to be a Pages custom-domain attachment point —
+ * the same mechanism already proven working for arsene.fantasy-coach.fr
+ * (arsene-editor) — and holds no content of its own. (fantasy-coach.fr *is*
+ * now a real Cloudflare zone, confirmed 2026-09-25 while wiring up the
+ * `/mpg` and `/indisponibles-dnp` legacy redirects — that zone's own Page
+ * Rules/Redirect Rules, not this file, own the few flat legacy paths that
+ * don't map onto Arsène content at all.)
  *
  * Supabase's platform rewrites any Edge Function GET response whose
  * Content-Type is `text/html` to `text/plain` (documented, and confirmed
@@ -90,7 +92,20 @@ export const onRequest: PagesFunction = async (context) => {
     });
   }
   if (typeof page.html !== 'string') {
-    return new Response('Bad Gateway', { status: 502, headers: NO_STORE });
+    // Upstream answered with its own JSON error envelope (router.ts's
+    // `send(errorResponse(...))` — an unmatched path, most often) rather
+    // than any shape above. That's a real status worth passing through
+    // as-is: confirmed live, every one of ~250 stale/orphaned Wix URLs
+    // Search Console had on file (old blog tags/categories, superseded
+    // posts) was answering the upstream's real 404 as a generic 502
+    // instead — telling crawlers to retry a dead link forever rather
+    // than drop it. A 200 with none of the recognized shapes is the one
+    // case that's actually this proxy's own bug, not a real upstream
+    // status, so that alone still becomes a 502.
+    return new Response(upstreamResponse.status === 200 ? 'Bad Gateway' : 'Not Found', {
+      status: upstreamResponse.status === 200 ? 502 : upstreamResponse.status,
+      headers: NO_STORE,
+    });
   }
 
   return new Response(page.html, {
