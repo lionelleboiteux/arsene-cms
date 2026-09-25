@@ -67,6 +67,14 @@ const METRICS_SUMMARY_ROUTE = '/internal/metrics/time-to-publish';
  *   - `/public/articles/{league}/{season}/{type}` — a listing page.
  *   - `/public/articles/{league}/{season}/{type}/{slug}` — an article. */
 const PUBLIC_HOME_ROUTE = '/public/';
+/** AC-14's sitemap and its companion robots.txt — same `/public/*` proxy
+ *  prefix as every other reader-facing route (`public-site/functions/
+ *  [[path]].ts` forwards `cms.fantasy-coach.fr/sitemap.xml` here as
+ *  `/public/sitemap.xml`). Both existed as unwired code (`renderSitemap()`)
+ *  or not at all (robots.txt) until now — a crawler hitting either got the
+ *  proxy's generic 502, not a 404 or real content. */
+const PUBLIC_SITEMAP_ROUTE = '/public/sitemap.xml';
+const PUBLIC_ROBOTS_ROUTE = '/public/robots.txt';
 const PUBLIC_ARTICLE_LEGACY_ROUTE = /^\/public\/articles\/([^/]+)$/;
 /** Wix's own post-permalink shape (`https://www.fantasy-coach.fr/post/{slug}`)
  *  — matched one-to-one so an old bookmark needs no rewriting. Unlike
@@ -873,6 +881,36 @@ function jsonPageResponse(html: string, status: number, cors: Record<string, str
   });
 }
 
+/** `jsonPageResponse`'s sibling for a response that isn't HTML — the
+ *  sitemap (`application/xml`) and robots.txt (`text/plain`), so far. Same
+ *  platform-rewrite reasoning: this only ever reaches the browser as JSON,
+ *  and `public-site/functions/[[path]].ts` is the one place that builds
+ *  the real response, with the real content type, from `body`/
+ *  `content_type` here. */
+function jsonTextResponse(body: string, content_type: string, cors: Record<string, string>): Response {
+  return new Response(JSON.stringify({ body, content_type }), {
+    status: 200,
+    headers: { 'content-type': 'application/json', ...cors },
+  });
+}
+
+/** AC-14's sitemap, and the robots.txt that points at it — the one static,
+ *  content-free pair of routes on the public site, so no `renderer` call
+ *  needed for robots.txt itself (just `opts.siteOrigin`, already resolved
+ *  the same way every other public route gets it). */
+async function renderSitemapOrRobots(
+  op: Extract<Operation, { kind: 'public-sitemap' | 'public-robots' }>,
+  ctx: Ctx,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const siteOrigin = ctx.opts.siteOrigin ?? DEFAULT_SITE_ORIGIN;
+  if (op.kind === 'public-robots') {
+    return jsonTextResponse(`User-agent: *\nAllow: /\n\nSitemap: ${siteOrigin}/sitemap.xml\n`, 'text/plain', cors);
+  }
+  const renderer = await getSiteRenderer(ctx);
+  return jsonTextResponse(await renderer.renderSitemap(), 'application/xml', cors);
+}
+
 async function renderPublicPage(
   op: Extract<Operation, { kind: 'public-home' | 'public-article' | 'public-category' }>,
   ctx: Ctx,
@@ -1134,6 +1172,8 @@ type Operation =
   | { kind: 'image-status'; image_id: string }
   | { kind: 'metrics-summary' }
   | { kind: 'public-home' }
+  | { kind: 'public-sitemap' }
+  | { kind: 'public-robots' }
   | { kind: 'public-article'; league_slug: string; season_slug: string; type_slug: string; slug: string }
   | { kind: 'public-category'; league_slug: string; season_slug: string; type_slug: string }
   | { kind: 'public-article-legacy'; slug: string }
@@ -1170,6 +1210,8 @@ function matchRoute(path: string): Operation | null {
   if (path === CREATE_DRAFT_ROUTE) return { kind: 'create-draft' };
   if (path === METRICS_SUMMARY_ROUTE) return { kind: 'metrics-summary' };
   if (path === PUBLIC_HOME_ROUTE) return { kind: 'public-home' };
+  if (path === PUBLIC_SITEMAP_ROUTE) return { kind: 'public-sitemap' };
+  if (path === PUBLIC_ROBOTS_ROUTE) return { kind: 'public-robots' };
   if (path === ADMIN_WRITERS_ROUTE) return { kind: 'admin-list-writers' };
   if (path === WRITER_AVATAR_ROUTE) return { kind: 'upload-avatar' };
   if (path === WRITER_ME_ROUTE) return { kind: 'get-own-writer' };
@@ -1253,6 +1295,8 @@ const methodOf = (op: Operation): string => {
   if (
     op.kind === 'metrics-summary' ||
     op.kind === 'public-home' ||
+    op.kind === 'public-sitemap' ||
+    op.kind === 'public-robots' ||
     op.kind === 'public-article' ||
     op.kind === 'public-category' ||
     op.kind === 'public-article-legacy' ||
@@ -1315,6 +1359,8 @@ function dispatch(
     case 'admin-unpublish-article':
       return adminUnpublishArticle(request, op.article_id, ctx);
     case 'public-home':
+    case 'public-sitemap':
+    case 'public-robots':
     case 'public-article':
     case 'public-category':
     case 'public-article-legacy':
@@ -1380,6 +1426,9 @@ export async function route(
   // falling into the auth chain and `send()` below.
   if (op.kind === 'public-home' || op.kind === 'public-article' || op.kind === 'public-category') {
     return renderPublicPage(op, ctx, cors);
+  }
+  if (op.kind === 'public-sitemap' || op.kind === 'public-robots') {
+    return renderSitemapOrRobots(op, ctx, cors);
   }
   if (op.kind === 'public-article-legacy') {
     return renderLeagueOrLegacyArticle(op, ctx, cors);

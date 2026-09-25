@@ -54,7 +54,7 @@ export const onRequest: PagesFunction = async (context) => {
     return new Response('Bad Gateway', { status: 502, headers: NO_STORE });
   }
 
-  let page: { html?: string; redirect?: string };
+  let page: { html?: string; redirect?: string; body?: string; content_type?: string };
   try {
     page = await upstreamResponse.json();
   } catch {
@@ -63,6 +63,15 @@ export const onRequest: PagesFunction = async (context) => {
 
   if (typeof page.redirect === 'string') {
     return new Response(null, { status: 301, headers: { location: page.redirect, ...NO_STORE } });
+  }
+  // The sitemap (application/xml) and robots.txt (text/plain) — anything
+  // that isn't the article/listing HTML `html` already carries, and so
+  // isn't forced through that field's own `text/html` content type.
+  if (typeof page.body === 'string' && typeof page.content_type === 'string') {
+    return new Response(page.body, {
+      status: upstreamResponse.status,
+      headers: { 'content-type': `${page.content_type}; charset=utf-8`, ...NO_STORE },
+    });
   }
   if (typeof page.html !== 'string') {
     return new Response('Bad Gateway', { status: 502, headers: NO_STORE });

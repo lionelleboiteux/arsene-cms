@@ -226,4 +226,30 @@ describe('the real public site routes', () => {
 
     expect(res.status).not.toBe(401);
   });
+
+  it('PUBLIC-ROUTE-13: /sitemap.xml requires no credential and lists the published article, as JSON-wrapped XML', async () => {
+    const { server } = ctx();
+    const res = await fetch(`${server.url}/public/sitemap.xml`);
+
+    // Same JSON-envelope reasoning as every other public route: the real
+    // `application/xml` response only ever reaches a browser via the
+    // Cloudflare proxy in front of this route.
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    const { body, content_type } = (await res.json()) as { body: string; content_type: string };
+    expect(content_type).toBe('application/xml');
+    expect(body).toContain(`${SITE_ORIGIN}/articles/ligue-1/26-27/pronos/pp-test`);
+  });
+
+  it('PUBLIC-ROUTE-14: /robots.txt requires no credential and points at the sitemap', async () => {
+    const { server } = ctx();
+    const res = await fetch(`${server.url}/public/robots.txt`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    const { body, content_type } = (await res.json()) as { body: string; content_type: string };
+    expect(content_type).toBe('text/plain');
+    expect(body).toContain('Allow: /');
+    expect(body).toContain(`Sitemap: ${SITE_ORIGIN}/sitemap.xml`);
+  });
 });
