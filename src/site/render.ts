@@ -394,6 +394,19 @@ const WIX_SLUG_NORMALIZATIONS: ((slug: string) => string)[] = [
   (slug) => slug.replace(/-\d+$/, '').replace(/-\d\d-\d\d-/, '-'),
 ];
 
+/** Season-over-season content that's genuinely superseded, not just a Wix
+ *  bookmark variant — last season's mercato guide never shares a slug with
+ *  this season's (the season itself is part of the slug), so no
+ *  `WIX_SLUG_NORMALIZATIONS` entry can bridge the two. Checked first in
+ *  `resolveWixPostPath`: an old post still gets real search traffic
+ *  (Search Console, 2026-09-25: 31.8K impressions/1.5% CTR) that a dead
+ *  end at the Wix archive just wastes, when the current guide already
+ *  covers the same reader intent. */
+const LEGACY_SLUG_OVERRIDES: Record<string, string> = {
+  'nos-conseils-mercato-ligue-1-dans-mon-petit-gazon-saison-2025-26':
+    'nos-conseils-mercato-ligue-1-dans-mon-petit-gazon-saison-2026-27',
+};
+
 /** A third, independent way a Wix slug can differ — accents, which a real
  *  Arsène slug never carries (`toSlug()`, `src/domain/seo.ts`, strips
  *  them the same way at publish time). Applied on top of every candidate
@@ -1212,6 +1225,11 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
      *  for what's usually going to be a miss anyway). */
     async resolveWixPostPath(args: { slug: string }): Promise<string | null> {
       const rows = await published();
+      const overrideSlug = LEGACY_SLUG_OVERRIDES[args.slug];
+      if (overrideSlug !== undefined) {
+        const overrideRow = rows.find((r) => r.slug === overrideSlug);
+        if (overrideRow !== undefined) return articlePath(viewOf(overrideRow));
+      }
       const base = [args.slug, ...WIX_SLUG_NORMALIZATIONS.map((normalize) => normalize(args.slug))];
       const candidates = [...new Set([...base, ...base.map(stripAccents)])];
       for (const candidate of candidates) {

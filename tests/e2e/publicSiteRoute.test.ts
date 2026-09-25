@@ -64,6 +64,15 @@ beforeAll(async () => {
       slug: 'eliteserien-2026-bilan-a-mi-saison',
       published_at: '2026-08-20T17:13:28Z',
     });
+    await seedArticle(db.client, {
+      writer_id: writerId,
+      title: 'Nos conseils mercato Ligue 1 dans Mon Petit Gazon saison 2026-27',
+      league_name: 'Ligue 1',
+      type_name: 'MPG',
+      status: 'published',
+      slug: 'nos-conseils-mercato-ligue-1-dans-mon-petit-gazon-saison-2026-27',
+      published_at: '2026-08-19T12:00:00Z',
+    });
     const server = await startHttpServer({
       port: await freePort(),
       databaseUrl: db.connectionUri,
@@ -191,6 +200,19 @@ describe('the real public site routes', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { redirect?: string };
     expect(body.redirect).toBe(`${SITE_ORIGIN}/articles/eliteserien/26-27/guides/eliteserien-2026-bilan-a-mi-saison`);
+  });
+
+  it("PUBLIC-ROUTE-12b: last season's mercato guide, genuinely superseded (not just a Wix bookmark variant), redirects to this season's, not the Wix archive", async () => {
+    const { server } = ctx();
+    const res = await fetch(
+      `${server.url}/public/post/nos-conseils-mercato-ligue-1-dans-mon-petit-gazon-saison-2025-26`,
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { redirect?: string };
+    expect(body.redirect).toBe(
+      `${SITE_ORIGIN}/articles/ligue-1/26-27/mpg/nos-conseils-mercato-ligue-1-dans-mon-petit-gazon-saison-2026-27`,
+    );
   });
 
   it('PUBLIC-ROUTE-12: an old Wix bookmark for a post never manually migrated to Arsène signals a redirect to the static Wix archive, not a 404', async () => {
