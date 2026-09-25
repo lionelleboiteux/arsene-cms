@@ -39,8 +39,24 @@
 const UPSTREAM_ORIGIN = 'https://wpicvtlfjhdofpmfdzrb.supabase.co/functions/v1/arsene-api';
 const NO_STORE = { 'cache-control': 'no-store' };
 
+// AdSense authorized-sellers file — required at the domain root, one line
+// per publisher ID, unrelated to Arsène's own content. `public/ads.txt`
+// alone doesn't reach a real request here: this catch-all's own
+// `_routes.json` (`include: ["/*"]`) routes every path through this
+// Function first, static assets included, so the file the browser
+// actually got back was this Function's own 502 (confirmed live:
+// `be03d3d7.arsene-public-site.pages.dev/ads.txt` returned the literal
+// string 'Bad Gateway', not a Cloudflare-generated error page). Answering
+// it here, before any upstream fetch, is the only way to actually serve it.
+const ADS_TXT = 'google.com, pub-6481777982811975, DIRECT, f08c47fec0942fa0\n';
+
 export const onRequest: PagesFunction = async (context) => {
   const incoming = new URL(context.request.url);
+
+  if (incoming.pathname === '/ads.txt') {
+    return new Response(ADS_TXT, { headers: { 'content-type': 'text/plain; charset=utf-8', ...NO_STORE } });
+  }
+
   const upstream = new URL(`${UPSTREAM_ORIGIN}/public${incoming.pathname}${incoming.search}`);
 
   if (context.request.method !== 'GET') {
