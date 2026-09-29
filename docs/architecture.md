@@ -2,7 +2,11 @@
 
 ## Overview
 
-Arsène is a Supabase-backed CMS with four server-side atomic operations (draft management, image upload, publish) and direct PostgREST access for everything else. Images land in S3 and are optimized asynchronously by Lambda; the public site uses Cloudflare Pages with on-demand incremental revalidation (ISR), so only the newly published article's page and its category/homepage regenerate on publish—not the entire archive. This design balances cost ($0/mo at launch), publish latency (1–3 minutes rather than 5–10 for a full rebuild), and operational simplicity.
+Arsène is a Supabase-backed CMS with four server-side atomic operations (draft management, image upload, publish) and direct PostgREST access for everything else. Images land in S3 and are optimized asynchronously by Lambda.
+
+> **As built (2026-09-25), diverges from the ISR design below:** the public site was never built as a separate Next.js/ISR app. Instead, `src/site/render.ts` renders HTML/JSON-LD/XML per request as `/public/*` routes on the same `arsene-api` Edge Function, and a `public-site/` Cloudflare Pages project (`functions/[[path]].ts`) reverse-proxies `cms.fantasy-coach.fr`/`www.fantasy-coach.fr` to it — required because Supabase silently downgrades any Edge Function `text/html` response to `text/plain`, so the Edge Function hands back rendered content as a JSON field (`{html}` / `{redirect}` / `{body, content_type}`) and the proxy is the only place a real `Content-Type` reaches a browser. There is no regeneration or caching step at all: every request is rendered fresh from Postgres. The "on-demand ISR" sections below describe the original plan, not this. The rest of this document (Postgres-backed API, S3/Lambda image pipeline) is accurate as built.
+
+The public site uses Cloudflare Pages with on-demand incremental revalidation (ISR), so only the newly published article's page and its category/homepage regenerate on publish—not the entire archive. This design balances cost ($0/mo at launch), publish latency (1–3 minutes rather than 5–10 for a full rebuild), and operational simplicity.
 
 ## Components
 

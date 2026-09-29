@@ -6,11 +6,18 @@ Arsène is a backend for a content-management system serving football-prediction
 
 - **Backend:** Node.js/TypeScript + Supabase (Postgres + Edge Functions + Auth + Storage)
 - **Image processing:** AWS S3 (upload staging) + Lambda (optimization via `sharp` codec, WebP/AVIF/HEIC support)
-- **Public site rendering:** Next.js on Cloudflare Pages, using on-demand incremental revalidation (ISR) — only changed pages regenerate on publish, not the entire archive
+- **Public site rendering:** not the Next.js/ISR app ADR-0001 originally proposed — `src/site/render.ts` renders HTML/JSON-LD per request as a `/public/*` route on the same Supabase Edge Function (`arsene-api`), and the `public-site/` Cloudflare Pages project (`public-site/functions/[[path]].ts`) reverse-proxies `cms.fantasy-coach.fr`/`www.fantasy-coach.fr` to it — needed because Supabase rewrites any Edge Function `text/html` response to `text/plain`, so the Edge Function hands back HTML/XML as a JSON field and this proxy is the one place that emits the real `Content-Type` a browser gets. Also serves `sitemap.xml`, `robots.txt`, and `ads.txt`, and 404s (not 502s) any path neither side recognizes.
 - **Authentication:** Supabase Auth (JWT-based writer accounts; see [ADR-0001](pdlc/arsene-cms/adr/0001-supabase-backend-isr-frontend.md) for architecture rationale)
 - **Testing:** TypeScript/Vitest + Testcontainers (real Postgres) for unit/integration tests; Schemathesis for contract validation against [openapi.yaml](pdlc/arsene-cms/contracts/openapi.yaml)
 
-This repo contains the backend API server (`src/api/`) and the public-site render pass (`src/site/`) — the HTML/JSON-LD an ISR page would serve, read straight from Postgres. It does not contain the writer-facing editor SPA's UI, which is not yet built; `src/api/client.ts` is the typed client that SPA would use, and `src/client/fixturePicker.ts` is the one client-side component that already exists (a pronos fixture picker widget).
+This repo contains the backend API server (`src/api/`), the public-site render pass (`src/site/`, read straight from Postgres), and the `public-site/` Cloudflare Pages reverse-proxy project that fronts it (see above). It does not contain the writer-facing editor SPA's UI, which is not yet built; `src/api/client.ts` is the typed client that SPA would use, and `src/client/fixturePicker.ts` is the one client-side component that already exists (a pronos fixture picker widget).
+
+Deploying a change touches up to three separate targets, each its own manual step — none trigger the others:
+- Backend: `supabase functions deploy arsene-api --project-ref wpicvtlfjhdofpmfdzrb`
+- Public-site proxy: `cd public-site && npx wrangler pages deploy public --project-name=arsene-public-site --branch=main` (omitting `--branch=main` deploys a non-production preview, not the live custom domains)
+- Editor SPA: Cloudflare Pages project `arsene-editor` — `npm run build` in `frontend/` then `wrangler pages deploy frontend/dist`
+
+`fantasy-coach.fr`'s DNS is a real Cloudflare zone (moved off Wix); a handful of legacy flat URLs that don't map onto any Arsène route (`/mpg`, `/indisponibles-dnp`, `/compos-probables`, apex→www) are handled by that zone's own Page Rules and Redirect Rules, not by this repo's code — check the Cloudflare dashboard, not `public-site/`, before assuming a flat URL redirect is missing from here.
 
 ## Quick Start
 
