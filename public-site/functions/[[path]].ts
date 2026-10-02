@@ -38,6 +38,8 @@
  * nothing this function returns is ever safe to cache.
  */
 
+import { PRIVACY_POLICY_HTML } from '../lib/privacy-policy';
+
 const UPSTREAM_ORIGIN = 'https://wpicvtlfjhdofpmfdzrb.supabase.co/functions/v1/arsene-api';
 const NO_STORE = { 'cache-control': 'no-store' };
 
@@ -57,6 +59,12 @@ export const onRequest: PagesFunction = async (context) => {
 
   if (incoming.pathname === '/ads.txt') {
     return new Response(ADS_TXT, { headers: { 'content-type': 'text/plain; charset=utf-8', ...NO_STORE } });
+  }
+
+  // Static legal page for the mobile app's store listings. Not Arsène
+  // content, so it's answered here rather than proxied upstream.
+  if (incoming.pathname === '/confidentialite' || incoming.pathname === '/confidentialite/') {
+    return new Response(PRIVACY_POLICY_HTML, { headers: { 'content-type': 'text/html; charset=utf-8', ...NO_STORE } });
   }
 
   const upstream = new URL(`${UPSTREAM_ORIGIN}/public${incoming.pathname}${incoming.search}`);
