@@ -617,12 +617,13 @@ const PRONOS_LEAGUES: { name: string; logoUrl: string }[] = [
   },
 ];
 
-/** Same 4 items as `fc-shared/nav.js`'s own Ligue 1 dropdown (`LINKS[0].children`
+/** Same 5 items as `fc-shared/nav.js`'s own Ligue 1 dropdown (`LINKS[0].children`
  *  there) — the home page's own header stands in for `<fc-nav>` entirely
  *  (`page()`'s `showFcNav` doc comment), so it needs its own copy of this
  *  menu rather than inheriting one from the shared script. Kept in sync by
  *  hand since `fc-shared` is a separate repo this project doesn't own. */
 const LIGUE1_NAV_CHILDREN: { label: string; url: string }[] = [
+  { label: 'Articles', url: 'https://cms.fantasy-coach.fr/articles/ligue-1' },
   { label: 'Indisponibles / DNP', url: 'https://l1.dnp.fantasy-coach.fr/' },
   // Re-added 2026-09-17 — now lives on the DNP static site rather than the
   // old (never-built) www.fantasy-coach.fr path.
