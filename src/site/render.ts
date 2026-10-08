@@ -542,28 +542,21 @@ function articleCard(row: ArticleRow): string {
  * The fantasy-coach.fr sibling sites (pronos, DNP, compos) all share their
  * nav/ads/feedback through `fc-shared` (a separate repo,
  * github.com/lionelleboiteux/fc-shared) — dependency-free Web Components
- * pulled straight from jsDelivr, no build step, matching this file's own
- * "plain HTML string, no framework" shape exactly. `nav.js` defines
- * `<fc-nav>`; `ads.js` is the AdSense + consent loader, same publisher ID
- * across every site.
+ * served from `assets.fantasy-coach.fr` (the `fc-shared` Cloudflare Pages
+ * project, published with `fc-shared/deploy.sh`), no build step, matching
+ * this file's own "plain HTML string, no framework" shape exactly. `nav.js`
+ * defines `<fc-nav>`; `ads.js` is the AdSense + consent loader, same
+ * publisher ID across every site.
  *
- * Pinned to a commit SHA (`FC_SHARED_REF` below), not `@main` — `@main`
- * used to mean an `fc-shared` edit could sit unseen by a returning visitor
- * for up to 7 days (the browser's own cache for that exact URL) even after
- * a jsDelivr purge, discovered live the day the "Suspendus au prochain
- * jaune" URL was fixed there and still didn't show up. A SHA-pinned URL is
- * immutable, so jsDelivr and every browser can cache it forever; bumping
- * `FC_SHARED_REF` after any `fc-shared` change is what actually invalidates
- * the old one, since it's a different URL, not a header any cache can
- * choose to ignore. Every other site that loads `fc-shared` needs the same
- * bump, by hand, in its own `<script src>` tags — `fc-shared/README.md`
- * documents the full list.
+ * Unpinned on purpose: the files are served with a short browser cache, so
+ * an `fc-shared` deploy reaches every site on its own, with no per-site
+ * edit or redeploy. (Pinning jsDelivr to a commit SHA was the earlier
+ * workaround for `@main` being cached up to 7 days.)
  */
-const FC_SHARED_REF = 'cdadae5';
 const FC_SHARED_HEAD = [
-  `<script src="https://cdn.jsdelivr.net/gh/lionelleboiteux/fc-shared@${FC_SHARED_REF}/nav.js" defer></script>`,
-  `<script src="https://cdn.jsdelivr.net/gh/lionelleboiteux/fc-shared@${FC_SHARED_REF}/ads.js" async></script>`,
-  `<script src="https://cdn.jsdelivr.net/gh/lionelleboiteux/fc-shared@${FC_SHARED_REF}/ga.js" async></script>`,
+  `<script src="https://assets.fantasy-coach.fr/nav.js" defer></script>`,
+  `<script src="https://assets.fantasy-coach.fr/ads.js" async></script>`,
+  `<script src="https://assets.fantasy-coach.fr/ga.js" async></script>`,
 ].join('');
 
 /**
