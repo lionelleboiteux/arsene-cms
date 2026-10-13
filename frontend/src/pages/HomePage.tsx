@@ -43,6 +43,8 @@ export function HomePage({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [unpublishingId, setUnpublishingId] = useState<string | null>(null);
   const [unpublishError, setUnpublishError] = useState<string | null>(null);
+  const [notifyingId, setNotifyingId] = useState<string | null>(null);
+  const [notifyError, setNotifyError] = useState<string | null>(null);
   // article_id -> view count (`GET /v1/articles/views`) — an article absent
   // from the response simply has zero, so this stays an empty object until
   // the fetch resolves rather than defaulting every id to 0 up front.
@@ -118,6 +120,38 @@ export function HomePage({
     }
   }
 
+  // Any writer may press it (unlike unpublish/delete), once per article —
+  // the API's compare-and-set on `notified_at` is the real guard; this
+  // confirm exists because a push to every reader can't be recalled.
+  async function handleNotify(articleId: string) {
+    if (
+      !window.confirm(
+        "Envoyer une notification aux lecteurs de l'application ? Elle ne peut être envoyée qu'une seule fois par article.",
+      )
+    ) {
+      return;
+    }
+    setNotifyError(null);
+    setNotifyingId(articleId);
+    try {
+      const client = await arseneClient();
+      await client.notifyArticle({ articleId });
+      await refresh();
+    } catch (err) {
+      setNotifyError(
+        err instanceof ArseneApiError && err.status === 409
+          ? 'Une notification a déjà été envoyée pour cet article.'
+          : err instanceof Error
+            ? err.message
+            : String(err),
+      );
+      // A 409 means the list was stale — show the real state.
+      await refresh();
+    } finally {
+      setNotifyingId(null);
+    }
+  }
+
   async function createArticle(league_name: string, type_name: string) {
     setCreateError(null);
     setCreating(`${league_name}:${type_name}`);
@@ -174,6 +208,11 @@ export function HomePage({
           {unpublishError}
         </p>
       )}
+      {notifyError !== null && (
+        <p role="alert" className="error-text">
+          {notifyError}
+        </p>
+      )}
 
       {loading ? (
         <p>Chargement…</p>
@@ -204,6 +243,8 @@ export function HomePage({
                 onDelete={(id) => void handleDelete(id)}
                 unpublishingId={unpublishingId}
                 onUnpublish={(id) => void handleUnpublish(id)}
+                notifyingId={notifyingId}
+                onNotify={(id) => void handleNotify(id)}
                 viewCounts={viewCounts}
               />
             );
@@ -219,6 +260,8 @@ export function HomePage({
               onDelete={(id) => void handleDelete(id)}
               unpublishingId={unpublishingId}
               onUnpublish={(id) => void handleUnpublish(id)}
+              notifyingId={notifyingId}
+              onNotify={(id) => void handleNotify(id)}
               viewCounts={viewCounts}
             />
           )}
@@ -249,6 +292,8 @@ function LeagueSection({
   onDelete,
   unpublishingId,
   onUnpublish,
+  notifyingId,
+  onNotify,
   viewCounts,
 }: {
   title: string;
@@ -260,6 +305,8 @@ function LeagueSection({
   onDelete?: (articleId: string) => void;
   unpublishingId?: string | null;
   onUnpublish?: (articleId: string) => void;
+  notifyingId?: string | null;
+  onNotify?: (articleId: string) => void;
   viewCounts: Record<string, number>;
 }) {
   return (
@@ -300,6 +347,25 @@ function LeagueSection({
                   </span>
                 )}
                 <span className={`status-badge status-${article.status}`}>{STATUS_LABEL[article.status]}</span>
+                {article.status === 'published' && onNotify !== undefined && (
+                  <button
+                    type="button"
+                    className="notify-button"
+                    disabled={article.notified_at !== null || notifyingId === article.id}
+                    title={
+                      article.notified_at !== null
+                        ? `Notification envoyée le ${new Date(article.notified_at).toLocaleString('fr-FR')}`
+                        : "Envoyer une notification aux lecteurs de l'application"
+                    }
+                    onClick={() => onNotify(article.id)}
+                  >
+                    {notifyingId === article.id
+                      ? 'Envoi…'
+                      : article.notified_at !== null
+                        ? 'Notifié ✓'
+                        : 'Notification'}
+                  </button>
+                )}
                 {isAdmin === true && article.status === 'draft' && onDelete !== undefined && (
                   <button
                     type="button"

@@ -478,6 +478,51 @@ export function createRepo(pool: pg.Pool) {
       return existing.rowCount === 1 ? 'not_published' : 'not_found';
     },
 
+    /** Atomically marks a published article as announced and returns what
+     *  the notification needs, or says why it can't. Compare-and-set on
+     *  `notified_at is null`, so concurrent presses send at most one push.
+     *  The image is the cover's pre-cropped `og_image_url` when the Lambda
+     *  produced one (0013), else its `optimized_url`; null when the article
+     *  has no ready cover. */
+    async claimArticleNotification(article_id: string): Promise<
+      | {
+          result: 'claimed';
+          article: { title: string; teaser: string | null; slug: string; image_url: string | null };
+        }
+      | { result: 'not_found' | 'not_published' | 'already_notified' }
+    > {
+      if (!UUID.test(article_id)) return { result: 'not_found' };
+      const res = await pool.query<{ title: string; teaser: string | null; slug: string | null; image_url: string | null }>(
+        `update articles a
+            set notified_at = now()
+          where a.id = $1 and a.status = 'published' and a.notified_at is null
+        returning a.title, a.teaser, a.slug,
+                  (select coalesce(i.og_image_url, i.optimized_url)
+                     from article_images i
+                    where i.article_id = a.id and i.role = 'cover' and i.status = 'ready'
+                    limit 1) as image_url`,
+        [article_id],
+      );
+      const row = res.rows[0];
+      if (row !== undefined) {
+        return {
+          result: 'claimed',
+          article: { title: row.title, teaser: row.teaser, slug: row.slug ?? article_id, image_url: row.image_url },
+        };
+      }
+      const existing = await pool.query<{ status: string }>(`select status from articles where id = $1`, [article_id]);
+      const status = existing.rows[0]?.status;
+      if (status === undefined) return { result: 'not_found' };
+      return { result: status === 'published' ? 'already_notified' : 'not_published' };
+    },
+
+    /** Undoes `claimArticleNotification` when the notifications Worker
+     *  reported that nothing was delivered, so the writer can try again. */
+    async releaseArticleNotification(article_id: string): Promise<void> {
+      if (!UUID.test(article_id)) return;
+      await pool.query(`update articles set notified_at = null where id = $1`, [article_id]);
+    },
+
     async markPublished(input: {
       article_id: string;
       published_at: Date;

@@ -93,6 +93,10 @@ const opts: ServerOptions = {
   // Auth Admin API, same credential `scripts/create-writer.ts` requires).
   supabaseUrl,
   supabaseServiceRoleKey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+  // Optional: the notifications Worker's base URL + its shared secret. Unset,
+  // `POST /v1/articles/{id}/notify` answers 503 rather than failing the boot.
+  notificationsUrl: Deno.env.get('NOTIFICATIONS_URL'),
+  notificationsSecret: Deno.env.get('NOTIFICATIONS_SECRET'),
   corsOrigins: parseCorsOrigins(Deno.env.get('CORS_ALLOWED_ORIGINS')),
   readTimeoutMs: (() => {
     const raw = Deno.env.get('READ_TIMEOUT_MS');

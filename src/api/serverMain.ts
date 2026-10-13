@@ -63,6 +63,8 @@ const server = await startHttpServer({
   dashboardReadSecret: process.env.DASHBOARD_READ_SECRET,
   supabaseUrl: process.env.SUPABASE_URL,
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  notificationsUrl: process.env.NOTIFICATIONS_URL,
+  notificationsSecret: process.env.NOTIFICATIONS_SECRET,
 });
 
 process.stdout.write(`listening ${server.url}\n`);

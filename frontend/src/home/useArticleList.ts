@@ -13,6 +13,9 @@ export type ArticleListItem = {
    *  null for a draft, which has no public page to open (`articlePath`
    *  needs `first_published_at`/`slug`, neither set until publish). */
   public_url: string | null;
+  /** When a writer announced it to the mobile apps; null if never — drives
+   *  the home page's "Notification" button (`HomePage.tsx`). */
+  notified_at: string | null;
 };
 
 type ArticleRow = {
@@ -22,6 +25,7 @@ type ArticleRow = {
   updated_at: string;
   slug: string | null;
   first_published_at: string | null;
+  notified_at: string | null;
   arsene_leagues: unknown;
   categories: unknown;
 };
@@ -39,7 +43,7 @@ export function useArticleList() {
   const refresh = useCallback(async () => {
     const { data } = await supabase
       .from('articles')
-      .select('id, title, status, updated_at, slug, first_published_at, arsene_leagues(name), categories(name)')
+      .select('id, title, status, updated_at, slug, first_published_at, notified_at, arsene_leagues(name), categories(name)')
       .order('updated_at', { ascending: false });
     setArticles(
       ((data ?? []) as ArticleRow[]).map((row) => {
@@ -65,6 +69,7 @@ export function useArticleList() {
           updated_at: row.updated_at,
           league_name,
           public_url,
+          notified_at: row.notified_at,
         };
       }),
     );

@@ -36,6 +36,8 @@ import {
   type AdminWritersDeps,
 } from './adminWriters.ts';
 import { handleDeleteArticle, handleUnpublishArticle, type AdminArticlesDeps } from './adminArticles.ts';
+import { handleNotifyArticle, type NotifyArticleDeps } from './notifyArticle.ts';
+import { createNotifier } from './notifier.ts';
 import { authAdminHeaders, createOrFindAuthUser, generateSignInLink } from './authAdmin.ts';
 import { bearerToken, errorResponse, type HandlerResponse } from './http.ts';
 import { handleImageStatusCallback } from './imageStatus.ts';
@@ -50,6 +52,8 @@ import { handleGetArticleViews, type ArticleViewsDeps } from './articleViews.ts'
 import { createSiteRenderer } from '../site/render.ts';
 
 const ARTICLE_ROUTE = /^\/v1\/articles\/([^/]+)\/(publish|images|open)$/;
+/** The home page's "Notification" button — any active writer, once per article. */
+const ARTICLE_NOTIFY_ROUTE = /^\/v1\/articles\/([^/]+)\/notify$/;
 const ARTICLE_IMAGE_ROUTE = /^\/v1\/articles\/([^/]+)\/images\/([^/]+)$/;
 const CREATE_DRAFT_ROUTE = '/v1/articles';
 const IMAGE_STATUS_ROUTE = /^\/internal\/images\/([^/]+)\/status$/;
@@ -447,6 +451,21 @@ function adminArticlesDeps(ctx: Ctx): AdminArticlesDeps {
   };
 }
 
+function notifyArticleDeps(ctx: Ctx): NotifyArticleDeps {
+  const { notificationsUrl, notificationsSecret } = ctx.opts;
+  return {
+    auth: { verifyBearer: async (token) => verify(token, ctx) },
+    repo: ctx.repo,
+    notifier:
+      notificationsUrl !== undefined &&
+      notificationsUrl !== '' &&
+      notificationsSecret !== undefined &&
+      notificationsSecret !== ''
+        ? createNotifier({ baseUrl: notificationsUrl, secret: notificationsSecret })
+        : undefined,
+  };
+}
+
 function draftDeps(ctx: Ctx): CreateDraftDeps {
   return {
     now: () => new Date(),
@@ -784,6 +803,12 @@ const adminDeleteArticle = (request: Request, article_id: string, ctx: Ctx): Pro
     adminArticlesDeps(ctx),
   );
 
+const notifyArticle = (request: Request, article_id: string, ctx: Ctx): Promise<HandlerResponse> =>
+  handleNotifyArticle(
+    { authorization: request.headers.get('authorization'), article_id },
+    notifyArticleDeps(ctx),
+  );
+
 const adminUnpublishArticle = (request: Request, article_id: string, ctx: Ctx): Promise<HandlerResponse> =>
   handleUnpublishArticle(
     { authorization: request.headers.get('authorization'), article_id },
@@ -1085,6 +1110,14 @@ export type ServerOptions = {
    */
   supabaseUrl?: string;
   supabaseServiceRoleKey?: string;
+  /**
+   * The fantasy-coach-notifications Worker's base URL and the secret shared
+   * with its `NOTIFY_SHARED_SECRET` — needed only by `POST
+   * /v1/articles/{id}/notify`. Optional: a deployment without both still
+   * boots, and that route answers `503` instead of pretending to send.
+   */
+  notificationsUrl?: string;
+  notificationsSecret?: string;
 };
 
 type Shared = {
@@ -1186,7 +1219,8 @@ type Operation =
   | { kind: 'admin-invite-writer' }
   | { kind: 'admin-writer-action'; writer_id: string; action: 'revoke' | 'reinstate' }
   | { kind: 'admin-delete-article'; article_id: string }
-  | { kind: 'admin-unpublish-article'; article_id: string };
+  | { kind: 'admin-unpublish-article'; article_id: string }
+  | { kind: 'notify-article'; article_id: string };
 
 /** `new URL(request.url).pathname` never percent-decodes non-ASCII
  *  characters (confirmed: a real `à` in the request URL stays literally
@@ -1274,6 +1308,11 @@ function matchRoute(path: string): Operation | null {
     return { kind: 'public-post-legacy', slug: safeDecodeURIComponent(publicPost[1]) };
   }
 
+  const notifyArticleMatch = ARTICLE_NOTIFY_ROUTE.exec(path);
+  if (notifyArticleMatch?.[1] !== undefined) {
+    return { kind: 'notify-article', article_id: notifyArticleMatch[1] };
+  }
+
   const article = ARTICLE_ROUTE.exec(path);
   if (article?.[1] !== undefined) {
     return { kind: article[2] as 'publish' | 'images' | 'open', article_id: article[1] };
@@ -1358,6 +1397,8 @@ function dispatch(
       return adminDeleteArticle(request, op.article_id, ctx);
     case 'admin-unpublish-article':
       return adminUnpublishArticle(request, op.article_id, ctx);
+    case 'notify-article':
+      return notifyArticle(request, op.article_id, ctx);
     case 'public-home':
     case 'public-sitemap':
     case 'public-robots':

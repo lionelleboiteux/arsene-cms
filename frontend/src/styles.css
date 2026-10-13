@@ -226,6 +226,16 @@ button:disabled {
   border-color: #e0704d;
 }
 
+.notify-button {
+  color: #2c6fbb;
+  border-color: #2c6fbb;
+}
+
+.notify-button:disabled {
+  color: #6b7a8c;
+  border-color: #c5ccd4;
+}
+
 .article-link {
   background: none;
   border: none;
