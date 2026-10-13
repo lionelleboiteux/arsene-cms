@@ -8,3 +8,4 @@ supabase/.temp/
 frontend/dist/
 .env
 .env.local
+.wrangler/
