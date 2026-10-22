@@ -269,7 +269,7 @@ const HOME_PAGE_CSS = `
    as a unit, not left-aligned from the padding edge. Desktop (below)
    switches to a 3-column grid instead. */
 .home-header-top{background:linear-gradient(180deg,var(--h-blue-300),var(--h-blue-500));
-  padding:16px 28px;display:flex;flex-direction:column;align-items:center;
+  border-bottom:3px solid var(--h-red-500);padding:16px 28px;display:flex;flex-direction:column;align-items:center;
   justify-content:center;flex-wrap:wrap;gap:12px;text-align:center}
 .home-brand{display:flex;align-items:center;gap:14px}
 .home-logo{height:52px;display:block}
@@ -295,12 +295,6 @@ const HOME_PAGE_CSS = `
 .home-nav-dropdown a{color:var(--h-blue-900);text-decoration:none;font-weight:600;font-size:13px;
   padding:8px 16px;white-space:nowrap}
 .home-nav-dropdown a:hover{background:var(--h-gray-100)}
-.home-header-sub{background:var(--h-blue-600);padding:8px 28px;display:flex;gap:8px;
-  border-bottom:3px solid var(--h-red-500);flex-wrap:wrap;justify-content:center}
-.home-pill-sm{display:inline-flex;align-items:center;font-family:var(--h-font-display);font-weight:700;
-  border-radius:var(--h-radius-pill);text-decoration:none;padding:4px 12px;font-size:12px;
-  background:transparent;color:var(--h-white)}
-.home-pill-sm.active{background:var(--h-red-500);color:var(--h-white)}
 /* Desktop only (per the request this was scoped to): three true columns so
    the league pills sit centered on the row as a whole, not just centered in
    whatever space is left after the brand — a plain flex row can't do that,
@@ -318,22 +312,25 @@ const HOME_PAGE_CSS = `
   .home-header-top .home-brand{justify-self:start}
   .home-header-top .home-pills{justify-self:center}
   .home-header-top .home-socials{justify-self:end}
-  .home-header-sub{justify-content:flex-start}
 }
 .home-body{display:flex;padding:24px;gap:24px;flex-wrap:wrap;max-width:1100px;margin:0 auto}
 .home-col-main{flex:2 1 420px;display:flex;flex-direction:column;gap:16px}
 .home-col-side{flex:1 1 260px;display:flex;flex-direction:column;gap:12px}
 .home-card{background:var(--h-white);border-radius:var(--h-radius-md);box-shadow:var(--h-shadow-card);
   padding:16px;display:block;text-decoration:none;color:inherit}
-.home-hero{display:flex;gap:16px;flex-wrap:wrap}
-.home-hero-img{width:180px;height:120px;flex:none;border-radius:4px;object-fit:cover;
-  background:repeating-linear-gradient(45deg,#e7eef7,#e7eef7 6px,#d3e0f0 6px,#d3e0f0 12px)}
-.home-eyebrow{font-size:12px;color:var(--h-red-500);font-weight:700;text-transform:uppercase}
-.home-headline{font-family:var(--h-font-display);font-size:24px;font-weight:700;color:var(--h-blue-900);margin:4px 0}
-.home-subtitle{font-size:14px;color:var(--h-gray-600);margin:0}
-.home-btn{display:inline-block;margin-top:10px;font-family:var(--h-font-display);font-weight:700;
+.home-hero{display:block;padding:0;overflow:hidden}
+.home-hero-img{display:block;width:100%;height:300px;object-fit:cover;
+  background:repeating-linear-gradient(45deg,#e7eef7,#e7eef7 8px,#d3e0f0 8px,#d3e0f0 16px)}
+.home-hero-body{padding:20px 24px 24px}
+.home-eyebrow{font-size:12px;color:#c42a23;font-weight:700;text-transform:uppercase}
+.home-headline{font-family:var(--h-font-display);font-size:34px;line-height:1.15;font-weight:700;color:var(--h-blue-900);margin:6px 0 10px}
+.home-subtitle{font-size:16px;line-height:1.5;color:var(--h-gray-600);margin:0}
+.home-hero-foot{display:flex;align-items:center;gap:14px;margin-top:16px;flex-wrap:wrap}
+.home-hero-date{font-size:13px;color:var(--h-gray-600)}
+.home-hero:hover .home-headline,.home-small:hover .home-small-title{text-decoration:underline}
+.home-btn{display:inline-block;font-family:var(--h-font-display);font-weight:700;
   border:none;border-radius:var(--h-radius-pill);padding:6px 14px;font-size:13px;
-  background:var(--h-red-500);color:var(--h-white)}
+  background:#c42a23;color:var(--h-white)}
 .home-btn-ghost{background:var(--h-blue-700)}
 .home-card-title{font-family:var(--h-font-display);font-weight:700;color:var(--h-blue-900);font-size:16px}
 .home-tool-slots{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
@@ -341,14 +338,16 @@ const HOME_PAGE_CSS = `
   display:flex;align-items:center;justify-content:center;text-align:center;text-decoration:none;
   font-family:var(--h-font-display);font-weight:700;font-size:13px;color:var(--h-blue-700);
   box-shadow:inset 0 0 0 1.5px var(--h-blue-700)}
-/* "Derniers Player Picks" — a fourth home-page card, styled like the
-   others (.home-card) rather than reusing SITE_CSS's .article-card, which
-   is a visually different system (plain listing pages, not the portal). */
-.home-picks{display:flex;flex-direction:column;gap:10px;margin-top:10px}
-.home-pick{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}
-.home-pick-cover{width:56px;height:56px;border-radius:4px;object-fit:cover;flex:none;background:var(--h-gray-100)}
-.home-pick-title{font-family:var(--h-font-display);font-weight:700;font-size:14px;color:var(--h-blue-900);margin:0}
-.home-pick-byline{font-size:12px;color:var(--h-gray-600);margin:2px 0 0}
+/* The compact per-category cards under the hero — styled like the other
+   portal cards (.home-card), not SITE_CSS's .article-card (plain listing
+   pages, a visually different system). */
+.home-smalls{display:flex;flex-direction:column;gap:10px}
+.home-small{display:flex;align-items:center;gap:14px;padding:10px}
+.home-small-img{width:104px;height:72px;flex:none;border-radius:4px;object-fit:cover;
+  background:repeating-linear-gradient(45deg,#e7eef7,#e7eef7 6px,#d3e0f0 6px,#d3e0f0 12px)}
+.home-small-eyebrow{font-size:11px}
+.home-small-title{font-family:var(--h-font-display);font-weight:700;font-size:16px;line-height:1.25;color:var(--h-blue-900);margin:2px 0}
+.home-small-date{font-size:12px;color:var(--h-gray-600);margin:0}
 /* One-line SEO/intro copy under the header — matches the terse, factual
    voice already used elsewhere on this page (e.g. .home-subtitle), not a
    marketing paragraph. */
@@ -850,17 +849,18 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
     return { html: page(title, head, body, title), json_ld: [] };
   };
 
-  /** The game-format sub-nav row. LCDE/MPG link into Ligue 1's current
-   *  season — the home page has no other league/season context to anchor a
-   *  format shortcut to, and Ligue 1 is ~70% of this site's traffic (the
-   *  design project's own readme). Pronos isn't an Arsène content type at
-   *  all — it's the separate pronos.fantasy-coach.fr site — so it links
-   *  there directly instead of into a `/articles/...` route. */
-  const currentLigue1Season = (): string => `/articles/ligue-1/${seasonSlug(new Date())}`;
-  const HOME_FORMAT_PILLS = (): { label: string; href: string }[] => [
-    { label: 'LCDE', href: `${currentLigue1Season()}/lcde` },
-    { label: 'MPG', href: `${currentLigue1Season()}/mpg` },
-    { label: 'Pronos', href: 'https://pronos.fantasy-coach.fr' },
+  /** The six home-page slots — one per content category, in the order the
+   *  non-hero ones are listed. Ligue 1 and Premier League are split by type
+   *  (their Player Picks are the weekly flagship; Ligue 1's MPG guides are a
+   *  separate format), while Bundesliga and the two Scandinavian leagues are
+   *  a slot per league, whatever type their newest article is. */
+  const HOME_CATEGORIES: { league: string; type?: string }[] = [
+    { league: 'Ligue 1', type: 'Player Picks' },
+    { league: 'Ligue 1', type: 'MPG' },
+    { league: 'Premier League', type: 'Player Picks' },
+    { league: 'Bundesliga' },
+    { league: 'Eliteserien' },
+    { league: 'Allsvenskan' },
   ];
 
   /** League pills follow a fixed priority order (business call, not
@@ -887,7 +887,7 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
 
   const homePage = (
     hero: ArticleRow | undefined,
-    lastPicks: ArticleRow[],
+    others: ArticleRow[],
     leagues: { name: string }[],
   ): RenderedPage => {
     const head = [
@@ -899,11 +899,7 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
       `<style>${HOME_PAGE_CSS}</style>`,
     ].join('');
 
-    // The header's active pills track the hero, not a hardcoded default:
-    // today the hero is always Ligue 1 Player Picks (see `renderHomepage()`),
-    // which is the LCDE weekly format under the hood (`readme.md`'s own
-    // "LCDE ... weekly articles" description is exactly the Player Picks
-    // type), so both read off `hero` rather than being pinned in markup.
+    // The active league pill tracks the hero's league.
     const leaguePills = leagues
       .map((league) => {
         const active = hero !== undefined && league.name === hero.league_name;
@@ -924,12 +920,6 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
         ].join('');
       })
       .join('');
-    const formatPills = HOME_FORMAT_PILLS()
-      .map((format) => {
-        const active = format.label === 'LCDE' && hero !== undefined && hero.type_name === 'Player Picks';
-        return `<a class="home-pill-sm${active ? ' active' : ''}" href="${format.href}">${escape(format.label)}</a>`;
-      })
-      .join('');
     const socials = HOME_SOCIALS.map(
       (s) =>
         `<a href="${escape(s.url)}" aria-label="${escape(s.label)}" target="_blank" rel="noopener"><img src="${s.icon}" alt="${escape(s.label)}"/></a>`,
@@ -943,42 +933,40 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
             hero.cover_image_url === null
               ? '<div class="home-hero-img"></div>'
               : `<img class="home-hero-img" src="${escape(hero.cover_image_url)}" alt="${escape(hero.title)}"/>`,
-            '<div>',
-            `<div class="home-eyebrow">${escape(`${hero.league_name} · ${hero.type_name}`)}</div>`,
+            '<div class="home-hero-body">',
+            `<div class="home-eyebrow">${escape(`À la une · ${hero.league_name} · ${hero.type_name}`)}</div>`,
             `<h1 class="home-headline">${escape(hero.title)}</h1>`,
-            // Falls back to the old static line when the writer never set a
-            // teaser (0011_article_teaser.sql) — same "no element at all"
-            // handling would leave a visible gap here, unlike the listing
-            // card's own empty-but-present <p>, so this one keeps a value.
-            `<p class="home-subtitle">${hero.teaser === null ? 'Article hebdo — mis à jour chaque semaine' : escape(hero.teaser)}</p>`,
+            // No fallback line: the hero is no longer always a weekly piece,
+            // so the old static "Article hebdo" text would be wrong for most
+            // of them. A teaser-less hero just goes title → button.
+            hero.teaser === null || hero.teaser === '' ? '' : `<p class="home-subtitle">${escape(hero.teaser)}</p>`,
+            '<div class="home-hero-foot">',
             '<span class="home-btn">Lire l’article</span>',
+            `<span class="home-hero-date">Publié ${relativeTime(hero.published_at.toISOString())}</span>`,
+            '</div>',
             '</div>',
             '</a>',
           ].join('');
 
-    const picksBlock =
-      lastPicks.length === 0
+    const smallCards =
+      others.length === 0
         ? ''
-        : [
-            '<div class="home-card home-picks-card">',
-            '<div class="home-card-title">📋 Derniers Player Picks — Ligue 1</div>',
-            '<div class="home-picks">',
-            ...lastPicks.map((pick) =>
+        : `<div class="home-smalls">${others
+            .map((row) =>
               [
-                `<a class="home-pick" href="${articlePath(viewOf(pick))}">`,
-                pick.cover_image_url === null
-                  ? '<div class="home-pick-cover"></div>'
-                  : `<img class="home-pick-cover" src="${escape(pick.cover_image_url)}" alt="${escape(pick.title)}"/>`,
+                `<a class="home-card home-small" href="${articlePath(viewOf(row))}">`,
+                row.cover_image_url === null
+                  ? '<div class="home-small-img"></div>'
+                  : `<img class="home-small-img" src="${escape(row.cover_image_url)}" alt="${escape(row.title)}"/>`,
                 '<div>',
-                `<p class="home-pick-title">${escape(pick.title)}</p>`,
-                `<p class="home-pick-byline">${authorsHtml(pick.authors)} · ${relativeTime(pick.published_at.toISOString())}</p>`,
+                `<div class="home-eyebrow home-small-eyebrow">${escape(`${row.league_name} · ${row.type_name}`)}</div>`,
+                `<h3 class="home-small-title">${escape(row.title)}</h3>`,
+                `<p class="home-small-date">${relativeTime(row.published_at.toISOString())}</p>`,
                 '</div>',
                 '</a>',
               ].join(''),
-            ),
-            '</div>',
-            '</div>',
-          ].join('');
+            )
+            .join('')}</div>`;
 
     const body = [
       '<div class="home-page">',
@@ -991,13 +979,12 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
       `<nav class="home-pills">${leaguePills}</nav>`,
       `<div class="home-socials">${socials}</div>`,
       '</div>',
-      `<div class="home-header-sub"><nav class="home-pills">${formatPills}</nav></div>`,
       '</header>',
       `<p class="home-intro">${escape(HOME_DESCRIPTION)}</p>`,
       '<div class="home-body">',
       '<div class="home-col-main">',
       heroCard,
-      picksBlock,
+      smallCards,
       '</div>',
       '<div class="home-col-side">',
       '<a class="home-card home-cta" href="https://pronos.fantasy-coach.fr">',
@@ -1043,19 +1030,25 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
         client.query<{ name: string }>('select name from arsene_leagues'),
       ]);
       const leagues = [...leaguesResult.rows].sort(homeLeagueSort);
-      // The hero is always Ligue 1's most recent Player Picks (LCDE) piece —
-      // the site's flagship weekly content, not just whatever published most
-      // recently across every league/type. `rows` is already `published_at
-      // desc` (`PUBLISHED_ARTICLES_SQL`), so the first match is the newest.
-      const hero = rows.find((row) => row.league_name === 'Ligue 1' && row.type_name === 'Player Picks');
-      // The 3 Player Picks right before the hero, not including it — the
-      // hero is already the most prominent thing on the page, repeating it
-      // a few hundred pixels below would read as a bug. `rows` is already
-      // `published_at desc`, so this is genuinely "the next 3 most recent".
-      const lastPicks = rows
-        .filter((row) => row.league_name === 'Ligue 1' && row.type_name === 'Player Picks' && row.id !== hero?.id)
-        .slice(0, 3);
-      return homePage(hero, lastPicks, leagues);
+      // One slot per `HOME_CATEGORIES` entry: its newest article. `rows` is
+      // already `published_at desc` (`PUBLISHED_ARTICLES_SQL`), so the first
+      // match is the newest. A category with nothing published has no slot.
+      const slots = HOME_CATEGORIES.flatMap((category) => {
+        const row = rows.find(
+          (candidate) =>
+            candidate.league_name === category.league &&
+            (category.type === undefined || candidate.type_name === category.type),
+        );
+        return row === undefined ? [] : [row];
+      });
+      // The hero is whichever slot was published most recently; the rest keep
+      // `HOME_CATEGORIES`' fixed order.
+      const hero = slots.reduce<ArticleRow | undefined>(
+        (newest, row) => (newest === undefined || row.published_at > newest.published_at ? row : newest),
+        undefined,
+      );
+      const others = slots.filter((row) => row.id !== hero?.id);
+      return homePage(hero, others, leagues);
     },
 
     /** Shared not-found page — used by `renderArticlePage`'s own miss and by

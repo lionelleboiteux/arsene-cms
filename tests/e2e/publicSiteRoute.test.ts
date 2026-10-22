@@ -105,11 +105,12 @@ describe('the real public site routes', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('application/json');
     const { html } = (await res.json()) as { html: string };
-    // The home page portal (`homePage()`, `src/site/render.ts`) only ever
-    // features a Ligue 1 *Player Picks* article as its hero — this file's
-    // fixture is Ligue 1 / Pronos (its real job is exercising the nested
-    // article/category/legacy-redirect routes below, at that exact path),
-    // so no hero renders here. That content match belongs to
+    // The home page portal (`homePage()`, `src/site/render.ts`) only features
+    // the newest article of its six fixed categories (Ligue 1 Player Picks /
+    // MPG, Premier League Player Picks, Bundesliga, Eliteserien, Allsvenskan)
+    // — this file's fixture is Ligue 1 / Pronos (its real job is exercising
+    // the nested article/category/legacy-redirect routes below, at that
+    // exact path), which is none of them, so no hero renders here. That content match belongs to
     // `tests/db/publicSiteRender.test.ts`; this just proves the route is
     // reachable, credential-free, and answers the real portal chrome.
     expect(html).toContain('<div class="home-page">');

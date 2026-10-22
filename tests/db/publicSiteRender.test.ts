@@ -743,40 +743,70 @@ describe('public site', () => {
       expect(page.html).toContain('href="/articles/ligue-1">Ligue 1</a>');
     });
 
-    it('the Ligue 1 league pill and the LCDE format pill are both highlighted active, since the hero is always a Ligue 1 Player Picks (LCDE) article', async () => {
+    it('the header has no LCDE / MPG / Pronos sub-bar — only the league pills', async () => {
       const { renderer } = ctx();
       const page = await renderer.renderHomepage();
 
       expect({
-        ligue1_active: page.html.includes('<a class="home-pill active" href="/articles/ligue-1">Ligue 1</a>'),
-        premier_league_not_active: page.html.includes(
-          '<a class="home-pill" href="/articles/premier-league">Premier League</a>',
-        ),
-        lcde_active: page.html.includes('<a class="home-pill-sm active" href="/articles/ligue-1/26-27/lcde">LCDE</a>'),
-        mpg_not_active: page.html.includes('<a class="home-pill-sm" href="/articles/ligue-1/26-27/mpg">MPG</a>'),
+        has_format_pills: page.html.includes('home-pill-sm'),
+        has_sub_header: page.html.includes('home-header-sub'),
+        has_lcde_link: page.html.includes('>LCDE</a>'),
+      }).toEqual({ has_format_pills: false, has_sub_header: false, has_lcde_link: false });
+    });
+
+    it('the hero is the most recently published article across the six categories, with its cover slot, title and teaser; the active league pill follows it', async () => {
+      const { renderer, db } = ctx();
+      const writer = await seedWriter(db.client, 'Home Hero Writer');
+      // Newer than every fixture seeded so far (latest: 2026-08-30).
+      await seedArticle(db.client, {
+        writer_id: writer,
+        title: 'Home Hero Premier League',
+        league_name: 'Premier League',
+        type_name: 'Player Picks',
+        status: 'published',
+        slug: 'home-hero-premier-league',
+        published_at: '2026-09-01T09:00:00Z',
+        teaser: 'Un teaser pour la une.',
+      });
+
+      const page = await renderer.renderHomepage();
+      const hero = page.html.match(/<a class="home-card home-hero".*?<\/a>/s)?.[0] ?? '';
+
+      expect({
+        hero_title: hero.match(/<h1 class="home-headline">([^<]+)<\/h1>/)?.[1],
+        hero_eyebrow: hero.match(/<div class="home-eyebrow">([^<]+)<\/div>/)?.[1],
+        hero_teaser: hero.match(/<p class="home-subtitle">([^<]+)<\/p>/)?.[1],
+        has_button: hero.includes('Lire l’article'),
+        premier_league_active: page.html.includes('<a class="home-pill active" href="/articles/premier-league">'),
+        ligue_1_not_active: page.html.includes('<a class="home-pill" href="/articles/ligue-1">Ligue 1</a>'),
       }).toEqual({
-        ligue1_active: true,
-        premier_league_not_active: true,
-        lcde_active: true,
-        mpg_not_active: true,
+        hero_title: 'Home Hero Premier League',
+        hero_eyebrow: 'À la une · Premier League · Player Picks',
+        hero_teaser: 'Un teaser pour la une.',
+        has_button: true,
+        premier_league_active: true,
+        ligue_1_not_active: true,
       });
     });
 
-    it('LCDE and MPG format pills link into Ligue 1\'s current season for that format', async () => {
-      const { renderer } = ctx();
-      const page = await renderer.renderHomepage();
+    it('a hero with no teaser renders no subtitle at all (no static fallback line)', async () => {
+      const { renderer, db } = ctx();
+      await seedArticle(db.client, {
+        writer_id: await seedWriter(db.client, 'No Teaser Writer'),
+        title: 'Home Hero Without Teaser',
+        league_name: 'Bundesliga',
+        type_name: 'Guides',
+        status: 'published',
+        slug: 'home-hero-without-teaser',
+        published_at: '2026-09-02T09:00:00Z',
+      });
 
-      expect({
-        lcde: page.html.includes('href="/articles/ligue-1/26-27/lcde"'),
-        mpg: page.html.includes('href="/articles/ligue-1/26-27/mpg"'),
-      }).toEqual({ lcde: true, mpg: true });
-    });
+      const hero = (await renderer.renderHomepage()).html.match(/<a class="home-card home-hero".*?<\/a>/s)?.[0] ?? '';
 
-    it('the Pronos format pill links to the separate pronos.fantasy-coach.fr site, not an Arsène route — Pronos isn\'t Arsène content', async () => {
-      const { renderer } = ctx();
-      const page = await renderer.renderHomepage();
-
-      expect(page.html).toContain('<a class="home-pill-sm" href="https://pronos.fantasy-coach.fr">Pronos</a>');
+      expect({ title: hero.includes('Home Hero Without Teaser'), has_subtitle: hero.includes('home-subtitle') }).toEqual({
+        title: true,
+        has_subtitle: false,
+      });
     });
 
     it('league pills follow the fixed business-priority order, not alphabetical: Ligue 1, Premier League, Bundesliga', async () => {
@@ -885,78 +915,53 @@ describe('public site', () => {
       }).toEqual({ has_title: true, has_description: true, has_og_description: true, has_robots: true });
     });
 
-    it('lists the 3 most recent other Ligue 1 Player Picks articles under the hero, excluding the hero itself, most recent first', async () => {
+    it('under the hero: one compact card per remaining category, newest article only, in the fixed category order', async () => {
       const { renderer, db } = ctx();
-      const writer = await seedWriter(db.client, 'Recrue Picks');
-      // All published after the current hero ('Player Picks, Ligue 1, J1',
-      // 2026-08-20, seeded by the `renderLeaguePage` "groups by type" test
-      // above) so J8 becomes the new hero and J7/J6/J1 — not J5, the oldest —
-      // are the 3 most recent picks left over.
+      const writer = await seedWriter(db.client, 'Home Cards Writer');
+      // Two Ligue 1 Player Picks and a Ligue 1 MPG, all older than the hero
+      // ('Home Hero Without Teaser', 2026-09-02): only the newer Player Picks
+      // may show, and MPG is its own slot.
       await seedArticle(db.client, {
         writer_id: writer,
-        title: 'Player Picks, Ligue 1, J6',
+        title: 'Home Ligue 1 Player Picks Newer',
         league_name: 'Ligue 1',
         type_name: 'Player Picks',
         status: 'published',
-        slug: 'player-picks-ligue-1-j6',
-        published_at: '2026-08-23T09:00:00Z',
+        slug: 'home-ligue-1-player-picks-newer',
+        published_at: '2026-08-28T09:00:00Z',
       });
       await seedArticle(db.client, {
         writer_id: writer,
-        title: 'Player Picks, Ligue 1, J7',
+        title: 'Home Ligue 1 MPG',
         league_name: 'Ligue 1',
-        type_name: 'Player Picks',
+        type_name: 'MPG',
         status: 'published',
-        slug: 'player-picks-ligue-1-j7',
-        published_at: '2026-08-24T09:00:00Z',
+        slug: 'home-ligue-1-mpg',
+        published_at: '2026-08-27T09:00:00Z',
       });
-      await seedArticle(db.client, {
-        writer_id: writer,
-        title: 'Player Picks, Ligue 1, J8',
-        league_name: 'Ligue 1',
-        type_name: 'Player Picks',
-        status: 'published',
-        slug: 'player-picks-ligue-1-j8',
-        published_at: '2026-08-25T09:00:00Z',
-      });
+      // The Premier League hero from the test above is no longer the newest,
+      // so it drops into its own slot, between MPG and Bundesliga.
 
       const page = await renderer.renderHomepage();
-      const picksTitles = [...page.html.matchAll(/<p class="home-pick-title">([^<]+)<\/p>/g)].map((m) => m[1]);
+      const cards = [...page.html.matchAll(/<a class="home-card home-small" href="([^"]+)">.*?<h3 class="home-small-title">([^<]+)<\/h3>/gs)].map(
+        (m) => ({ href: m[1], title: m[2] }),
+      );
 
       expect({
-        hero_title: page.html.match(/<h1 class="home-headline">([^<]+)<\/h1>/)?.[1],
-        picks_titles: picksTitles,
-        links_to_article: page.html.includes(
-          '<a class="home-pick" href="/articles/ligue-1/26-27/player-picks/player-picks-ligue-1-j7">',
-        ),
+        titles: cards.map((c) => c.title),
+        links_to_article: cards[0]?.href,
+        hero_not_repeated: !cards.some((c) => c.title === 'Home Hero Without Teaser'),
       }).toEqual({
-        hero_title: 'Player Picks, Ligue 1, J8',
-        picks_titles: ['Player Picks, Ligue 1, J7', 'Player Picks, Ligue 1, J6', 'Player Picks, Ligue 1, J1'],
-        links_to_article: true,
+        titles: [
+          'Home Ligue 1 Player Picks Newer',
+          'Home Ligue 1 MPG',
+          'Home Hero Premier League',
+          'Eliteserien Newer Fixture Article',
+          'Allsvenskan Fixture Article',
+        ],
+        links_to_article: '/articles/ligue-1/26-27/player-picks/home-ligue-1-player-picks-newer',
+        hero_not_repeated: true,
       });
-    });
-
-    it('the hero subtitle shows the article\'s own teaser when the writer set one, instead of the old static line', async () => {
-      const { renderer, db } = ctx();
-      const writer = await seedWriter(db.client, 'Teaser Writer');
-      // Published after J8 (the current hero, seeded above) so this becomes
-      // the new hero.
-      await seedArticle(db.client, {
-        writer_id: writer,
-        title: 'Player Picks, Ligue 1, J9',
-        league_name: 'Ligue 1',
-        type_name: 'Player Picks',
-        status: 'published',
-        slug: 'player-picks-ligue-1-j9',
-        published_at: '2026-08-26T09:00:00Z',
-        teaser: 'Mbappé et Doué en feu, notre sélection pour la J9.',
-      });
-
-      const page = await renderer.renderHomepage();
-
-      expect(page.html).toContain(
-        '<p class="home-subtitle">Mbappé et Doué en feu, notre sélection pour la J9.</p>',
-      );
     });
 
     it('the Pronos CTA shows the 5 pronos.fantasy-coach.fr league crests instead of the old "5 ligues couvertes" text', async () => {
