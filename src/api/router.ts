@@ -79,6 +79,8 @@ const PUBLIC_HOME_ROUTE = '/public/';
  *  proxy's generic 502, not a 404 or real content. */
 const PUBLIC_SITEMAP_ROUTE = '/public/sitemap.xml';
 const PUBLIC_ROBOTS_ROUTE = '/public/robots.txt';
+/** `/scandinavie` — Eliteserien and Allsvenskan articles on one page. */
+const PUBLIC_SCANDINAVIA_ROUTE = /^\/public\/scandinavie\/?$/;
 const PUBLIC_ARTICLE_LEGACY_ROUTE = /^\/public\/articles\/([^/]+)$/;
 /** Wix's own post-permalink shape (`https://www.fantasy-coach.fr/post/{slug}`)
  *  — matched one-to-one so an old bookmark needs no rewriting. Unlike
@@ -937,13 +939,16 @@ async function renderSitemapOrRobots(
 }
 
 async function renderPublicPage(
-  op: Extract<Operation, { kind: 'public-home' | 'public-article' | 'public-category' }>,
+  op: Extract<Operation, { kind: 'public-home' | 'public-scandinavia' | 'public-article' | 'public-category' }>,
   ctx: Ctx,
   cors: Record<string, string>,
 ): Promise<Response> {
   const renderer = await getSiteRenderer(ctx);
   if (op.kind === 'public-home') {
     return jsonPageResponse((await renderer.renderHomepage()).html, 200, cors);
+  }
+  if (op.kind === 'public-scandinavia') {
+    return jsonPageResponse((await renderer.renderScandinaviaPage()).html, 200, cors);
   }
   if (op.kind === 'public-category') {
     const category = await renderer.renderCategoryPage(op);
@@ -1207,6 +1212,7 @@ type Operation =
   | { kind: 'public-home' }
   | { kind: 'public-sitemap' }
   | { kind: 'public-robots' }
+  | { kind: 'public-scandinavia' }
   | { kind: 'public-article'; league_slug: string; season_slug: string; type_slug: string; slug: string }
   | { kind: 'public-category'; league_slug: string; season_slug: string; type_slug: string }
   | { kind: 'public-article-legacy'; slug: string }
@@ -1246,6 +1252,7 @@ function matchRoute(path: string): Operation | null {
   if (path === PUBLIC_HOME_ROUTE) return { kind: 'public-home' };
   if (path === PUBLIC_SITEMAP_ROUTE) return { kind: 'public-sitemap' };
   if (path === PUBLIC_ROBOTS_ROUTE) return { kind: 'public-robots' };
+  if (PUBLIC_SCANDINAVIA_ROUTE.test(path)) return { kind: 'public-scandinavia' };
   if (path === ADMIN_WRITERS_ROUTE) return { kind: 'admin-list-writers' };
   if (path === WRITER_AVATAR_ROUTE) return { kind: 'upload-avatar' };
   if (path === WRITER_ME_ROUTE) return { kind: 'get-own-writer' };
@@ -1336,6 +1343,7 @@ const methodOf = (op: Operation): string => {
     op.kind === 'public-home' ||
     op.kind === 'public-sitemap' ||
     op.kind === 'public-robots' ||
+    op.kind === 'public-scandinavia' ||
     op.kind === 'public-article' ||
     op.kind === 'public-category' ||
     op.kind === 'public-article-legacy' ||
@@ -1402,6 +1410,7 @@ function dispatch(
     case 'public-home':
     case 'public-sitemap':
     case 'public-robots':
+    case 'public-scandinavia':
     case 'public-article':
     case 'public-category':
     case 'public-article-legacy':
@@ -1465,7 +1474,12 @@ export async function route(
   // none for an anonymous website visitor to hold — and their response is
   // HTML, not this API's JSON envelope, so they return here rather than
   // falling into the auth chain and `send()` below.
-  if (op.kind === 'public-home' || op.kind === 'public-article' || op.kind === 'public-category') {
+  if (
+    op.kind === 'public-home' ||
+    op.kind === 'public-scandinavia' ||
+    op.kind === 'public-article' ||
+    op.kind === 'public-category'
+  ) {
     return renderPublicPage(op, ctx, cors);
   }
   if (op.kind === 'public-sitemap' || op.kind === 'public-robots') {

@@ -732,6 +732,8 @@ export interface SiteRenderModule {
     renderCategoryPage(args: { league_slug: string; season_slug: string; type_slug: string }): Promise<RenderedPage>;
     /** `null` when `league_slug` doesn't match a real league at all. */
     renderLeaguePage(args: { league_slug: string }): Promise<RenderedPage | null>;
+    /** Eliteserien + Allsvenskan, a section per league, newest-posted first. */
+    renderScandinaviaPage(): Promise<RenderedPage>;
     renderArticlePage(args: {
       league_slug: string;
       season_slug: string;

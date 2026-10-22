@@ -635,6 +635,51 @@ describe('public site', () => {
     });
   });
 
+  describe('renderScandinaviaPage — Eliteserien and Allsvenskan, the league posted last first', () => {
+    const sectionOrder = (html: string): (string | undefined)[] =>
+      [...html.matchAll(/<h2 class="section-title"><a href="[^"]+">([^<]+)<\/a><\/h2>/g)].map((m) => m[1]);
+
+    it('lists a section per league, newest-posted league first, and no other league', async () => {
+      const { renderer, db } = ctx();
+      const writer = await seedWriter(db.client, 'Scandinavie Writer');
+      await seedArticle(db.client, {
+        writer_id: writer,
+        title: 'Allsvenskan Fixture Article',
+        league_name: 'Allsvenskan',
+        type_name: 'Guides',
+        status: 'published',
+        slug: 'allsvenskan-fixture-article',
+        // Later than every Eliteserien article seeded so far (2026-08-15).
+        published_at: '2026-08-25T09:00:00Z',
+      });
+
+      const first = await renderer.renderScandinaviaPage();
+      expect({
+        sections: sectionOrder(first.html),
+        lists_allsvenskan: first.html.includes('data-article-title="Allsvenskan Fixture Article"'),
+        lists_eliteserien: first.html.includes('data-article-title="View Counter Fixture Article"'),
+        lists_other_league: first.html.includes('data-article-title="Mercato Bundesliga - Août"'),
+      }).toEqual({
+        sections: ['Allsvenskan', 'Eliteserien'],
+        lists_allsvenskan: true,
+        lists_eliteserien: true,
+        lists_other_league: false,
+      });
+
+      await seedArticle(db.client, {
+        writer_id: writer,
+        title: 'Eliteserien Newer Fixture Article',
+        league_name: 'Eliteserien',
+        type_name: 'Guides',
+        status: 'published',
+        slug: 'eliteserien-newer-fixture-article',
+        published_at: '2026-08-30T09:00:00Z',
+      });
+
+      expect(sectionOrder((await renderer.renderScandinaviaPage()).html)).toEqual(['Eliteserien', 'Allsvenskan']);
+    });
+  });
+
   describe('force-light — listing pages match pronos\'s always-light background, the article page follows device preference', () => {
     const isForcedLight = (html: string): boolean => /<body[^>]*\bclass="force-light"/.test(html);
 

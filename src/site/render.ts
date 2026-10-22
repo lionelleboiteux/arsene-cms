@@ -371,6 +371,9 @@ const HOME_PAGE_CSS = `
  *  every type/league name on this site is French. */
 const nameCollator = new Intl.Collator('fr');
 
+/** The leagues `/scandinavie` groups (`renderScandinaviaPage`). */
+const SCANDINAVIA_LEAGUES = ['Eliteserien', 'Allsvenskan'];
+
 /**
  * Two of the three systematic ways a Wix post's own slug differs from the
  * slug it was imported into Arsène under
@@ -1102,6 +1105,44 @@ export async function createSiteRenderer(opts: { databaseUrl: string; siteOrigin
 
       const rows = (await published()).filter((row) => toSlug(row.league_name) === args.league_slug);
       return leagueListing(league.name, rows);
+    },
+
+    /**
+     * `/scandinavie` — the Eliteserien and Allsvenskan articles on one page,
+     * a section per league, the league whose newest article was published
+     * most recently first. A league with no published article yet still gets
+     * its section (after the ones that do), so the page never silently drops
+     * one of the two. `published()` is already `published_at desc`, so each
+     * league's first row is its newest.
+     */
+    async renderScandinaviaPage(): Promise<RenderedPage> {
+      const rows = (await published()).filter((row) => SCANDINAVIA_LEAGUES.includes(row.league_name));
+      const sections = SCANDINAVIA_LEAGUES.map((name) => ({
+        name,
+        rows: rows.filter((row) => row.league_name === name),
+      })).sort((a, b) => {
+        const at = a.rows[0]?.published_at.getTime() ?? -Infinity;
+        const bt = b.rows[0]?.published_at.getTime() ?? -Infinity;
+        return bt - at;
+      });
+      const title = 'Scandinavie : Eliteserien et Allsvenskan';
+      const description = `Fantasy Eliteserien et Allsvenskan : tous les articles Fantasy Coach — ${rows.length} article${rows.length === 1 ? '' : 's'} publié${rows.length === 1 ? '' : 's'}.`;
+      const first = rows[0];
+      const head = [
+        first === undefined ? '' : socialImageTags(first, title),
+        `<meta name="description" content="${escape(description)}"/>`,
+        '<meta name="robots" content="index, follow"/>',
+      ].join('');
+      const body = sections
+        .map(
+          (section) =>
+            `<h2 class="section-title"><a href="/articles/${toSlug(section.name)}">${escape(section.name)}</a></h2>` +
+            (section.rows.length === 0
+              ? '<p class="empty">No articles yet</p>'
+              : `<ul class="articles">${section.rows.map(articleCard).join('')}</ul>`),
+        )
+        .join('');
+      return { html: page(title, head, body), json_ld: [] };
     },
 
     async renderArticlePage(args: {
