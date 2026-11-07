@@ -225,8 +225,24 @@ button:disabled {
     gap: 0.375rem;
   }
 
+  .article-list li + li {
+    margin-top: 0.5rem;
+  }
+
   .article-list-actions {
     flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .article-list-actions button {
+    padding: 0.15rem 0.5rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  /* views + status on the left, buttons pushed to the right edge */
+  .article-list-actions .notify-button {
+    margin-left: auto;
   }
 }
 
