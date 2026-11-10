@@ -10,7 +10,7 @@ Arsène is a backend for a content-management system serving football-prediction
 - **Authentication:** Supabase Auth (JWT-based writer accounts; see [ADR-0001](pdlc/arsene-cms/adr/0001-supabase-backend-isr-frontend.md) for architecture rationale)
 - **Testing:** TypeScript/Vitest + Testcontainers (real Postgres) for unit/integration tests; Schemathesis for contract validation against [openapi.yaml](pdlc/arsene-cms/contracts/openapi.yaml)
 
-This repo contains the backend API server (`src/api/`), the public-site render pass (`src/site/`, read straight from Postgres), and the `public-site/` Cloudflare Pages reverse-proxy project that fronts it (see above). It does not contain the writer-facing editor SPA's UI, which is not yet built; `src/api/client.ts` is the typed client that SPA would use, and `src/client/fixturePicker.ts` is the one client-side component that already exists (a pronos fixture picker widget).
+This repo contains the backend API server (`src/api/`), the public-site render pass (`src/site/`, read straight from Postgres), and the `public-site/` Cloudflare Pages reverse-proxy project that fronts it (see above). The writer-facing editor SPA lives in `frontend/`; `src/api/client.ts` is the typed client it uses, and `src/client/fixturePicker.ts` is a client-side pronos fixture picker widget.
 
 Deploying a change touches up to three separate targets, each its own manual step — none trigger the others:
 - Backend: `supabase functions deploy arsene-api --project-ref wpicvtlfjhdofpmfdzrb`
