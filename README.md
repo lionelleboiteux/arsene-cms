@@ -15,7 +15,7 @@ This repo contains the backend API server (`src/api/`), the public-site render p
 Deploying a change touches up to three separate targets, each its own manual step — none trigger the others:
 - Backend: `supabase functions deploy arsene-api --project-ref wpicvtlfjhdofpmfdzrb`
 - Public-site proxy: `cd public-site && npx wrangler pages deploy public --project-name=arsene-public-site --branch=main` (omitting `--branch=main` deploys a non-production preview, not the live custom domains)
-- Editor SPA: Cloudflare Pages project `arsene-editor` — `npm run build` in `frontend/` then `wrangler pages deploy frontend/dist`
+- Editor SPA: Cloudflare Pages project `arsene-editor` — `npm run build` in `frontend/`, then `cd frontend && npx wrangler pages deploy dist --project-name=arsene-editor --branch=feat/arsene-cms`. The project's production branch is `feat/arsene-cms`: any other `--branch` (e.g. `main`) only creates a preview, and `arsene.fantasy-coach.fr` keeps serving the old bundle (it looks like a cache problem but isn't)
 
 `fantasy-coach.fr`'s DNS is a real Cloudflare zone (moved off Wix); a handful of legacy flat URLs that don't map onto any Arsène route (`/mpg`, `/indisponibles-dnp`, `/compos-probables`, apex→www) are handled by that zone's own Page Rules and Redirect Rules, not by this repo's code — check the Cloudflare dashboard, not `public-site/`, before assuming a flat URL redirect is missing from here.
 
